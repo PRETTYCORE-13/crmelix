@@ -54,7 +54,9 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(mix ecto.migrations)",
       "Bash(find d:/prettycore/lib -name *repo* -o -name *psql*)",
-      "Bash(mix run -e \":*)"
+      "Bash(mix run -e \":*)",
+      "Bash(grep -r \"PRO_PRODUCTO\\\\|productos\\\\|tienda\" /d/prettycore/config --include=*.exs)",
+      "Bash(grep -E \"\\\\.exs$\")"
     ],
     "deny": [],
     "ask": []

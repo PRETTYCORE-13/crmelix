@@ -12,13 +12,14 @@ defmodule Prettycore.Productos.Producto do
     field :pzas_min_vta, :integer, default: 1
     field :activo, :boolean, default: true
     field :raw, :map
+    field :imagen_url, :string
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(producto, attrs) do
     producto
-    |> cast(attrs, [:codigo, :descripcion, :desc_corta, :marca, :iva, :pzas_min_vta, :activo, :raw])
+    |> cast(attrs, [:codigo, :descripcion, :desc_corta, :marca, :iva, :pzas_min_vta, :activo, :raw, :imagen_url])
     |> validate_required([:codigo])
   end
 end

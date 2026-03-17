@@ -73,6 +73,7 @@ defmodule PrettycoreWeb.Router do
       live "/sesiones", SesionesLive
       live "/intelligence", ClientIntelligenceLive
       live "/usuarios", UsuariosLive
+      live "/tienda", TiendaLive
     end
   end
 

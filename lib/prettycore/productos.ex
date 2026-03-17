@@ -69,6 +69,17 @@ defmodule Prettycore.Productos do
     end
   end
 
+  @doc "Actualiza la imagen de un producto por su código. Retorna {:ok, count} o {:error, :not_found}."
+  def update_imagen(codigo, url) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    {count, _} =
+      PsqlRepo.update_all(
+        from(p in Producto, where: p.codigo == ^codigo),
+        set: [imagen_url: url, updated_at: now]
+      )
+    if count > 0, do: {:ok, count}, else: {:error, :not_found}
+  end
+
   @doc "Retorna true si la tabla de productos está vacía."
   def empty? do
     PsqlRepo.aggregate(Producto, :count) == 0

@@ -440,6 +440,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                 end) do %>
                   <% expanded = @expanded_permissions_user_id == user.id %>
                   <% user_perms = user.permissions || ["inicio"] %>
+                  <% is_sysadmin_role = user.role == "sysadmin" %>
                   <% is_admin_role = user.role in ["admin", "sysadmin"] %>
                   <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-500/40 bg-purple-50/30", else: "border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-gray-300"}"}>
                     <!-- Fila principal -->
@@ -524,11 +525,15 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             </tr>
                           </thead>
                           <tbody class="divide-y divide-gray-100">
-                            <% perms_list = if user.role == "oficina",
-                              do: [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"usuarios", "Usuarios"}],
-                              else: [{"inicio", "Inicio"}, {"tienda", "Tienda"}] %>
+                            <% perms_list = cond do
+                            is_sysadmin_role -> []
+                            user.role == "admin" -> [{"editar_imagenes", "Editar imágenes productos"}]
+                            user.role == "oficina" -> [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"usuarios", "Usuarios"}, {"editar_imagenes", "Editar imágenes"}]
+                            true -> [{"inicio", "Inicio"}, {"tienda", "Tienda"}]
+                          end %>
                             <%= for {perm_id, perm_label} <- perms_list do %>
-                              <% checked = is_admin_role or perm_id in user_perms %>
+                              <% checked = is_sysadmin_role or perm_id in user_perms %>
+                              <% toggle_locked = is_sysadmin_role %>
                               <tr>
                                 <td class="py-2 pr-4">
                                   <div class="flex items-center gap-2">
@@ -549,6 +554,11 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="23" y2="8" /><line x1="21" y1="6" x2="21" y2="10" />
                                         </svg>
+                                      <% "editar_imagenes" -> %>
+                                        <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                          <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                          <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
                                       <% _ -> %>
                                     <% end %>
                                     <span class={if checked, do: "text-gray-700", else: "text-gray-400"}><%= perm_label %></span>
@@ -557,12 +567,12 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                                 <td class="py-2">
                                   <button
                                     type="button"
-                                    phx-click={if is_admin_role, do: nil, else: "toggle_permission"}
+                                    phx-click={if toggle_locked, do: nil, else: "toggle_permission"}
                                     phx-value-user-id={user.id}
                                     phx-value-permission={perm_id}
-                                    disabled={is_admin_role}
-                                    class={"relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none #{if checked, do: "bg-purple-600", else: "bg-gray-300"} #{if is_admin_role, do: "opacity-50 cursor-not-allowed", else: "cursor-pointer"}"}
-                                    title={if is_admin_role, do: "Admin tiene acceso completo", else: if(checked, do: "Quitar acceso", else: "Dar acceso")}
+                                    disabled={toggle_locked}
+                                    class={"relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none #{if checked, do: "bg-purple-600", else: "bg-gray-300"} #{if toggle_locked, do: "opacity-50 cursor-not-allowed", else: "cursor-pointer"}"}
+                                    title={if toggle_locked, do: "ECORE tiene acceso completo", else: if(checked, do: "Quitar acceso", else: "Dar acceso")}
                                   >
                                     <span class={"pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out #{if checked, do: "translate-x-4", else: "translate-x-0"}"}></span>
                                   </button>
@@ -571,8 +581,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             <% end %>
                           </tbody>
                         </table>
-                        <%= if is_admin_role do %>
-                          <p class="text-xs text-gray-400 mt-2 italic">Acceso completo por rol de administrador</p>
+                        <%= if is_sysadmin_role do %>
+                          <p class="text-xs text-gray-400 mt-2 italic">ECORE tiene acceso completo al sistema</p>
                         <% end %>
                       </div>
                     <% end %>

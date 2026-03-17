@@ -191,13 +191,30 @@ const NavigateAfterFlash = {
   }
 };
 
+// Hook para auto-cerrar flash después de 3 segundos
+const AutoFlash = {
+  mounted() {
+    this.timer = setTimeout(() => {
+      this.el.style.transition = "opacity 0.4s ease, transform 0.4s ease"
+      this.el.style.opacity = "0"
+      this.el.style.transform = "translateX(20px)"
+      setTimeout(() => {
+        this.el.click()
+      }, 400)
+    }, 3000)
+  },
+  destroyed() {
+    clearTimeout(this.timer)
+  }
+}
+
 const isLocalhost = window.location.hostname === "localhost" || window.location.hostname.includes("localhost");
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash},
 })
 
 // Show progress bar on live navigation and form submits

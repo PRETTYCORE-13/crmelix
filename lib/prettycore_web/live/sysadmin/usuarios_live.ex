@@ -260,10 +260,16 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                 </div>
               <% else %>
                 <div class="space-y-2">
+                  <% all_perms = [
+                    {"inicio",          "Inicio",              :page},
+                    {"clientes",        "Clientes",            :page},
+                    {"tienda",          "Tienda",              :page},
+                    {"usuarios",        "Usuarios",            :page},
+                    {"editar_imagenes", "Imágenes Tienda",     :feature}
+                  ] %>
                   <%= for user <- @users do %>
                     <% expanded = @expanded_permissions_user_id == user.id %>
                     <% user_perms = user.permissions || ["inicio"] %>
-                    <% is_admin_role = user.role in ["admin", "sysadmin"] %>
                     <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-600/40 bg-zinc-900", else: "border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700"}"}>
                       <div class="flex items-center justify-between p-4">
                         <div class="flex items-center space-x-4">
@@ -276,12 +282,17 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                           </div>
                         </div>
                         <div class="flex items-center space-x-2">
-                          <span class={"inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium #{if user.role == "admin", do: "bg-purple-600/10 text-purple-400 border border-purple-600/20", else: "bg-zinc-800 text-zinc-500 border border-zinc-700"}"}>
+                          <span class={"inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium #{case user.role do
+                            "sysadmin" -> "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            "admin"    -> "bg-purple-600/10 text-purple-400 border border-purple-600/20"
+                            "oficina"  -> "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            _          -> "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                          end}"}>
                             <%= case user.role do
-                              "admin" -> "Administrador"
+                              "admin"    -> "Administrador"
                               "sysadmin" -> "ECORE"
-                              "oficina" -> "Oficina"
-                              _ -> "Cliente"
+                              "oficina"  -> "Oficina"
+                              _          -> "Cliente"
                             end %>
                           </span>
                           <!-- Botón permisos -->
@@ -324,20 +335,19 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                           </button>
                         </div>
                       </div>
-                      <!-- Panel de permisos -->
+                      <!-- Panel de permisos — SYSADMIN puede toglear todo sin restricción -->
                       <%= if expanded do %>
                         <div class="px-4 pb-4 border-t border-zinc-800/60 pt-3">
                           <table class="w-full text-xs">
                             <thead>
                               <tr>
-                                <th class="text-left text-zinc-500 font-medium pb-2 pr-4">Página</th>
+                                <th class="text-left text-zinc-500 font-medium pb-2 pr-4">Permiso</th>
                                 <th class="text-left text-zinc-500 font-medium pb-2">Acceso</th>
                               </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-800/40">
-                              <% perms_list = [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"usuarios", "Usuarios"}] %>
-                              <%= for {perm_id, perm_label} <- perms_list do %>
-                                <% checked = is_admin_role or perm_id in user_perms %>
+                              <%= for {perm_id, perm_label, perm_type} <- all_perms do %>
+                                <% checked = perm_id in user_perms %>
                                 <tr>
                                   <td class="py-2 pr-4">
                                     <div class="flex items-center gap-2">
@@ -358,19 +368,30 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="23" y2="8" /><line x1="21" y1="6" x2="21" y2="10" />
                                           </svg>
+                                        <% "editar_imagenes" -> %>
+                                          <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                          </svg>
                                         <% _ -> %>
                                       <% end %>
-                                      <span class={if checked, do: "text-zinc-300", else: "text-zinc-600"}><%= perm_label %></span>
+                                      <span class={if checked, do: "text-zinc-300", else: "text-zinc-600"}>
+                                        <%= perm_label %>
+                                        <%= if perm_type == :feature do %>
+                                          <span class="ml-1 text-[10px] text-amber-500/70 font-medium">función</span>
+                                        <% end %>
+                                      </span>
                                     </div>
                                   </td>
                                   <td class="py-2">
+                                    <!-- SYSADMIN: sin restricciones, toggle siempre activo -->
                                     <button
                                       type="button"
-                                      phx-click={if is_admin_role, do: nil, else: "toggle_permission"}
+                                      phx-click="toggle_permission"
                                       phx-value-user-id={user.id}
                                       phx-value-permission={perm_id}
-                                      disabled={is_admin_role}
-                                      class={"relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none #{if checked, do: "bg-purple-600", else: "bg-zinc-700"} #{if is_admin_role, do: "opacity-50 cursor-not-allowed", else: "cursor-pointer"}"}
+                                      class={"relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none #{if checked, do: "bg-purple-600", else: "bg-zinc-700"}"}
+                                      title={if checked, do: "Quitar permiso", else: "Dar permiso"}
                                     >
                                       <span class={"pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out #{if checked, do: "translate-x-4", else: "translate-x-0"}"}></span>
                                     </button>
@@ -379,9 +400,6 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                               <% end %>
                             </tbody>
                           </table>
-                          <%= if is_admin_role do %>
-                            <p class="text-xs text-zinc-600 mt-2 italic">Acceso completo por rol de administrador</p>
-                          <% end %>
                         </div>
                       <% end %>
                     </div>

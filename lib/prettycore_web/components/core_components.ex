@@ -54,35 +54,34 @@ defmodule PrettycoreWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
+      phx-hook="AutoFlash"
+      data-kind={@kind}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
-      phx-mounted={show_flash(@id, @kind)}
+      phx-mounted={show_flash(@id)}
       role="alert"
-      class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50"
+      class="fixed top-4 right-4 z-[9999] pointer-events-auto"
       {@rest}
     >
       <div class={[
-        "flex items-center gap-4 px-8 py-6 rounded-xl shadow-2xl border-l-4 min-w-[400px] max-w-lg transform transition-all duration-300 ease-in-out",
-        @kind == :info && "bg-gradient-to-r from-green-50 to-emerald-50 border-green-500 text-green-900",
-        @kind == :error && "bg-gradient-to-r from-red-50 to-rose-50 border-red-500 text-red-900"
+        "flex items-center gap-3 pl-4 pr-3 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-xs",
+        @kind == :info && "bg-white border-green-200 text-gray-800",
+        @kind == :error && "bg-white border-red-200 text-gray-800"
       ]}>
         <div class={[
-          "flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center",
-          @kind == :info && "bg-green-500",
-          @kind == :error && "bg-red-500"
+          "flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+          @kind == :info && "text-green-500",
+          @kind == :error && "text-red-500"
         ]}>
-          <.icon :if={@kind == :info} name="hero-check-circle" class="size-7 text-white" />
-          <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-7 text-white" />
+          <svg :if={@kind == :info} class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+          </svg>
+          <svg :if={@kind == :error} class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
         </div>
-        <div class="flex-1">
-          <p :if={@title} class="font-bold text-base mb-1">{@title}</p>
-          <p class="text-base font-semibold">{msg}</p>
-        </div>
-        <button type="button" class={[
-          "flex-shrink-0 cursor-pointer rounded-full p-3 transition-all hover:scale-110",
-          @kind == :info && "bg-green-600 hover:bg-green-700",
-          @kind == :error && "bg-red-600 hover:bg-red-700"
-        ]} aria-label={gettext("close")}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="white" class="w-6 h-6">
+        <p class="flex-1 leading-snug">{msg}</p>
+        <button type="button" class="flex-shrink-0 p-1 text-gray-300 hover:text-gray-500 rounded transition-colors cursor-pointer" aria-label="cerrar">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -91,13 +90,11 @@ defmodule PrettycoreWeb.CoreComponents do
     """
   end
 
-  defp show_flash(js \\ %JS{}, id, _kind) do
-    # Solo mostrar el flash - NO ocultar automáticamente
-    # El usuario debe cerrar manualmente haciendo clic en la X
+  defp show_flash(js \\ %JS{}, id) do
     js
     |> JS.show(
       to: "##{id}",
-      transition: {"ease-out duration-300", "opacity-0 scale-90", "opacity-100 scale-100"}
+      transition: {"ease-out duration-200", "opacity-0 translate-x-4", "opacity-100 translate-x-0"}
     )
   end
 
