@@ -54,6 +54,11 @@ defmodule PrettycoreWeb.Router do
   #    live "/workorder", WorkOrderLive
       live "/clientes", Clientes
       live "/tienda", Tienda
+      live "/categorias", CategoriasLive
+      live "/carrusel", CarruselLive
+      live "/super-categorias", SuperCategoriasLive
+      live "/secciones", SeccionesLive
+      live "/seccion/:tipo", SeccionEditorLive
       live "/usuarios", Users.UsersCreateLive
       live "/clientes/new", ClienteFormNewLive
       live "/clientes/new/:tab", ClienteFormNewLive
@@ -73,7 +78,12 @@ defmodule PrettycoreWeb.Router do
       live "/sesiones", SesionesLive
       live "/intelligence", ClientIntelligenceLive
       live "/usuarios", UsuariosLive
-      live "/tienda", TiendaLive
+    end
+
+    scope "/sysadmin", PrettycoreWeb do
+      pipe_through :browser
+
+      live "/tienda", Tienda
     end
   end
 

@@ -56,7 +56,9 @@
       "Bash(find d:/prettycore/lib -name *repo* -o -name *psql*)",
       "Bash(mix run -e \":*)",
       "Bash(grep -r \"PRO_PRODUCTO\\\\|productos\\\\|tienda\" /d/prettycore/config --include=*.exs)",
-      "Bash(grep -E \"\\\\.exs$\")"
+      "Bash(grep -E \"\\\\.exs$\")",
+      "Bash(find d:/prettycore/lib/prettycore_web -name *sidebar* -o -name *menu* -o -name *layout*)",
+      "Bash(xargs grep:*)"
     ],
     "deny": [],
     "ask": []

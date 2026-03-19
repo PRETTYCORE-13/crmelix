@@ -46,6 +46,9 @@ defmodule PrettycoreWeb.Inicio do
       "tienda" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
 
+      "categorias" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
+
       "usuarios" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
 

@@ -264,6 +264,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     {"inicio",          "Inicio",              :page},
                     {"clientes",        "Clientes",            :page},
                     {"tienda",          "Tienda",              :page},
+                    {"categorias",      "Categorías Tienda",   :page},
                     {"usuarios",        "Usuarios",            :page},
                     {"editar_imagenes", "Imágenes Tienda",     :feature}
                   ] %>
@@ -363,6 +364,10 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                                         <% "tienda" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
+                                          </svg>
+                                        <% "categorias" -> %>
+                                          <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                                           </svg>
                                         <% "usuarios" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

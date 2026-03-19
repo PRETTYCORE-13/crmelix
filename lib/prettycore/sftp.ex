@@ -1,10 +1,7 @@
 defmodule Prettycore.Sftp do
   @moduledoc """
-  Sube imágenes de productos al servidor SFTP y retorna la URL pública.
-
-  Servidor: 88.223.85.55:65002
-  Ruta remota: public_html/ELIXIR/PRETTYCORE/{codigo}{ext}
-  URL pública: https://prettycore.xyz/ELIXIR/PRETTYCORE/{codigo}{ext}
+  Sube imágenes al servidor SFTP y retorna la URL pública.
+  Reintenta automáticamente hasta 2 veces si la conexión falla.
   """
   require Logger
 
@@ -12,23 +9,48 @@ defmodule Prettycore.Sftp do
   @port 65002
   @user ~c"u588009084"
   @password ~c"Poder316."
-  @remote_dir "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE"
-  @url_base "https://prettycore.xyz/ELIXIR/PRETTYCORE"
   @timeout 20_000
+  @retries 2
 
-  @doc """
-  Sube el contenido binario de una imagen al SFTP.
+  @url_base       "https://prettycore.xyz/ELIXIR/PRETTYCORE"
+  @url_cats       "https://prettycore.xyz/ELIXIR/PRETTYCORE/CATEGORIAS"
+  @url_carrusel   "https://prettycore.xyz/ELIXIR/PRETTYCORE/CARRUSEL"
+  @url_supercats  "https://prettycore.xyz/ELIXIR/PRETTYCORE/SUPERCATEGORIAS"
 
-  - `codigo`: código del producto (e.g. "ABC123")
-  - `ext`: extensión con punto (e.g. ".jpg")
-  - `content`: binario del archivo
+  @dir_base       "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE"
+  @dir_cats       "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CATEGORIAS"
+  @dir_carrusel   "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CARRUSEL"
+  @dir_supercats  "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/SUPERCATEGORIAS"
 
-  Retorna `{:ok, url}` o `{:error, reason}`.
-  """
+  @make_dirs_base     [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE"]
+  @make_dirs_cats     [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CATEGORIAS"]
+  @make_dirs_carrusel [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CARRUSEL"]
+  @make_dirs_supercats [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/SUPERCATEGORIAS"]
+
   def upload_product_image(codigo, ext, content) when is_binary(content) do
-    safe_name = "#{codigo}#{ext}"
-    remote_path = "#{@remote_dir}/#{safe_name}"
-    url = "#{@url_base}/#{safe_name}"
+    name = "#{codigo}#{ext}"
+    upload("#{@dir_base}/#{name}", "#{@url_base}/#{name}", @make_dirs_base, content, "producto")
+  end
+
+  def upload_categoria_image(slug, ext, content) when is_binary(content) do
+    name = "#{slug}#{ext}"
+    upload("#{@dir_cats}/#{name}", "#{@url_cats}/#{name}", @make_dirs_cats, content, "categoría")
+  end
+
+  def upload_carrusel_image(filename, ext, content) when is_binary(content) do
+    name = "#{filename}#{ext}"
+    upload("#{@dir_carrusel}/#{name}", "#{@url_carrusel}/#{name}", @make_dirs_carrusel, content, "carrusel")
+  end
+
+  def upload_super_categoria_image(slug, ext, content) when is_binary(content) do
+    name = "#{slug}#{ext}"
+    upload("#{@dir_supercats}/#{name}", "#{@url_supercats}/#{name}", @make_dirs_supercats, content, "super_categoría")
+  end
+
+  # ── Privado ────────────────────────────────────────────────────────
+
+  defp upload(remote_path, url, dirs, content, label, attempt \\ 1) do
+    Logger.info("SFTP: subiendo #{label} → #{remote_path} (intento #{attempt})")
 
     opts = [
       user: @user,
@@ -38,21 +60,17 @@ defmodule Prettycore.Sftp do
       connect_timeout: @timeout
     ]
 
-    Logger.info("SFTP: conectando a #{@host}:#{@port} para subir #{remote_path}")
-
     with {:ok, conn} <- :ssh.connect(@host, @port, opts, @timeout),
-         {:ok, ch} <- :ssh_sftp.start_channel(conn, timeout: @timeout) do
-      # Crear carpetas nivel por nivel (ignorar errores si ya existen)
-      :ssh_sftp.make_dir(ch, ~c"domains/prettycore.xyz/public_html/ELIXIR")
-      :ssh_sftp.make_dir(ch, ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE")
+         {:ok, ch}   <- :ssh_sftp.start_channel(conn, timeout: @timeout) do
+      Enum.each(dirs, &:ssh_sftp.make_dir(ch, &1))
 
       result =
         case :ssh_sftp.write_file(ch, String.to_charlist(remote_path), content) do
           :ok ->
-            Logger.info("SFTP: imagen subida OK → #{url}")
+            Logger.info("SFTP: #{label} subido OK → #{url}")
             {:ok, url}
           {:error, reason} ->
-            Logger.error("SFTP: error al escribir archivo: #{inspect(reason)}")
+            Logger.error("SFTP: error al escribir #{label}: #{inspect(reason)}")
             {:error, inspect(reason)}
         end
 
@@ -61,8 +79,14 @@ defmodule Prettycore.Sftp do
       result
     else
       {:error, reason} ->
-        Logger.error("SFTP: error al conectar #{@host}:#{@port} → #{inspect(reason)}")
-        {:error, inspect(reason)}
+        Logger.warning("SFTP: fallo conexión #{label} (intento #{attempt}): #{inspect(reason)}")
+        if attempt < @retries + 1 do
+          Process.sleep(1_500 * attempt)
+          upload(remote_path, url, dirs, content, label, attempt + 1)
+        else
+          Logger.error("SFTP: #{@retries + 1} intentos fallidos para #{label}")
+          {:error, inspect(reason)}
+        end
     end
   end
 end

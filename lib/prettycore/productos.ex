@@ -84,4 +84,33 @@ defmodule Prettycore.Productos do
   def empty? do
     PsqlRepo.aggregate(Producto, :count) == 0
   end
+
+  @doc "Lista productos filtrados por nombre de categoría. 'Todos' retorna todos."
+  def list_by_categoria("Todos"), do: list_productos()
+  def list_by_categoria(nil), do: list_productos()
+  def list_by_categoria(nombre) do
+    PsqlRepo.all(
+      from p in Producto,
+        join: cp in "categoria_productos", on: cp.producto_codigo == p.codigo,
+        join: c in Prettycore.Categorias.Categoria, on: c.id == cp.categoria_id,
+        where: c.nombre == ^nombre,
+        order_by: p.descripcion
+    )
+  end
+
+  @doc "Busca productos dentro de una categoría. 'Todos' busca en todo."
+  def search_by_categoria("", cat), do: list_by_categoria(cat)
+  def search_by_categoria(q, "Todos"), do: search_productos(q)
+  def search_by_categoria(q, nil), do: search_productos(q)
+  def search_by_categoria(q, nombre) do
+    term = "%#{String.downcase(q)}%"
+    PsqlRepo.all(
+      from p in Producto,
+        join: cp in "categoria_productos", on: cp.producto_codigo == p.codigo,
+        join: c in Prettycore.Categorias.Categoria, on: c.id == cp.categoria_id,
+        where: c.nombre == ^nombre and
+               (ilike(p.descripcion, ^term) or ilike(p.codigo, ^term) or ilike(p.marca, ^term)),
+        order_by: p.descripcion
+    )
+  end
 end

@@ -33,6 +33,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
         {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
       "tienda" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
+      "categorias" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
       "usuarios" ->
         {:noreply, socket}
       _ ->
@@ -526,9 +528,9 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                           </thead>
                           <tbody class="divide-y divide-gray-100">
                             <% perms_list = cond do
-                            is_sysadmin_role -> []
-                            user.role == "admin" -> [{"editar_imagenes", "Editar imágenes productos"}]
-                            user.role == "oficina" -> [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"usuarios", "Usuarios"}, {"editar_imagenes", "Editar imágenes"}]
+                            is_sysadmin_role -> [{"categorias", "Categorías Tienda"}, {"editar_imagenes", "Imágenes Tienda"}]
+                            user.role == "admin" -> []
+                            user.role == "oficina" -> [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Categorías"}, {"usuarios", "Usuarios"}]
                             true -> [{"inicio", "Inicio"}, {"tienda", "Tienda"}]
                           end %>
                             <%= for {perm_id, perm_label} <- perms_list do %>
@@ -553,6 +555,10 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                                       <% "usuarios" -> %>
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="23" y2="8" /><line x1="21" y1="6" x2="21" y2="10" />
+                                        </svg>
+                                      <% "categorias" -> %>
+                                        <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                          <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                                         </svg>
                                       <% "editar_imagenes" -> %>
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

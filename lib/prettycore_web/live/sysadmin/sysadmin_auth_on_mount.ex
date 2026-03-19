@@ -18,7 +18,9 @@ defmodule PrettycoreWeb.SysAdminAuthOnMount do
         {:cont,
          socket
          |> assign(:current_user_id, user_id)
-         |> assign(:current_user_name, user_name)}
+         |> assign(:current_user_name, user_name)
+         |> assign(:user_role, "sysadmin")
+         |> assign(:user_permissions, [])}
     end
   end
 end

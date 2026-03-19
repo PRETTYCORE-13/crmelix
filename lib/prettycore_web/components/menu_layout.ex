@@ -110,6 +110,82 @@ defmodule PrettycoreWeb.MenuLayout do
                     </button>
                   </div>
                 <% end %>
+                <%= if item.id == "tienda" and @current_page in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
+                      "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_publicidad", "seccion_envios"] and can_see_categorias?(@user_role, @user_permissions) do %>
+                  <div class="pc-submenu">
+                    <button
+                      type="button"
+                      class={submenu_item_class("categorias", @current_page)}
+                      phx-click={@menu_event}
+                      phx-value-id="categorias"
+                    >
+                      <span class="pc-submenu-dot" />
+                      <span class="pc-nav-label">Categorías</span>
+                    </button>
+                    <button
+                      type="button"
+                      class={submenu_item_class("super_categorias", @current_page)}
+                      phx-click={@menu_event}
+                      phx-value-id="super_categorias"
+                    >
+                      <span class="pc-submenu-dot" />
+                      <span class="pc-nav-label">Super Categorías</span>
+                    </button>
+                    <button
+                      type="button"
+                      class={submenu_item_class("carrusel", @current_page)}
+                      phx-click={@menu_event}
+                      phx-value-id="carrusel"
+                    >
+                      <span class="pc-submenu-dot" />
+                      <span class="pc-nav-label">Carrusel</span>
+                    </button>
+                    <button
+                      type="button"
+                      class={submenu_item_class("secciones", @current_page)}
+                      phx-click={@menu_event}
+                      phx-value-id="secciones"
+                    >
+                      <span class="pc-submenu-dot" />
+                      <span class="pc-nav-label">Secciones</span>
+                    </button>
+                    <%= if @current_page in ["secciones", "seccion_top10", "seccion_favoritos",
+                          "seccion_destacados", "seccion_publicidad", "seccion_envios"] do %>
+                      <div class="pc-subsubmenu">
+                        <button type="button"
+                          class={subsubmenu_item_class("seccion_top10", @current_page)}
+                          phx-click={@menu_event} phx-value-id="seccion_top10">
+                          <span class="pc-subsubmenu-dot" />
+                          <span class="pc-nav-label">Top 10</span>
+                        </button>
+                        <button type="button"
+                          class={subsubmenu_item_class("seccion_favoritos", @current_page)}
+                          phx-click={@menu_event} phx-value-id="seccion_favoritos">
+                          <span class="pc-subsubmenu-dot" />
+                          <span class="pc-nav-label">Favoritos</span>
+                        </button>
+                        <button type="button"
+                          class={subsubmenu_item_class("seccion_destacados", @current_page)}
+                          phx-click={@menu_event} phx-value-id="seccion_destacados">
+                          <span class="pc-subsubmenu-dot" />
+                          <span class="pc-nav-label">Destacados</span>
+                        </button>
+                        <button type="button"
+                          class={subsubmenu_item_class("seccion_publicidad", @current_page)}
+                          phx-click={@menu_event} phx-value-id="seccion_publicidad">
+                          <span class="pc-subsubmenu-dot" />
+                          <span class="pc-nav-label">Publicidad</span>
+                        </button>
+                        <button type="button"
+                          class={subsubmenu_item_class("seccion_envios", @current_page)}
+                          phx-click={@menu_event} phx-value-id="seccion_envios">
+                          <span class="pc-subsubmenu-dot" />
+                          <span class="pc-nav-label">Envíos</span>
+                        </button>
+                      </div>
+                    <% end %>
+                  </div>
+                <% end %>
               <% end %>
             </nav>
           </div>
@@ -231,6 +307,13 @@ defmodule PrettycoreWeb.MenuLayout do
           <line x1="19" y1="8" x2="23" y2="8" />
           <line x1="21" y1="6" x2="21" y2="10" />
         </svg>
+      <% "categorias" -> %>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
       <% "logout" -> %>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -259,13 +342,26 @@ defmodule PrettycoreWeb.MenuLayout do
        when current in ["programacion", "programacion_sql"],
        do: true
 
+  defp menu_active?("tienda", current)
+       when current in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
+                        "seccion_top10", "seccion_favoritos", "seccion_destacados",
+                        "seccion_publicidad", "seccion_envios"],
+       do: true
+
   defp menu_active?(id, current), do: id == current
+
+  defp can_see_categorias?(role, _perms) when role in ["admin", "sysadmin"], do: true
+  defp can_see_categorias?(_role, nil), do: false
+  defp can_see_categorias?(_role, perms), do: "categorias" in perms
 
   defp menu_item_class(true), do: "pc-nav-item pc-nav-item-active"
   defp menu_item_class(false), do: "pc-nav-item"
 
   defp submenu_item_class(id, current),
     do: if(id == current, do: "pc-submenu-item pc-submenu-item-active", else: "pc-submenu-item")
+
+  defp subsubmenu_item_class(id, current),
+    do: if(id == current, do: "pc-subsubmenu-item pc-subsubmenu-item-active", else: "pc-subsubmenu-item")
 
   defp toggle_sidebar_js(menu_event) do
     JS.push(menu_event, value: %{id: "toggle_sidebar"})

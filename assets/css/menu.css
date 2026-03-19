@@ -271,6 +271,46 @@
   color: #ffffff;
 }
 
+.pc-subsubmenu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 18px;
+  margin-top: 2px;
+}
+
+.pc-subsubmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #525252;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pc-subsubmenu-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #a78bfa;
+  flex-shrink: 0;
+}
+
+.pc-subsubmenu-item:hover {
+  background: #1f1f1f;
+  color: #ffffff;
+}
+
+.pc-subsubmenu-item-active {
+  background: #1f1f1f;
+  color: #e5e7eb;
+}
+
 /* ---- LOGOUT ---- */
 .pc-nav-logout {
   color: #525252;

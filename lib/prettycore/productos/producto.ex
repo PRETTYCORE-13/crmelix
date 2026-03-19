@@ -14,6 +14,10 @@ defmodule Prettycore.Productos.Producto do
     field :raw, :map
     field :imagen_url, :string
 
+    many_to_many :categorias, Prettycore.Categorias.Categoria,
+      join_through: "categoria_productos",
+      join_keys: [producto_codigo: :codigo, categoria_id: :id]
+
     timestamps(type: :utc_datetime)
   end
 

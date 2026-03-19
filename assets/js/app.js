@@ -210,11 +210,211 @@ const AutoFlash = {
 
 const isLocalhost = window.location.hostname === "localhost" || window.location.hostname.includes("localhost");
 
+// Carrusel vertical infinito con rueda del mouse (efecto McDonald's)
+const ScrollCatActive = {
+  mounted() {
+    this.centerActive(false)
+    // Guardar posición inicial del loop_idx activo
+    const list = this.el.querySelector("[data-cat-list]")
+    const n = parseInt(list?.dataset.total || "1")
+    const active = this.el.querySelector("[data-active='true']")
+    const buttons = [...(list?.querySelectorAll("button") || [])]
+    this._prevLoopIdx = active ? buttons.indexOf(active) : n
+
+    // Rueda del mouse — throttled para evitar cambios demasiado rápidos
+    this._wheelLocked = false
+    this.el.addEventListener("wheel", (e) => {
+      e.preventDefault()
+      if (this._wheelLocked) return
+      this._wheelLocked = true
+      setTimeout(() => { this._wheelLocked = false }, 320)
+      if (e.deltaY > 0) this.pushEvent("cat_next", {})
+      else this.pushEvent("cat_prev", {})
+    }, { passive: false })
+    // Touch para móvil
+    this._touchY = null
+    this.el.addEventListener("touchstart", (e) => {
+      this._touchY = e.touches[0].clientY
+    }, { passive: true })
+    this.el.addEventListener("touchend", (e) => {
+      if (this._touchY === null) return
+      const diff = this._touchY - e.changedTouches[0].clientY
+      if (Math.abs(diff) > 20) {
+        if (diff > 0) this.pushEvent("cat_next", {})
+        else this.pushEvent("cat_prev", {})
+      }
+      this._touchY = null
+    }, { passive: true })
+  },
+
+  updated() {
+    const container = this.el
+    const list = container.querySelector("[data-cat-list]")
+    if (!list) return
+    const n = parseInt(list.dataset.total || "1")
+    const buttons = [...list.querySelectorAll("button")]
+    const active = container.querySelector("[data-active='true']")
+    if (!active) return
+
+    const activeIdx = buttons.indexOf(active) // loop_idx del activo (siempre en bloque medio: n..2n-1)
+    const prev = this._prevLoopIdx ?? activeIdx
+
+    // Wrap forward: venimos del final del bloque medio, saltamos al inicio
+    const wrappedForward = prev === 2 * n - 1 && activeIdx === n
+    // Wrap backward: venimos del inicio del bloque medio, saltamos al final
+    const wrappedBackward = prev === n && activeIdx === 2 * n - 1
+
+    if (wrappedForward && buttons[2 * n]) {
+      // Scroll suave hacia el bloque 3 (continúa hacia abajo sin salto visible)
+      const nextItem = buttons[2 * n] // cat_idx=0 en bloque 3
+      const targetTop = nextItem.offsetTop - (container.clientHeight / 2) + (nextItem.clientHeight / 2)
+      container.scrollTo({ top: targetTop, behavior: "smooth" })
+      // Después de la animación, teleport invisible al bloque medio
+      setTimeout(() => {
+        const resetTop = active.offsetTop - (container.clientHeight / 2) + (active.clientHeight / 2)
+        container.scrollTo({ top: resetTop, behavior: "instant" })
+      }, 250)
+    } else if (wrappedBackward && buttons[n - 1]) {
+      // Scroll suave hacia el bloque 1 (continúa hacia arriba sin salto visible)
+      const prevItem = buttons[n - 1] // cat_idx=n-1 en bloque 1
+      const targetTop = prevItem.offsetTop - (container.clientHeight / 2) + (prevItem.clientHeight / 2)
+      container.scrollTo({ top: targetTop, behavior: "smooth" })
+      // Después de la animación, teleport invisible al bloque medio
+      setTimeout(() => {
+        const resetTop = active.offsetTop - (container.clientHeight / 2) + (active.clientHeight / 2)
+        container.scrollTo({ top: resetTop, behavior: "instant" })
+      }, 250)
+    } else {
+      this.centerActive(true)
+    }
+
+    this._prevLoopIdx = activeIdx
+  },
+
+  centerActive(smooth = true) {
+    const container = this.el
+    const active = container.querySelector("[data-active='true']")
+    if (!active) return
+    const top = active.offsetTop - (container.clientHeight / 2) + (active.clientHeight / 2)
+    container.scrollTo({ top, behavior: smooth ? "smooth" : "instant" })
+  }
+}
+
+// Hook para Carrusel de tienda con auto-play y flechas
+const Carrusel = {
+  mounted() {
+    this.idx = 0
+    this.total = this.el.children.length
+    this._autoplay = setInterval(() => this.next(), 4000)
+
+    const prev = document.getElementById('carrusel-prev')
+    const next = document.getElementById('carrusel-next')
+    if (prev) prev.addEventListener('click', () => { this.prev(); this.resetAutoplay() })
+    if (next) next.addEventListener('click', () => { this.next(); this.resetAutoplay() })
+
+    this.el.addEventListener('scroll', () => {
+      const w = this.el.clientWidth
+      if (w === 0) return
+      this.idx = Math.round(this.el.scrollLeft / w)
+      this.updateDots()
+    }, { passive: true })
+  },
+  next() {
+    this.idx = (this.idx + 1) % this.total
+    this.scrollTo(this.idx)
+  },
+  prev() {
+    this.idx = (this.idx - 1 + this.total) % this.total
+    this.scrollTo(this.idx)
+  },
+  scrollTo(i) {
+    this.el.scrollTo({ left: i * this.el.clientWidth, behavior: 'smooth' })
+    this.updateDots()
+  },
+  updateDots() {
+    document.querySelectorAll('[id^="carrusel-dot-"]').forEach((dot, i) => {
+      dot.style.opacity = i === this.idx ? '1' : '0.4'
+    })
+  },
+  resetAutoplay() {
+    clearInterval(this._autoplay)
+    this._autoplay = setInterval(() => this.next(), 4000)
+  },
+  destroyed() {
+    clearInterval(this._autoplay)
+  }
+}
+
+// Hook para reordenar listas con drag-and-drop
+const DragSort = {
+  mounted() {
+    this.draggedEl = null
+
+    this.el.addEventListener('dragstart', (e) => {
+      const item = e.target.closest('[data-drag-id]')
+      if (!item) return
+      this.draggedEl = item
+      e.dataTransfer.effectAllowed = 'move'
+      setTimeout(() => { item.style.opacity = '0.4' }, 0)
+    })
+
+    this.el.addEventListener('dragend', () => {
+      if (this.draggedEl) this.draggedEl.style.opacity = '1'
+      this.draggedEl = null
+      this.el.querySelectorAll('[data-drag-id]').forEach(el => {
+        el.style.borderTop = ''
+        el.style.borderBottom = ''
+      })
+    })
+
+    this.el.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const item = e.target.closest('[data-drag-id]')
+      if (!item || item === this.draggedEl) return
+      this.el.querySelectorAll('[data-drag-id]').forEach(el => {
+        el.style.borderTop = ''
+        el.style.borderBottom = ''
+      })
+      const rect = item.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      if (e.clientY < mid) {
+        item.style.borderTop = '2px solid #7c3aed'
+        item.style.borderBottom = ''
+      } else {
+        item.style.borderBottom = '2px solid #7c3aed'
+        item.style.borderTop = ''
+      }
+    })
+
+    this.el.addEventListener('drop', (e) => {
+      e.preventDefault()
+      const targetItem = e.target.closest('[data-drag-id]')
+      if (!targetItem || !this.draggedEl || targetItem === this.draggedEl) return
+
+      const items = [...this.el.querySelectorAll('[data-drag-id]')]
+      const ids = items.map(el => el.dataset.dragId)
+      const draggedId = this.draggedEl.dataset.dragId
+      const targetId = targetItem.dataset.dragId
+
+      const rect = targetItem.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      const insertAfter = e.clientY >= mid
+
+      const newIds = ids.filter(id => id !== draggedId)
+      const targetIdx = newIds.indexOf(targetId)
+      newIds.splice(insertAfter ? targetIdx + 1 : targetIdx, 0, draggedId)
+
+      this.pushEvent('reorder', { ids: newIds })
+    })
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort},
 })
 
 // Show progress bar on live navigation and form submits
