@@ -189,6 +189,12 @@ defmodule Prettycore.Api.Client do
     do_post(url, data, token)
   end
 
+  def get_precios(cliente_codigo, dir_codigo, token \\ nil) do
+    url = "#{base_url()}/VTA_PRECIOS"
+    data = %{"CTECLI_CODIGO_K" => cliente_codigo, "CTEDIR_CODIGO_K" => dir_codigo}
+    do_post(url, data, token)
+  end
+
   # --- Clientes ---
 
   def get_productos(token \\ nil), do: get_all("PRO_PRODUCTO", token)

@@ -86,8 +86,7 @@ defmodule Prettycore.Productos do
   end
 
   @doc "Lista productos filtrados por nombre de categoría. 'Todos' retorna todos."
-  def list_by_categoria("Todos"), do: list_productos()
-  def list_by_categoria(nil), do: list_productos()
+  def list_by_categoria(cat) when cat in ["Todos", "INICIO", nil], do: list_productos()
   def list_by_categoria(nombre) do
     PsqlRepo.all(
       from p in Producto,
@@ -100,8 +99,7 @@ defmodule Prettycore.Productos do
 
   @doc "Busca productos dentro de una categoría. 'Todos' busca en todo."
   def search_by_categoria("", cat), do: list_by_categoria(cat)
-  def search_by_categoria(q, "Todos"), do: search_productos(q)
-  def search_by_categoria(q, nil), do: search_productos(q)
+  def search_by_categoria(q, cat) when cat in ["Todos", "INICIO", nil], do: search_productos(q)
   def search_by_categoria(q, nombre) do
     term = "%#{String.downcase(q)}%"
     PsqlRepo.all(
