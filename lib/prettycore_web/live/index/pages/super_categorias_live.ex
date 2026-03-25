@@ -47,13 +47,19 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
       "toggle_sidebar"  -> {:noreply, update(socket, :sidebar_open, &(not &1))}
       "inicio"          -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
       "clientes"        -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "tienda"          -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "categorias"      -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "carrusel"        -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "super_categorias"-> {:noreply, socket}
-      "secciones"       -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"        -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      _                 -> {:noreply, socket}
+      "tienda"            -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
+      "pedidos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
+      "categorias"        -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
+      "super_categorias"  -> {:noreply, socket}
+      "carrusel"          -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
+      "secciones"         -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
+      "usuarios"          -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
+      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
+      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
+      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
+      "seccion_envios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
+      _                   -> {:noreply, socket}
     end
   end
 

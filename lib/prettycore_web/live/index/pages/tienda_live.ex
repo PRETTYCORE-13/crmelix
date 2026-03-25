@@ -8,6 +8,7 @@ defmodule PrettycoreWeb.Tienda do
   alias Prettycore.Carrusel
   alias Prettycore.Secciones
   alias Prettycore.Precios
+  alias Prettycore.Pedidos
   alias Prettycore.Auth
 
   @max_file_size 10_000_000  # 10 MB
@@ -37,6 +38,7 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:carrusel, [])
       |> assign(:secciones_tienda, [])
       |> assign(:precios, %{})
+      |> assign(:synced, false)
       |> allow_upload(:imagen,
           accept: ~w(.jpg .jpeg .png .webp .gif),
           max_entries: 1,
@@ -47,7 +49,9 @@ defmodule PrettycoreWeb.Tienda do
       send(self(), :load_categorias)
       send(self(), :load_carrusel)
       send(self(), :load_secciones)
-      if role != "sysadmin", do: send(self(), :load_cart)
+      if role != "sysadmin" do
+        send(self(), :load_cart)
+      end
     end
 
     if role == "sysadmin" do
@@ -98,15 +102,22 @@ defmodule PrettycoreWeb.Tienda do
 
   @impl true
   def handle_info(:do_sync, socket) do
-    # Intentar precios siempre, independiente del resultado del sync de productos
-    if socket.assigns[:user_role] != "sysadmin", do: send(self(), :load_precios)
+    # Sincronizar precios desde API → DB → assigns (siempre que no sea sysadmin)
+    if socket.assigns[:user_role] != "sysadmin" do
+      user = Auth.get_user(socket.assigns[:current_user_id])
+      cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || "1"
+      dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || "1"
+      Precios.sync_precios(cliente, dir)
+      send(self(), :load_precios)
+    end
 
     case Productos.sync_from_api() do
       {:ok, count} ->
         productos = Productos.list_productos()
         {:noreply,
          socket
-         |> assign(syncing: false, productos: productos, search: "", cat_idx: 0, cat_nombre: "Todos")
+         |> assign(syncing: false, synced: true, productos: productos, search: "", cat_idx: 0, cat_nombre: "Todos")
+         |> push_event("tienda_mark_synced", %{})
          |> put_flash(:info, "#{count} productos sincronizados")}
 
       {:error, _reason} ->
@@ -118,6 +129,15 @@ defmodule PrettycoreWeb.Tienda do
   end
 
   # ── Event handlers ──
+
+  @impl true
+  def handle_event("restore_synced", _params, socket) do
+    user    = Auth.get_user(socket.assigns[:current_user_id])
+    cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || "1"
+    dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || "1"
+    precios = Precios.get_precios_map(cliente, dir)
+    {:noreply, assign(socket, synced: true, precios: precios)}
+  end
 
   @impl true
   def handle_event("search", %{"q" => q}, socket) do
@@ -247,10 +267,12 @@ defmodule PrettycoreWeb.Tienda do
     case Carritos.add_item(socket.assigns.current_user_id, codigo) do
       {:ok, _} ->
         %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
+        producto = Enum.find(socket.assigns.productos, &(&1.codigo == codigo))
+        nombre   = (producto && producto.descripcion) || "Producto"
         {:noreply,
          socket
-         |> assign(cart_items: items, cart_total_items: total, cart_open: true)
-         |> put_flash(:info, "Producto agregado al carrito")}
+         |> assign(cart_items: items, cart_total_items: total)
+         |> put_flash(:info, "✓ #{nombre} agregado al carrito")}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Error al agregar al carrito")}
@@ -279,12 +301,38 @@ defmodule PrettycoreWeb.Tienda do
   end
 
   @impl true
+  def handle_event("hacer_pedido", _, socket) do
+    user    = Auth.get_user(socket.assigns.current_user_id)
+    cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
+    dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
+
+    case Pedidos.crear_desde_carrito(
+           socket.assigns.current_user_id,
+           socket.assigns.cart_items,
+           socket.assigns.precios,
+           cliente,
+           dir
+         ) do
+      {:ok, _pedido} ->
+        Carritos.vaciar_carrito(socket.assigns.current_user_id)
+        {:noreply,
+         socket
+         |> assign(cart_items: [], cart_total_items: 0, cart_open: false)
+         |> put_flash(:info, "¡Pedido realizado con éxito!")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+    end
+  end
+
+  @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
     case id do
       "toggle_sidebar" -> {:noreply, update(socket, :sidebar_open, &(not &1))}
       "inicio"         -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
       "clientes"       -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
       "tienda"         -> {:noreply, socket}
+      "pedidos"        -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
       "categorias"       -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
       "super_categorias" -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
       "carrusel"         -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
@@ -334,7 +382,7 @@ defmodule PrettycoreWeb.Tienda do
 
   defp tienda_page(assigns) do
     ~H"""
-    <section class="min-h-screen bg-gray-50">
+    <section class="min-h-screen bg-gray-50" id="tienda-sync-root" phx-hook="TiendaSync">
       <!-- Header sticky -->
       <header class="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-sm border-b border-gray-200 px-4 sm:px-6 py-3">
         <div class="flex items-center justify-between gap-4">
@@ -358,23 +406,6 @@ defmodule PrettycoreWeb.Tienda do
               </svg>
               <%= if @syncing, do: "Sincronizando...", else: "Sincronizar" %>
             </button>
-            <!-- Carrito: solo roles no-sysadmin -->
-            <%= if @user_role != "sysadmin" do %>
-              <button
-                phx-click="toggle_cart"
-                class="relative inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white border border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-900 transition-all shadow-sm"
-                title="Ver carrito"
-              >
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <%= if @cart_total_items > 0 do %>
-                  <span class="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    <%= @cart_total_items %>
-                  </span>
-                <% end %>
-              </button>
-            <% end %>
           </div>
         </div>
         <!-- Search dentro del sticky -->
@@ -394,6 +425,31 @@ defmodule PrettycoreWeb.Tienda do
           />
         </div>
       </header>
+
+      <!-- Gate: requiere sincronizar -->
+      <%= if not @synced do %>
+        <div class="flex flex-col items-center justify-center min-h-[60vh] px-6">
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 max-w-sm w-full text-center">
+            <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-blue-50 flex items-center justify-center">
+              <svg class="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <h2 class="text-lg font-bold text-gray-900 mb-2">Catálogo no cargado</h2>
+            <p class="text-sm text-gray-500 mb-6">Para ver el catálogo de productos y precios actualizados, es necesario sincronizar con el servidor.</p>
+            <button
+              phx-click="sync"
+              disabled={@syncing}
+              class={"w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all #{if @syncing, do: "bg-gray-100 text-gray-400 cursor-not-allowed", else: "bg-blue-500 text-white hover:bg-blue-400"}"}
+            >
+              <svg class={"w-4 h-4 #{if @syncing, do: "animate-spin"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <%= if @syncing, do: "Sincronizando...", else: "Sincronizar ahora" %>
+            </button>
+          </div>
+        </div>
+      <% else %>
 
       <!-- Contenido -->
       <div class="px-4 sm:px-6 py-4">
@@ -415,7 +471,7 @@ defmodule PrettycoreWeb.Tienda do
           secs = if en_inicio, do: secs_all, else: Enum.filter(secs_all, &(&1.tipo == "productos"))
           puede_editar = can_edit_images?(@user_role, @user_permissions)
         %>
-        <div class="flex gap-0 items-start">
+        <div class="flex gap-0 items-start bg-gray-100 min-h-screen">
           <!-- SIDEBAR CATEGORÍAS - siempre visible, encima de todo -->
           <%= if @categorias != [] do %>
             <div class="flex-shrink-0 w-[72px] sticky self-start" style="top: 130px; z-index: 35;">
@@ -450,12 +506,21 @@ defmodule PrettycoreWeb.Tienda do
             </div>
           <% end %>
           <!-- CONTENIDO: todas las secciones -->
-          <div class="flex-1 min-w-0 space-y-6">
-          <%= for sec <- secs do %>
+          <%
+            secs_with_prev =
+              secs
+              |> Enum.with_index()
+              |> Enum.map(fn {sec, i} ->
+                prev = if i > 0, do: (Enum.at(secs, i - 1)).tipo, else: nil
+                {sec, prev}
+              end)
+          %>
+          <div class="flex-1 min-w-0 overflow-hidden">
+          <%= for {sec, prev_tipo} <- secs_with_prev do %>
 
             <!-- ══ SECCIÓN: CARRUSEL ══ -->
             <%= if sec.tipo == "carrusel" and @carrusel != [] do %>
-              <div class="relative w-full -mb-14">
+              <div class="relative w-full">
                 <div id="tienda-carrusel" class="flex overflow-x-auto snap-x snap-mandatory scroll-smooth"
                   style="scrollbar-width: none; -ms-overflow-style: none;" phx-hook="Carrusel">
                   <%= for img <- @carrusel do %>
@@ -469,9 +534,8 @@ defmodule PrettycoreWeb.Tienda do
                     </div>
                   <% end %>
                 </div>
-                <div class="absolute bottom-0 left-0 right-0 pointer-events-none" style="height:80px;background:linear-gradient(to top, #f9fafb 0%, transparent 100%);z-index:10;"></div>
                 <%= if length(@carrusel) > 1 do %>
-                  <div class="absolute flex gap-1.5" style="bottom:88px;left:50%;transform:translateX(-50%);z-index:20;">
+                  <div class="absolute flex gap-1.5" style="bottom:20px;left:50%;transform:translateX(-50%);z-index:20;">
                     <%= for {_, i} <- Enum.with_index(@carrusel) do %>
                       <div class={"w-1.5 h-1.5 rounded-full bg-white transition-opacity #{if i == 0, do: "opacity-100", else: "opacity-40"}"} id={"carrusel-dot-#{i}"}></div>
                     <% end %>
@@ -488,7 +552,7 @@ defmodule PrettycoreWeb.Tienda do
 
             <!-- ══ SECCIÓN: TIENDA PRINCIPAL (productos) ══ -->
             <%= if sec.tipo == "productos" do %>
-              <div class="relative" style="z-index:30;">
+              <div style={"position:relative;z-index:30;background:#ffffff;padding:16px 16px 24px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}"}>
                     <%= if Enum.empty?(@productos) do %>
                       <div class="text-center py-20 text-gray-400">
                         <p class="text-sm font-medium">Sin productos</p>
@@ -530,10 +594,11 @@ defmodule PrettycoreWeb.Tienda do
                                 <div class="flex justify-between text-gray-400">
                                   <span>Mín.</span><span class="font-medium text-gray-600"><%= producto.pzas_min_vta %> pza</span>
                                 </div>
-                                <%= if Map.has_key?(@precios, producto.codigo) do %>
+                                <% precio_val = Map.get(@precios, producto.codigo) || Map.get(@precios, "0") %>
+                                <%= if precio_val do %>
                                   <div class="flex justify-between items-center pt-0.5">
                                     <span class="text-gray-400">Precio</span>
-                                    <span class="font-bold text-gray-900 text-xs">$<%= :erlang.float_to_binary(Map.get(@precios, producto.codigo, 0.0), decimals: 2) %></span>
+                                    <span class="font-bold text-green-600 text-xs">$<%= :erlang.float_to_binary(precio_val / 1, decimals: 2) %></span>
                                   </div>
                                 <% end %>
                               </div>
@@ -567,39 +632,40 @@ defmodule PrettycoreWeb.Tienda do
                     _ -> Enum.take(@productos, 10)
                   end
               %>
-              <div class="px-4 sm:px-6">
-                <!-- Header con fondo oscuro -->
-                <div class="flex items-center gap-3 mb-4">
-                  <div class="flex items-center gap-1.5 bg-yellow-400 text-gray-900 px-3 py-1.5 rounded-full">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                    <span class="text-sm font-extrabold tracking-wide"><%= sec.nombre %></span>
+              <div style={"background:#ffffff;padding:16px 16px 20px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}position:relative;z-index:20;"}>
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    <span class="text-sm font-bold text-gray-900"><%= sec.nombre %></span>
                   </div>
                 </div>
                 <%= if Enum.empty?(sec_prods) do %>
                   <p class="text-sm text-gray-400 py-4">Sin productos disponibles</p>
                 <% else %>
-                  <div class="flex gap-3 overflow-x-auto pb-3 snap-x" style="scrollbar-width: none;">
+                  <div class="flex gap-2.5 overflow-x-auto pb-2 snap-x" style="scrollbar-width: none;">
                     <%= for {prod, rank} <- Enum.with_index(sec_prods, 1) do %>
                       <div class="flex-none w-32 snap-start group relative flex flex-col">
-                        <!-- Imagen con número de ranking -->
-                        <div class="relative w-full aspect-square rounded-2xl overflow-hidden bg-gray-100 flex-shrink-0">
+                        <div class="relative w-full aspect-square rounded-xl overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
                           <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300 p-1" />
                           <% else %>
-                            <div class="w-full h-full flex items-center justify-center bg-gray-100">
-                              <svg class="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            <div class="w-full h-full flex items-center justify-center">
+                              <svg class="w-10 h-10 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             </div>
                           <% end %>
-                          <!-- Número de ranking -->
-                          <div class={"absolute bottom-0 left-0 w-9 h-9 flex items-center justify-center rounded-tr-2xl font-black text-lg #{if rank <= 3, do: "bg-yellow-400 text-gray-900", else: "bg-gray-900/80 text-white"}"}>
+                          <div class={"absolute bottom-0 left-0 w-8 h-8 flex items-center justify-center rounded-tr-xl font-black text-sm #{if rank <= 3, do: "bg-yellow-400 text-gray-900", else: "bg-gray-200 text-gray-500"}"}>
                             <%= rank %>
                           </div>
                         </div>
-                        <div class="mt-2 px-0.5 flex flex-col flex-1">
-                          <p class="text-xs font-semibold text-gray-900 line-clamp-2 leading-tight"><%= prod.descripcion %></p>
+                        <div class="mt-1.5 px-0.5 flex flex-col flex-1">
+                          <p class="text-xs text-gray-800 line-clamp-2 leading-tight"><%= prod.descripcion %></p>
+                          <% precio_top = Map.get(@precios, prod.codigo) || Map.get(@precios, "0") %>
+                          <%= if precio_top do %>
+                            <span class="text-[11px] font-bold text-green-600 mt-0.5">$<%= :erlang.float_to_binary(precio_top / 1, decimals: 2) %></span>
+                          <% end %>
                           <%= if @user_role != "sysadmin" do %>
                             <button phx-click="add_to_cart" phx-value-codigo={prod.codigo}
-                              class="mt-auto w-full py-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-[10px] font-bold rounded-full transition-colors">
+                              class="mt-auto w-full py-1.5 mt-2 bg-gray-900 hover:bg-gray-700 text-white text-[10px] font-semibold rounded-lg transition-colors">
                               Comprar
                             </button>
                           <% end %>
@@ -621,39 +687,41 @@ defmodule PrettycoreWeb.Tienda do
                     _ -> Enum.take(@productos, 10)
                   end
               %>
-              <div class="px-4 sm:px-6">
+              <div style={"background:#ffffff;padding:16px 16px 20px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}position:relative;z-index:20;"}>
                 <div class="flex items-center gap-2 mb-4">
-                  <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                  <span class="text-base font-bold text-gray-900"><%= sec.nombre %></span>
+                  <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  <span class="text-sm font-bold text-gray-900"><%= sec.nombre %></span>
                 </div>
                 <%= if Enum.empty?(sec_prods) do %>
                   <p class="text-sm text-gray-400 py-4">Sin productos disponibles</p>
                 <% else %>
-                  <div class="flex gap-4 overflow-x-auto pb-3 snap-x" style="scrollbar-width: none;">
+                  <div class="flex gap-2.5 overflow-x-auto pb-2 snap-x" style="scrollbar-width: none;">
                     <%= for prod <- sec_prods do %>
-                      <div class="flex-none w-44 snap-start group">
-                        <div class="relative w-full rounded-2xl overflow-hidden bg-red-50 border border-red-100" style="aspect-ratio:3/4;">
+                      <div class="flex-none w-36 snap-start group flex flex-col">
+                        <div class="relative w-full rounded-xl overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0" style="aspect-ratio:1;">
                           <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300" />
                           <% else %>
                             <div class="w-full h-full flex items-center justify-center">
-                              <svg class="w-12 h-12 text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <svg class="w-12 h-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             </div>
                           <% end %>
-                          <!-- Corazón flotante -->
-                          <div class="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow-sm">
-                            <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                          <div class="absolute top-1.5 right-1.5 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
+                            <svg class="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                           </div>
-                          <!-- Gradiente inferior con nombre y botón -->
-                          <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-                            <p class="text-white text-xs font-semibold line-clamp-2 leading-tight mb-2"><%= prod.descripcion %></p>
-                            <%= if @user_role != "sysadmin" do %>
-                              <button phx-click="add_to_cart" phx-value-codigo={prod.codigo}
-                                class="w-full py-1 bg-white text-gray-900 text-[10px] font-bold rounded-full hover:bg-red-500 hover:text-white transition-colors">
-                                Comprar
-                              </button>
-                            <% end %>
-                          </div>
+                        </div>
+                        <div class="mt-1.5 flex flex-col flex-1">
+                          <p class="text-xs text-gray-800 line-clamp-2 leading-tight flex-1"><%= prod.descripcion %></p>
+                          <% precio_fav = Map.get(@precios, prod.codigo) || Map.get(@precios, "0") %>
+                          <%= if precio_fav do %>
+                            <span class="text-[11px] font-bold text-green-600 mt-0.5">$<%= :erlang.float_to_binary(precio_fav / 1, decimals: 2) %></span>
+                          <% end %>
+                          <%= if @user_role != "sysadmin" do %>
+                            <button phx-click="add_to_cart" phx-value-codigo={prod.codigo}
+                              class="mt-2 w-full py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-[10px] font-semibold rounded-lg transition-colors">
+                              Comprar
+                            </button>
+                          <% end %>
                         </div>
                       </div>
                     <% end %>
@@ -672,37 +740,38 @@ defmodule PrettycoreWeb.Tienda do
                     _ -> Enum.take(@productos, 10)
                   end
               %>
-              <div class="px-4 sm:px-6">
+              <div style={"background:#ffffff;padding:16px 16px 20px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}position:relative;z-index:20;"}>
                 <div class="flex items-center gap-2 mb-4">
-                  <div class="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center">
-                    <svg class="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3l14 9-14 9V3z"/></svg>
-                  </div>
-                  <span class="text-base font-bold text-gray-900"><%= sec.nombre %></span>
+                  <svg class="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3l14 9-14 9V3z"/></svg>
+                  <span class="text-sm font-bold text-gray-900"><%= sec.nombre %></span>
                 </div>
                 <%= if Enum.empty?(sec_prods) do %>
                   <p class="text-sm text-gray-400 py-4">Sin productos disponibles</p>
                 <% else %>
-                  <div class="flex gap-3 overflow-x-auto pb-3 snap-x" style="scrollbar-width: none;">
+                  <div class="flex gap-2.5 overflow-x-auto pb-2 snap-x" style="scrollbar-width: none;">
                     <%= for prod <- sec_prods do %>
-                      <div class="flex-none w-36 snap-start group bg-white rounded-2xl overflow-hidden border border-orange-100 shadow-sm hover:shadow-md hover:border-orange-300 transition-all flex flex-col">
-                        <div class="relative w-full aspect-square bg-orange-50 overflow-hidden flex-shrink-0">
+                      <div class="flex-none w-34 snap-start group flex flex-col">
+                        <div class="relative w-full aspect-square rounded-xl overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
                           <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300" />
                           <% else %>
                             <div class="w-full h-full flex items-center justify-center">
-                              <svg class="w-9 h-9 text-orange-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <svg class="w-9 h-9 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             </div>
                           <% end %>
-                          <div class="absolute top-2 left-2 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                          <div class="absolute top-1.5 left-1.5 bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md tracking-wide">
                             NUEVO
                           </div>
                         </div>
-                        <div class="p-2.5 flex flex-col flex-1">
-                          <p class="text-xs font-semibold text-gray-900 line-clamp-2 leading-tight"><%= prod.descripcion %></p>
-                          <p class="text-[10px] text-gray-400 font-mono mt-0.5"><%= prod.codigo %></p>
+                        <div class="mt-1.5 flex flex-col flex-1">
+                          <p class="text-xs text-gray-800 line-clamp-2 leading-tight flex-1"><%= prod.descripcion %></p>
+                          <% precio_dest = Map.get(@precios, prod.codigo) || Map.get(@precios, "0") %>
+                          <%= if precio_dest do %>
+                            <span class="text-[11px] font-bold text-green-600 mt-0.5">$<%= :erlang.float_to_binary(precio_dest / 1, decimals: 2) %></span>
+                          <% end %>
                           <%= if @user_role != "sysadmin" do %>
                             <button phx-click="add_to_cart" phx-value-codigo={prod.codigo}
-                              class="mt-auto w-full py-1 bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-bold rounded-full transition-colors">
+                              class="mt-2 w-full py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-[10px] font-semibold rounded-lg transition-colors">
                               Comprar
                             </button>
                           <% end %>
@@ -716,8 +785,8 @@ defmodule PrettycoreWeb.Tienda do
 
             <!-- ══ SECCIÓN: PUBLICIDAD ══ -->
             <%= if sec.tipo == "publicidad" do %>
-              <div class="px-4 sm:px-6">
-                <div class="rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 p-8 text-white relative overflow-hidden">
+              <div style={if(prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;overflow:hidden;position:relative;z-index:20;", else: "margin-bottom:8px;position:relative;z-index:20;")}>
+                <div class="bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 p-8 text-white relative overflow-hidden">
                   <div class="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/2"></div>
                   <div class="absolute bottom-0 left-0 w-40 h-40 rounded-full bg-white/5 translate-y-1/2 -translate-x-1/2"></div>
                   <div class="relative">
@@ -735,7 +804,7 @@ defmodule PrettycoreWeb.Tienda do
 
             <!-- ══ SECCIÓN: ENVÍOS ══ -->
             <%= if sec.tipo == "envios" do %>
-              <div class="px-4 sm:px-6">
+              <div style={"background:#ffffff;padding:16px 16px 20px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}position:relative;z-index:20;"}>
                 <%
                   default_cards = [
                     %{"titulo" => "Envío rápido",  "descripcion" => "Entrega en 24-48h",      "color" => "purple"},
@@ -757,130 +826,125 @@ defmodule PrettycoreWeb.Tienda do
                     end
                   end
                 %>
-                <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-                  <h2 class="text-base font-bold text-gray-900 mb-4"><%= sec.nombre %></h2>
-                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <%= for card <- env_cards do %>
-                      <% {icon_class, icon_path} = color_icon.(card["color"] || "purple") %>
-                      <div class="flex flex-col items-center text-center p-3 bg-gray-50 rounded-xl">
-                        <svg class={"w-8 h-8 mb-2 #{icon_class}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                          <path stroke-linecap="round" stroke-linejoin="round" d={icon_path}/>
-                        </svg>
-                        <p class="text-xs font-semibold text-gray-800"><%= card["titulo"] %></p>
-                        <p class="text-xs text-gray-400 mt-0.5"><%= card["descripcion"] %></p>
+                <p class="text-sm font-bold text-gray-900 mb-3"><%= sec.nombre %></p>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <%= for card <- env_cards do %>
+                    <% {icon_class, icon_path} = color_icon.(card["color"] || "purple") %>
+                    <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                      <svg class={"w-6 h-6 flex-shrink-0 mt-0.5 #{icon_class}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d={icon_path}/>
+                      </svg>
+                      <div>
+                        <p class="text-xs font-semibold text-gray-800 leading-tight"><%= card["titulo"] %></p>
+                        <p class="text-[11px] text-gray-400 mt-0.5 leading-tight"><%= card["descripcion"] %></p>
                       </div>
-                    <% end %>
-                  </div>
+                    </div>
+                  <% end %>
                 </div>
               </div>
             <% end %>
 
           <% end %>
           </div><!-- fin flex-1 content -->
-        </div><!-- fin flex gap-0 -->
-      <% end %>
-      </div><!-- fin contenido -->
-    </section>
 
-    <!-- DRAWER CARRITO (solo roles no-sysadmin) -->
-    <%= if @user_role != "sysadmin" and @cart_open do %>
-      <div class="fixed inset-0 z-40 flex justify-end">
-        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" phx-click="toggle_cart"></div>
-        <div class="relative w-full max-w-sm bg-white shadow-2xl flex flex-col h-full">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div class="flex items-center gap-2">
-              <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <h2 class="text-base font-semibold text-gray-900">Carrito</h2>
-              <%= if @cart_total_items > 0 do %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                  <%= @cart_total_items %> items
-                </span>
-              <% end %>
-            </div>
-            <div class="flex items-center gap-2">
-              <%= if @cart_items != [] do %>
-                <button
-                  phx-click="vaciar_carrito"
-                  class="text-xs text-red-400 hover:text-red-600 transition-colors"
-                  data-confirm="¿Vaciar el carrito?"
-                >
-                  Vaciar
-                </button>
-              <% end %>
-              <button phx-click="toggle_cart" class="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg transition-colors">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="flex-1 overflow-y-auto p-4">
-            <%= if Enum.empty?(@cart_items) do %>
-              <div class="flex flex-col items-center justify-center h-full text-gray-400 py-20">
-                <svg class="w-14 h-14 mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <p class="text-sm font-medium">Carrito vacío</p>
-                <p class="text-xs mt-1">Agrega productos desde el catálogo</p>
-              </div>
-            <% else %>
-              <div class="space-y-3">
-                <%= for item <- @cart_items do %>
-                  <div class="flex gap-3 bg-gray-50 rounded-xl p-3 items-center">
-                    <div class="w-12 h-12 rounded-lg overflow-hidden bg-white border border-gray-200 flex-shrink-0 flex items-center justify-center">
-                      <%= if item.producto && item.producto.imagen_url && item.producto.imagen_url != "" do %>
-                        <img src={"#{item.producto.imagen_url}?t=#{DateTime.to_unix(item.producto.updated_at)}"} class="w-full h-full object-cover" />
-                      <% else %>
-                        <svg class="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
+          <!-- MINI CARRITO - siempre visible para no-sysadmin -->
+          <%= if @user_role != "sysadmin" do %>
+            <div class="flex-shrink-0 w-[220px] sticky self-start" style="top: 130px;">
+              <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mx-2 overflow-hidden flex flex-col" style="max-height: calc(100vh - 145px);">
+                <!-- Header carrito -->
+                <div class="flex items-center justify-between px-3 py-2 border-b border-gray-50">
+                  <div class="flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span class="text-xs font-semibold text-gray-900">Carrito</span>
+                    <%= if @cart_total_items > 0 do %>
+                      <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700"><%= @cart_total_items %></span>
+                    <% end %>
+                  </div>
+                  <%= if @cart_items != [] do %>
+                    <button phx-click="vaciar_carrito" data-confirm="¿Vaciar carrito?" class="text-[10px] text-red-400 hover:text-red-600 transition-colors">Vaciar</button>
+                  <% end %>
+                </div>
+                <!-- Items -->
+                <div class="flex-1 overflow-y-auto px-2 py-2" style="min-height:80px;">
+                  <%= if Enum.empty?(@cart_items) do %>
+                    <div class="flex flex-col items-center justify-center py-6 text-gray-300">
+                      <svg class="w-8 h-8 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <p class="text-[10px]">Vacío</p>
+                    </div>
+                  <% else %>
+                    <div class="space-y-1.5">
+                      <%= for item <- @cart_items do %>
+                        <div class="flex items-center gap-1.5 bg-gray-50 rounded-lg p-1.5">
+                          <div class="w-8 h-8 rounded-md overflow-hidden bg-white border border-gray-100 flex-shrink-0 flex items-center justify-center">
+                            <%= if item.producto && item.producto.imagen_url && item.producto.imagen_url != "" do %>
+                              <img src={item.producto.imagen_url} class="w-full h-full object-cover" />
+                            <% else %>
+                              <svg class="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            <% end %>
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <p class="text-[10px] font-medium text-gray-800 truncate leading-tight"><%= if item.producto, do: item.producto.descripcion, else: item.producto_codigo %></p>
+                            <div class="flex items-center gap-1 mt-0.5">
+                              <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad - 1}
+                                class="w-4 h-4 rounded bg-white border border-gray-200 text-gray-500 hover:text-red-500 flex items-center justify-center text-xs font-bold leading-none">−</button>
+                              <span class="text-[10px] font-semibold text-gray-700 w-4 text-center"><%= item.cantidad %></span>
+                              <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad + 1}
+                                class="w-4 h-4 rounded bg-white border border-gray-200 text-gray-500 hover:text-purple-600 flex items-center justify-center text-xs font-bold leading-none">+</button>
+                            </div>
+                          </div>
+                          <button phx-click="remove_from_cart" phx-value-id={item.id}
+                            class="w-4 h-4 flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors flex items-center justify-center">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
                       <% end %>
                     </div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs font-semibold text-gray-900 truncate">
-                        <%= if item.producto, do: item.producto.descripcion, else: item.producto_codigo %>
-                      </p>
-                      <p class="text-[11px] text-gray-400 font-mono"><%= item.producto_codigo %></p>
+                  <% end %>
+                </div>
+                <!-- Footer -->
+                <%= if @cart_items != [] do %>
+                  <%
+                    total_mini = Enum.reduce(@cart_items, 0.0, fn item, acc ->
+                      p = Map.get(@precios, item.producto_codigo) || Map.get(@precios, "0") || 0.0
+                      acc + p * (item.cantidad || 1)
+                    end)
+                  %>
+                  <div class="border-t border-gray-100 px-3 py-2.5 space-y-2">
+                    <div class="flex justify-between text-[11px] text-gray-600">
+                      <span>Productos</span>
+                      <span class="font-semibold text-gray-900"><%= @cart_total_items %> pzas</span>
                     </div>
-                    <div class="flex items-center gap-1 flex-shrink-0">
-                      <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad - 1}
-                        class="w-6 h-6 rounded-md bg-white border border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-500 flex items-center justify-center transition-colors text-sm font-bold">−</button>
-                      <span class="w-7 text-center text-xs font-semibold text-gray-700"><%= item.cantidad %></span>
-                      <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad + 1}
-                        class="w-6 h-6 rounded-md bg-white border border-gray-200 text-gray-500 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600 flex items-center justify-center transition-colors text-sm font-bold">+</button>
-                      <button phx-click="remove_from_cart" phx-value-id={item.id}
-                        class="ml-1 w-6 h-6 rounded-md text-gray-300 hover:text-red-500 flex items-center justify-center transition-colors">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+                    <%= if total_mini > 0 do %>
+                      <div class="flex justify-between text-[11px]">
+                        <span class="text-gray-400">Importe</span>
+                        <span class="font-bold text-green-600">$<%= :erlang.float_to_binary(total_mini / 1, decimals: 2) %></span>
+                      </div>
+                    <% end %>
+                    <button
+                      phx-click="hacer_pedido"
+                      data-confirm="¿Confirmar pedido?"
+                      class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold rounded-xl transition-colors"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Realizar Pedido
+                    </button>
                   </div>
                 <% end %>
               </div>
-            <% end %>
-          </div>
-
-          <%= if @cart_items != [] do %>
-            <div class="border-t border-gray-100 p-4">
-              <div class="flex justify-between text-sm font-semibold text-gray-900 mb-3">
-                <span>Total de productos</span>
-                <span class="text-purple-600"><%= @cart_total_items %> pzas</span>
-              </div>
-              <div class="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
-                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Carrito guardado en base de datos
-              </div>
             </div>
           <% end %>
-        </div>
-      </div>
-    <% end %>
+
+        </div><!-- fin flex gap-0 -->
+      <% end %>
+      </div><!-- fin contenido -->
+    <% end %><!-- fin gate sincronizar -->
+    </section>
 
     <!-- MODAL UPLOAD IMAGEN -->
     <%= if @editing_imagen_codigo do %>

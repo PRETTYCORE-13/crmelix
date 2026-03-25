@@ -1,29 +1,104 @@
 defmodule Prettycore.Precios do
   @moduledoc """
-  Obtiene y procesa precios de productos por cliente/dirección desde la API externa.
-  Devuelve un mapa %{producto_codigo => precio} para consulta rápida.
+  Manejo de precios de productos: sincronización desde API externa y lectura desde DB.
   """
 
   alias Prettycore.Api.Client
+  alias Prettycore.Precios.Precio
+  alias Prettycore.PsqlRepo, as: Repo
+  import Ecto.Query
+
+  # ── API → DB ──────────────────────────────────────────────────────────────
 
   @doc """
-  Retorna un mapa %{codigo_producto => precio_float} para el cliente/dirección indicados.
-  Si la API falla o el usuario no tiene cliente asignado, retorna un mapa vacío.
+  Llama a la API VTA_PRECIOS y guarda los resultados en la tabla `precios`.
+  Retorna {:ok, count} o {:error, reason}.
+  """
+  def sync_precios(cliente_codigo, dir_codigo) do
+    cliente = if is_binary(cliente_codigo) and cliente_codigo != "", do: cliente_codigo, else: "1"
+    dir     = if is_binary(dir_codigo)     and dir_codigo     != "", do: dir_codigo,     else: "1"
+
+    case Client.get_precios(cliente, dir) do
+      # Lista directa
+      {:ok, lista} when is_list(lista) and lista != [] ->
+        save_precios(lista, cliente, dir)
+
+      # OData / mapa con "value" o respuesta única
+      {:ok, %{"value" => lista}} when is_list(lista) and lista != [] ->
+        save_precios(lista, cliente, dir)
+
+      # Un solo objeto (mapa plano)
+      {:ok, %{"PRODUC_CODIGO_K" => _} = item} ->
+        save_precios([item], cliente, dir)
+
+      {:ok, other} ->
+        require Logger
+        Logger.warning("sync_precios: respuesta inesperada: #{inspect(other)}")
+        {:ok, 0}
+
+      error ->
+        error
+    end
+  end
+
+  # ── DB → Assigns ──────────────────────────────────────────────────────────
+
+  @doc """
+  Retorna %{codigo_producto => precio_float} leyendo desde la base de datos.
+  No llama a la API externa.
   """
   def get_precios_map(cliente_codigo, dir_codigo)
       when is_binary(cliente_codigo) and cliente_codigo != "" do
     dir = if is_binary(dir_codigo) and dir_codigo != "", do: dir_codigo, else: "1"
-    case Client.get_precios(cliente_codigo, dir) do
-      {:ok, lista} when is_list(lista) ->
-        Map.new(lista, fn item ->
-          codigo = to_string(item["PRODUC_CODIGO_K"] || "")
-          precio = item["VTAPRE_PRECIO"] || 0.0
-          {codigo, precio}
-        end)
-      _ ->
-        %{}
-    end
+
+    from(p in Precio,
+      where: p.cliente_codigo == ^cliente_codigo and p.dir_codigo == ^dir,
+      select: {p.producto_codigo, p.precio}
+    )
+    |> Repo.all()
+    |> Map.new()
   end
 
   def get_precios_map(_, _), do: %{}
+
+  # ── Privado ───────────────────────────────────────────────────────────────
+
+  defp save_precios(lista, cliente, dir) do
+    require Logger
+    Logger.debug("save_precios: #{length(lista)} registros para cliente=#{cliente} dir=#{dir}")
+    Logger.debug("save_precios primer item: #{inspect(List.first(lista))}")
+
+    now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+    entries =
+      lista
+      |> Enum.reject(fn item ->
+        codigo = to_string(item["PRODUC_CODIGO_K"] || "")
+        codigo == ""
+      end)
+      |> Enum.uniq_by(fn item -> to_string(item["PRODUC_CODIGO_K"]) end)
+      |> Enum.map(fn item ->
+        %{
+          id: Ecto.UUID.generate(),
+          producto_codigo: to_string(item["PRODUC_CODIGO_K"]),
+          precio: item["VTAPRE_PRECIO"] || 0.0,
+          cliente_codigo: cliente,
+          dir_codigo: dir,
+          lista_precio: item["VTAPRL_CODIGO_K"],
+          unidad: String.trim(to_string(item["PROUND_CODIGO_K"] || "")),
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    {count, _} =
+      Repo.insert_all(
+        Precio,
+        entries,
+        on_conflict: {:replace, [:precio, :lista_precio, :unidad, :updated_at]},
+        conflict_target: [:cliente_codigo, :dir_codigo, :producto_codigo]
+      )
+
+    {:ok, count}
+  end
 end

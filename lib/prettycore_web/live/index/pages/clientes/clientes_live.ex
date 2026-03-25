@@ -522,18 +522,31 @@ end
       "tienda" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
 
+      "pedidos" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
+
       "categorias" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
+
+      "super_categorias" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
+
+      "carrusel" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
+
+      "secciones" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
 
       "usuarios" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
 
-      "analisis" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/analisis")}
+      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
+      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
+      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
+      "seccion_envios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
 
-  #    "config" ->
-  #      {:noreply, push_navigate(socket, to: ~p"/admin/configuracion")}
-      _->
+      _ ->
         {:noreply, socket}
     end
   end

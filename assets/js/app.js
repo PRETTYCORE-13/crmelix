@@ -410,11 +410,25 @@ const DragSort = {
   }
 }
 
+// Hook para persistir estado de sincronización entre navegaciones.
+// Usa window (memoria) → se limpia al refrescar el navegador pero sobrevive
+// la navegación LiveView (push_navigate no recarga el JS).
+const TiendaSync = {
+  mounted() {
+    if (window._tiendaSynced === true) {
+      this.pushEvent("restore_synced", {})
+    }
+    this.handleEvent("tienda_mark_synced", () => {
+      window._tiendaSynced = true
+    })
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync},
 })
 
 // Show progress bar on live navigation and form submits

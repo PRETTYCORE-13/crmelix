@@ -54,6 +54,7 @@ defmodule PrettycoreWeb.Router do
   #    live "/workorder", WorkOrderLive
       live "/clientes", Clientes
       live "/tienda", Tienda
+      live "/pedidos", PedidosLive
       live "/categorias", CategoriasLive
       live "/carrusel", CarruselLive
       live "/super-categorias", SuperCategoriasLive
@@ -92,6 +93,13 @@ defmodule PrettycoreWeb.Router do
     pipe_through :browser
 
     get "/clientes/export/excel", ClientesExcelController, :download
+  end
+
+  ## Herramientas sysadmin (descargas, no LiveView)
+  scope "/sysadmin", PrettycoreWeb do
+    pipe_through :browser
+
+    get "/architecture-scan", ArchitectureExcelController, :download
   end
 
   ## Health simple (sin login)

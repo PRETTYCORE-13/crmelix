@@ -27,7 +27,9 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
      |> assign(:api_testing, false)
      |> assign(:pending_params, nil)
      |> assign(:editing_mode, false)
-     |> assign(:permitir_edicion, config.permitir_edicion != false)}
+     |> assign(:permitir_edicion, config.permitir_edicion != false)
+     |> assign(:arch_scan_status, :idle)
+     |> assign(:arch_scan_stats, nil)}
   end
 
   @impl true
@@ -172,6 +174,25 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
     {:noreply, assign(socket, :saved, false)}
   end
 
+  # ── Arquitectura: escaneo + descarga ────────────────────────────────────────
+
+  @impl true
+  def handle_event("scan_architecture", _params, socket) do
+    # Corre el scanner para obtener estadísticas (el Excel se descarga via HTTP)
+    result = Prettycore.ArchitectureScanner.scan()
+    stats  = %{funcionalidades: result.funcionalidades, tablas: result.tablas}
+
+    {:noreply,
+     socket
+     |> assign(:arch_scan_status, :done)
+     |> assign(:arch_scan_stats, stats)}
+  end
+
+  @impl true
+  def handle_event("reset_arch_status", _params, socket) do
+    {:noreply, assign(socket, arch_scan_status: :idle, arch_scan_stats: nil)}
+  end
+
   # ── Helpers ──
 
   defp format_body(body) when is_list(body) or is_map(body) do
@@ -290,6 +311,55 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
             </button>
           </div>
         </form>
+      </div>
+
+      <!-- ═══════════════════════════════════════ HERRAMIENTAS ADMINISTRATIVAS ═══ -->
+      <div class="p-8 max-w-2xl pt-0">
+        <div class="border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <h2 class="text-sm font-semibold text-gray-700">Herramientas administrativas</h2>
+          </div>
+
+          <div class="p-5 flex items-start justify-between gap-4">
+            <div class="flex-1">
+              <p class="text-sm font-medium text-gray-800">Generar Excel Arquitectura</p>
+              <p class="text-xs text-gray-400 mt-0.5">
+                Escanea LiveViews, Controllers, Contexts, Schemas y Migraciones del proyecto.
+                Genera un archivo <code class="bg-gray-100 px-1 rounded text-[10px]">.xlsx</code> descargable con la estructura completa.
+              </p>
+              <%= if @arch_scan_status == :done and @arch_scan_stats do %>
+                <div class="mt-2 flex items-center gap-3">
+                  <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <%= @arch_scan_stats.funcionalidades %> funcionalidades
+                  </span>
+                  <span class="inline-flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <%= @arch_scan_stats.tablas %> tablas
+                  </span>
+                  <button phx-click="reset_arch_status" class="text-[10px] text-gray-400 hover:text-gray-600 underline">limpiar</button>
+                </div>
+              <% end %>
+            </div>
+
+            <%!-- Enlace de descarga oculto --%>
+            <a id="arch-dl-link" href="/sysadmin/architecture-scan" download class="hidden"></a>
+
+            <button
+              phx-click={JS.dispatch("click", to: "#arch-dl-link") |> JS.push("scan_architecture")}
+              class="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-semibold rounded-xl transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Generar Excel Arquitectura
+            </button>
+          </div>
+        </div>
       </div>
     </.sidebar>
 

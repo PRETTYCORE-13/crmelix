@@ -52,6 +52,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
         "inicio"            -> ~p"/admin/platform"
         "clientes"          -> ~p"/admin/clientes"
         "tienda"            -> ~p"/admin/tienda"
+        "pedidos"           -> ~p"/admin/pedidos"
         "categorias"        -> ~p"/admin/categorias"
         "super_categorias"  -> ~p"/admin/super-categorias"
         "carrusel"          -> ~p"/admin/carrusel"

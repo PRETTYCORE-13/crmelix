@@ -8,6 +8,7 @@ defmodule PrettycoreWeb.MenuLayout do
   #  %{id: "workorder", label: "Orden T"},
     %{id: "clientes", label: "Clientes"},
     %{id: "tienda", label: "Tienda"},
+    %{id: "pedidos", label: "Pedidos"},
     %{id: "usuarios", label: "Usuarios", admin_only: true}
   ]
 
@@ -298,6 +299,10 @@ defmodule PrettycoreWeb.MenuLayout do
           <line x1="3" y1="6" x2="21" y2="6" />
           <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
+      <% "pedidos" -> %>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
       <% "usuarios" -> %>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -347,6 +352,8 @@ defmodule PrettycoreWeb.MenuLayout do
                         "seccion_top10", "seccion_favoritos", "seccion_destacados",
                         "seccion_publicidad", "seccion_envios"],
        do: true
+
+  defp menu_active?("pedidos", "pedidos"), do: true
 
   defp menu_active?(id, current), do: id == current
 

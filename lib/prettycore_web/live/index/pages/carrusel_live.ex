@@ -35,14 +35,22 @@ defmodule PrettycoreWeb.CarruselLive do
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
     case id do
-      "toggle_sidebar" -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio"         -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"       -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "tienda"         -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "categorias"     -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "carrusel"       -> {:noreply, socket}
-      "usuarios"       -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      _                -> {:noreply, socket}
+      "toggle_sidebar"    -> {:noreply, update(socket, :sidebar_open, &(not &1))}
+      "inicio"            -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
+      "clientes"          -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
+      "tienda"            -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
+      "pedidos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
+      "categorias"        -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
+      "super_categorias"  -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
+      "carrusel"          -> {:noreply, socket}
+      "secciones"         -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
+      "usuarios"          -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
+      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
+      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
+      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
+      "seccion_envios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
+      _                   -> {:noreply, socket}
     end
   end
 
