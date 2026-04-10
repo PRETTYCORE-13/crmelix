@@ -18,9 +18,22 @@ defmodule Prettycore.Auth do
       when is_binary(username) and is_binary(password) do
     case PsqlRepo.get_by(AuthUser, username: username) do
       nil ->
-        # Timing attack protection
-        Pbkdf2.no_user_verify()
-        {:error, :invalid_credentials}
+        # Buscar en clientes nativos
+        case Prettycore.ClientesNativos.authenticate(username, password) do
+          {:ok, cliente} ->
+            {:ok, %{
+              id:           cliente.id,
+              email:        cliente.email || "",
+              username:     cliente.username,
+              role:         "cliente_nativo",
+              usuario_frog: nil,
+              permissions:  ["inicio", "tienda"]
+            }}
+
+          {:error, _} ->
+            Pbkdf2.no_user_verify()
+            {:error, :invalid_credentials}
+        end
 
       user ->
         if user.active && AuthUser.verify_password(user, password) do

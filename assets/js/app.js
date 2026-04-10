@@ -410,25 +410,92 @@ const DragSort = {
   }
 }
 
+// Hook que comprime imágenes en el cliente ANTES de que LiveView las suba.
+// - Redimensiona a máximo 1200px en cualquier dimensión
+// - Convierte a JPEG 82% de calidad
+// - Actúa en capture phase para interceptar antes que el listener de LiveView
+// - Si el archivo ya pesa < 250 KB, lo deja pasar sin comprimir
+const ImageCompressor = {
+  mounted() {
+    const input = this.el
+
+    input.addEventListener('change', function handler(e) {
+      // Si ya estamos comprimiendo, dejar pasar a LiveView
+      if (input._compressing) return
+
+      const file = e.target.files && e.target.files[0]
+      if (!file || !file.type.startsWith('image/')) return
+
+      // Archivos ya pequeños no necesitan compresión
+      if (file.size < 250 * 1024) return
+
+      // Detener el evento para que LiveView NO vea el archivo original
+      e.stopImmediatePropagation()
+
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+
+      img.onload = function () {
+        URL.revokeObjectURL(url)
+
+        const MAX = 1200
+        let w = img.naturalWidth
+        let h = img.naturalHeight
+
+        // Reducir manteniendo proporción
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+
+        canvas.toBlob(function (blob) {
+          const baseName = file.name.replace(/\.[^.]+$/, '')
+          const compressed = new File([blob], baseName + '.jpg', {
+            type: 'image/jpeg',
+            lastModified: Date.now()
+          })
+
+          // Reemplazar el archivo en el input
+          const dt = new DataTransfer()
+          dt.items.add(compressed)
+
+          input._compressing = true
+          input.files = dt.files
+
+          // Re-disparar change para que LiveView lo procese con el archivo comprimido
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+          input._compressing = false
+        }, 'image/jpeg', 0.82)
+      }
+
+      img.onerror = function () {
+        URL.revokeObjectURL(url)
+        // Si falla la compresión, dejar el archivo original pasar
+        input._compressing = true
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+        input._compressing = false
+      }
+
+      img.src = url
+    }, true) // capture = true: intercepta antes que el listener de LiveView
+  }
+}
+
 // Hook para persistir estado de sincronización entre navegaciones.
 // Usa window (memoria) → se limpia al refrescar el navegador pero sobrevive
 // la navegación LiveView (push_navigate no recarga el JS).
 const TiendaSync = {
-  mounted() {
-    if (window._tiendaSynced === true) {
-      this.pushEvent("restore_synced", {})
-    }
-    this.handleEvent("tienda_mark_synced", () => {
-      window._tiendaSynced = true
-    })
-  }
+  mounted() {}
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync, ImageCompressor},
 })
 
 // Show progress bar on live navigation and form submits

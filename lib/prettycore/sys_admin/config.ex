@@ -11,13 +11,14 @@ defmodule Prettycore.SysAdmin.Config do
     field :url, :string
     field :foto, :string
     field :permitir_edicion, :boolean, default: true
+    field :modo_nativo, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(config, attrs) do
     config
-    |> cast(attrs, [:usuario, :instancia, :token, :url, :foto, :permitir_edicion])
-    |> validate_required([:instancia, :token], message: "es obligatorio")
+    |> cast(attrs, [:usuario, :instancia, :token, :url, :foto, :permitir_edicion, :modo_nativo])
+    |> validate_required([])
   end
 end

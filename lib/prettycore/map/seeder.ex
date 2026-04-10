@@ -17,17 +17,31 @@ defmodule Prettycore.Map.Seeder do
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 
+  @initial_delay  8_000   # 8s — esperar a que el pool de conexiones se estabilice
+  @retry_delay   20_000   # 20s — reintento si hubo error de conexión
+  @max_attempts       3
+
   @impl true
   def init(:ok) do
-    # Dar tiempo a que PsqlRepo y la config estén listos antes de intentar seed
-    Process.send_after(self(), :seed, 3_000)
+    Process.send_after(self(), {:seed, 1}, @initial_delay)
     {:ok, :pending}
   end
 
   @impl true
-  def handle_info(:seed, _state) do
-    seed_if_empty()
-    {:noreply, :done}
+  def handle_info({:seed, attempt}, _state) do
+    case seed_if_empty() do
+      :ok ->
+        {:noreply, :done}
+
+      {:error, :connection} when attempt < @max_attempts ->
+        Logger.warning("MapSeeder: sin conexión disponible (intento #{attempt}/#{@max_attempts}) — reintentando en #{div(@retry_delay, 1000)}s")
+        Process.send_after(self(), {:seed, attempt + 1}, @retry_delay)
+        {:noreply, :retrying}
+
+      {:error, reason} ->
+        Logger.error("MapSeeder: fallo definitivo tras #{attempt} intento(s): #{inspect(reason)}")
+        {:noreply, :failed}
+    end
   end
 
   # ------------------------------------------------
@@ -46,9 +60,16 @@ defmodule Prettycore.Map.Seeder do
     else
       Logger.info("MapSeeder: ya existen #{count} estados en Postgres — skip")
     end
+
+    :ok
   rescue
+    e in DBConnection.ConnectionError ->
+      Logger.warning("MapSeeder: error de conexión: #{inspect(e)}")
+      {:error, :connection}
+
     e ->
       Logger.error("MapSeeder: error inesperado: #{inspect(e)}")
+      {:error, e}
   end
 
   # ------------------------------------------------

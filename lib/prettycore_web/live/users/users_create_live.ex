@@ -13,6 +13,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
      |> assign(:current_page, "usuarios")
      |> assign(:sidebar_open, true)
      |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
      |> assign(:page_title, "Usuarios")
      |> assign(:changeset, changeset)
      |> assign(:form, to_form(changeset))

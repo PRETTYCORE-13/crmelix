@@ -7,6 +7,8 @@ defmodule PrettycoreWeb.ConfiguracionLive do
      socket
      |> assign(:current_page, "config")
      |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
      |> assign(:sidebar_open, true)
      |> assign(:current_path, "/admin/configuracion")}
   end

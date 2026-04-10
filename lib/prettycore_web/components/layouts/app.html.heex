@@ -1,12 +1,15 @@
 <.sidebar
   current_page={@current_page}
   show_programacion_children={@show_programacion_children}
+  show_clientes_children={@show_clientes_children}
+  show_prettycore_children={@show_prettycore_children}
   sidebar_open={@sidebar_open}
   current_user_email={@current_user_email}
   current_user_name={@current_user_name}
   company_logo={@company_logo}
   user_role={@user_role}
   user_permissions={@user_permissions}
+  modo_nativo={@modo_nativo}
 >
   <.flash_group flash={@flash} /> {@inner_content}
 </.sidebar>

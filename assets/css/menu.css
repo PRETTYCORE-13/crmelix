@@ -376,22 +376,19 @@
 }
 
 /* ---- MOBILE HAMBURGER BUTTON ---- */
+/* Oculto en desktop (el topbar lo contiene pero no se muestra) */
 .pc-mobile-menu-btn {
   display: none;
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 60;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   border: none;
-  background: #141414;
+  background: rgba(255,255,255,0.15);
   color: #ffffff;
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  flex-shrink: 0;
 }
 
 /* ---- MOBILE OVERLAY ---- */
@@ -403,9 +400,19 @@
    MOBILE RESPONSIVE (max-width: 768px)
    ======================================== */
 @media (max-width: 768px) {
-  /* Show hamburger button */
+  /* Topbar compacto en móvil: muestra hamburger a la izquierda */
+  .pc-topbar {
+    justify-content: space-between;
+    padding: 6px 12px 6px 8px;
+  }
+
+  /* Show hamburger button inline en la topbar */
   .pc-mobile-menu-btn {
     display: flex;
+  }
+
+  .pc-topbar-logo {
+    height: 24px;
   }
 
   /* Sidebar: hidden off-screen by default */
@@ -413,8 +420,8 @@
     position: fixed;
     top: 0;
     left: 0;
-    height: 100vh;     /* fallback */
-    height: 100dvh;    /* Safari iOS: excluye barra del browser */
+    height: 100vh;
+    height: 100dvh;
     width: 240px;
     z-index: 50;
     transform: translateX(-100%);
@@ -471,9 +478,9 @@
     display: block;
   }
 
-  /* Main content full width */
+  /* Main content full width, sin padding-top extra (topbar ya da espacio) */
   .pc-platform-main {
     width: 100%;
-    padding-top: 56px; /* space for hamburger button */
+    padding-top: 0;
   }
 }

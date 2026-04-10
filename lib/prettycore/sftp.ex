@@ -27,6 +27,15 @@ defmodule Prettycore.Sftp do
   @make_dirs_carrusel [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CARRUSEL"]
   @make_dirs_supercats [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/SUPERCATEGORIAS"]
 
+  @url_productos_nativos "https://prettycore.xyz/ELIXIR/PRETTYCORE/PRODUCTOS_NATIVOS"
+  @dir_productos_nativos "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/PRODUCTOS_NATIVOS"
+  @make_dirs_productos_nativos [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/PRODUCTOS_NATIVOS"]
+
+  def upload_producto_nativo_image(codigo, ext, content) when is_binary(content) do
+    name = "#{codigo}#{ext}"
+    upload("#{@dir_productos_nativos}/#{name}", "#{@url_productos_nativos}/#{name}", @make_dirs_productos_nativos, content, "producto_nativo")
+  end
+
   def upload_product_image(codigo, ext, content) when is_binary(content) do
     name = "#{codigo}#{ext}"
     upload("#{@dir_base}/#{name}", "#{@url_base}/#{name}", @make_dirs_base, content, "producto")

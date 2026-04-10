@@ -3,10 +3,15 @@ defmodule PrettycoreWeb.SessionController do
   use PrettycoreWeb, :controller
   alias Prettycore.Auth
   alias Prettycore.Api.Client, as: Api
+  alias Prettycore.SysAdmin
   require Logger
 
   def create(conn, %{"username" => user, "password" => pass}) do
-    case Auth.authenticate(user, pass) do
+    caso = Auth.authenticate(user, pass)
+    config = SysAdmin.get_config()
+    modo_nativo = config.modo_nativo == true
+
+    case caso do
       {:ok, user_struct} ->
         user_id  = Map.get(user_struct, :id, user)
         email    = Map.get(user_struct, :email, user)
@@ -24,17 +29,32 @@ defmodule PrettycoreWeb.SessionController do
           |> track_new_session(user_id)
           |> redirect(to: ~p"/sysadmin")
         else
-          frog_token = get_frog_token(user_struct)
+          # En modo nativo no se obtiene token Frog ni se precargan catálogos
+          frog_token = if modo_nativo, do: nil, else: get_frog_token(user_struct)
 
-          conn
-          |> put_session(:user_id, user_id)
-          |> put_session(:user_email, email)
-          |> put_session(:user_name, username)
-          |> put_session(:role, role)
-          |> put_session(:frog_token, frog_token)
-          |> configure_session(renew: true)
-          |> track_new_session(user_id)
-          |> redirect(to: ~p"/admin/loading")
+          # Destino: nativos y modo_nativo van directo a platform, el resto a loading
+          dest =
+            cond do
+              role == "cliente_nativo" -> ~p"/admin/tienda"
+              modo_nativo              -> ~p"/admin/platform"
+              true                     -> ~p"/admin/loading"
+            end
+
+          conn_with_session =
+            conn
+            |> put_session(:user_id, user_id)
+            |> put_session(:user_email, email)
+            |> put_session(:user_name, username)
+            |> put_session(:role, role)
+            |> put_session(:frog_token, frog_token)
+            |> configure_session(renew: true)
+
+          conn_tracked =
+            if role == "cliente_nativo",
+              do: conn_with_session,
+              else: track_new_session(conn_with_session, user_id)
+
+          redirect(conn_tracked, to: dest)
         end
 
       {:error, :invalid_credentials} ->

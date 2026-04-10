@@ -50,6 +50,11 @@ defmodule Prettycore.Secciones do
     list_secciones()
   end
 
+  def set_activo(%Seccion{} = s, activo) do
+    s |> Seccion.changeset(%{activo: activo}) |> Repo.update()
+    list_secciones()
+  end
+
   def update_nombre(%Seccion{} = s, nombre) do
     s |> Seccion.changeset(%{nombre: nombre}) |> Repo.update()
     list_secciones()

@@ -28,6 +28,7 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
      |> assign(:pending_params, nil)
      |> assign(:editing_mode, false)
      |> assign(:permitir_edicion, config.permitir_edicion != false)
+     |> assign(:modo_nativo, config.modo_nativo == true)
      |> assign(:arch_scan_status, :idle)
      |> assign(:arch_scan_stats, nil)}
   end
@@ -37,40 +38,46 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
     {:noreply, socket}
   end
 
-  # ── Paso 1: interceptar el submit, hacer test de API y mostrar modal ──
+  # ── Paso 1: interceptar el submit ──
+  # En modo nativo no se necesita API; se guarda directamente.
   @impl true
   def handle_event("previsualizar", params, socket) do
-    url   = String.trim(params["url"]   || "")
-    token = String.trim(params["token"] || "")
-
-    if url == "" or token == "" do
-      {:noreply, assign(socket, :error, "URL y Token son obligatorios.")}
+    if socket.assigns.modo_nativo do
+      # Guardar directamente sin test de API
+      handle_event("confirmar_guardar", nil, assign(socket, :pending_params, params))
     else
-      test_url = String.trim_trailing(url, "/") <> "/SP/EN_RESTHELPER/SYS_EMPRESA"
-      headers  = [
-        {"accept",        "application/json"},
-        {"content-type",  "application/json"},
-        {"authorization", "Bearer #{token}"}
-      ]
+      url   = String.trim(params["url"]   || "")
+      token = String.trim(params["token"] || "")
 
-      api_result =
-        case Req.get(test_url, headers: headers, receive_timeout: @api_test_timeout, retry: false) do
-          {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
-            {:ok, status, body}
+      if url == "" or token == "" do
+        {:noreply, assign(socket, :error, "URL y Token son obligatorios.")}
+      else
+        test_url = String.trim_trailing(url, "/") <> "/SP/EN_RESTHELPER/SYS_EMPRESA"
+        headers  = [
+          {"accept",        "application/json"},
+          {"content-type",  "application/json"},
+          {"authorization", "Bearer #{token}"}
+        ]
 
-          {:ok, %Req.Response{status: status, body: body}} ->
-            {:error, status, body}
+        api_result =
+          case Req.get(test_url, headers: headers, receive_timeout: @api_test_timeout, retry: false) do
+            {:ok, %Req.Response{status: status, body: body}} when status in 200..299 ->
+              {:ok, status, body}
 
-          {:error, reason} ->
-            {:error, :connection, inspect(reason)}
-        end
+            {:ok, %Req.Response{status: status, body: body}} ->
+              {:error, status, body}
 
-      {:noreply,
-       socket
-       |> assign(:error, nil)
-       |> assign(:show_confirm_modal, true)
-       |> assign(:api_test_result, api_result)
-       |> assign(:pending_params, params)}
+            {:error, reason} ->
+              {:error, :connection, inspect(reason)}
+          end
+
+        {:noreply,
+         socket
+         |> assign(:error, nil)
+         |> assign(:show_confirm_modal, true)
+         |> assign(:api_test_result, api_result)
+         |> assign(:pending_params, params)}
+      end
     end
   end
 
@@ -82,45 +89,25 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
     instancia = String.trim(params["instancia"] || "")
     token     = String.trim(params["token"]     || "")
     url       = String.trim(params["url"]       || "")
-    foto      = String.trim(params["foto"]      || "")
-    password  = String.trim(params["password"]  || "")
+    foto      = socket.assigns.foto
 
     attrs = %{usuario: usuario, instancia: instancia, token: token, url: url, foto: foto,
-              permitir_edicion: socket.assigns.permitir_edicion}
+              permitir_edicion: socket.assigns.permitir_edicion,
+              modo_nativo: socket.assigns.modo_nativo}
 
     case SysAdmin.save_config(attrs) do
       {:ok, _config} ->
-        password_result =
-          if password != "" do
-            case Auth.get_user_by_username("SYSADMIN") do
-              nil  -> {:error, "Usuario SYSADMIN no encontrado"}
-              user -> Auth.change_password(user, password)
-            end
-          else
-            :ok
-          end
-
-        case password_result do
-          res when res in [:ok] or (is_tuple(res) and elem(res, 0) == :ok) ->
-            {:noreply,
-             socket
-             |> assign(:usuario, usuario)
-             |> assign(:instancia, instancia)
-             |> assign(:token, token)
-             |> assign(:url, url)
-             |> assign(:foto, foto)
-             |> assign(:saved, true)
-             |> assign(:error, nil)
-             |> assign(:show_confirm_modal, false)
-             |> assign(:api_test_result, nil)
-             |> assign(:pending_params, nil)}
-
-          {:error, reason} ->
-            {:noreply,
-             socket
-             |> assign(:show_confirm_modal, false)
-             |> assign(:error, "Config guardada, pero error al cambiar contraseña: #{inspect(reason)}")}
-        end
+        {:noreply,
+         socket
+         |> assign(:usuario, usuario)
+         |> assign(:instancia, instancia)
+         |> assign(:token, token)
+         |> assign(:url, url)
+         |> assign(:saved, true)
+         |> assign(:error, nil)
+         |> assign(:show_confirm_modal, false)
+         |> assign(:api_test_result, nil)
+         |> assign(:pending_params, nil)}
 
       {:error, changeset} ->
         errors =
@@ -153,6 +140,11 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
   @impl true
   def handle_event("toggle_permitir_edicion", _, socket) do
     {:noreply, assign(socket, :permitir_edicion, !socket.assigns.permitir_edicion)}
+  end
+
+  @impl true
+  def handle_event("toggle_modo_nativo", _, socket) do
+    {:noreply, assign(socket, :modo_nativo, !socket.assigns.modo_nativo)}
   end
 
   @impl true
@@ -237,27 +229,28 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
 
         <form phx-submit="previsualizar" class="bg-white rounded-2xl border border-gray-200 shadow-sm divide-y divide-gray-100">
 
-          <!-- Toggle: Permitir edición a usuarios normales -->
+          <!-- Toggle: Modo Nativo -->
           <div class="p-5 flex items-center justify-between">
             <div>
-              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Editar</p>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nativo</p>
               <p class="text-xs text-gray-400 mt-0.5">
-                <%= if @permitir_edicion do %>
-                  Los usuarios pueden editar clientes.
+                <%= if @modo_nativo do %>
+                  La app usa <strong>solo datos nativos</strong> (sin Frog API).
                 <% else %>
-                  Los usuarios <strong>no</strong> pueden editar clientes.
+                  La app usa la <strong>API de Frog</strong> como fuente de datos.
                 <% end %>
               </p>
             </div>
-            <button type="button" phx-click="toggle_permitir_edicion"
-              class={"relative inline-flex h-7 w-14 flex-shrink-0 items-center rounded-full transition-colors duration-300 focus:outline-none " <> if @permitir_edicion, do: "bg-emerald-500", else: "bg-gray-300"}>
-              <span class={"inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 " <> if @permitir_edicion, do: "translate-x-8", else: "translate-x-1"}></span>
-              <span class={"absolute text-[10px] font-bold transition-all duration-300 select-none " <> if @permitir_edicion, do: "left-1.5 text-white", else: "right-1.5 text-gray-500"}>
-                <%= if @permitir_edicion, do: "SÍ", else: "NO" %>
+            <button type="button" phx-click="toggle_modo_nativo"
+              class={"relative inline-flex h-7 w-14 flex-shrink-0 items-center rounded-full transition-colors duration-300 focus:outline-none " <> if @modo_nativo, do: "bg-emerald-500", else: "bg-gray-300"}>
+              <span class={"inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 " <> if @modo_nativo, do: "translate-x-8", else: "translate-x-1"}></span>
+              <span class={"absolute text-[10px] font-bold transition-all duration-300 select-none " <> if @modo_nativo, do: "left-1.5 text-white", else: "right-1.5 text-gray-500"}>
+                <%= if @modo_nativo, do: "SÍ", else: "NO" %>
               </span>
             </button>
           </div>
 
+          <%= if not @modo_nativo do %>
           <div class="p-5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Usuario</label>
             <input type="text" name="usuario" value={@usuario} placeholder="Usuario de la API"
@@ -285,20 +278,13 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
               class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
             <p class="mt-1 text-xs text-gray-400">URL pública de la aplicación.</p>
           </div>
-
-          <div class="p-5">
-            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Foto / Logo (URL)</label>
-            <input type="text" name="foto" value={@foto} placeholder="https://ejemplo.com/logo.png"
-              class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
-            <p class="mt-1 text-xs text-gray-400">URL del logotipo de la empresa.</p>
-          </div>
-
-          <div class="p-5">
-            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Contraseña</label>
-            <input type="password" name="password" value="" placeholder="Dejar vacío para no cambiar"
-              class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
-            <p class="mt-1 text-xs text-gray-400">Nueva contraseña del administrador.</p>
-          </div>
+          <% else %>
+          <%!-- Campos ocultos para mantener los valores existentes al guardar en modo nativo --%>
+          <input type="hidden" name="usuario"   value={@usuario} />
+          <input type="hidden" name="instancia" value={@instancia} />
+          <input type="hidden" name="token"     value={@token} />
+          <input type="hidden" name="url"       value={@url} />
+          <% end %>
 
           <div class="p-5 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
             <button type="button" phx-click="cancelar_edicion"

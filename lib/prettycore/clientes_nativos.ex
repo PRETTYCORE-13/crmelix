@@ -1,0 +1,70 @@
+defmodule Prettycore.ClientesNativos do
+  @moduledoc "Gestión de clientes nativos creados directamente en PostgreSQL."
+
+  import Ecto.Query
+  alias Prettycore.PsqlRepo
+  alias Prettycore.ClientesNativos.ClienteNativo
+
+  def list_todos do
+    PsqlRepo.all(from c in ClienteNativo, order_by: [desc: c.inserted_at])
+  end
+
+  def search(q) do
+    term = "%#{String.downcase(q)}%"
+    PsqlRepo.all(
+      from c in ClienteNativo,
+        where: ilike(c.nombre, ^term) or ilike(c.username, ^term) or ilike(c.email, ^term),
+        order_by: c.nombre
+    )
+  end
+
+  def get(id), do: PsqlRepo.get(ClienteNativo, id)
+
+  def get_by_username(username), do: PsqlRepo.get_by(ClienteNativo, username: username)
+
+  def crear(attrs) do
+    %ClienteNativo{}
+    |> ClienteNativo.changeset(attrs)
+    |> PsqlRepo.insert()
+  end
+
+  def actualizar(%ClienteNativo{} = c, attrs) do
+    c
+    |> ClienteNativo.update_changeset(attrs)
+    |> PsqlRepo.update()
+  end
+
+  def cambiar_password(%ClienteNativo{} = c, new_password) do
+    c
+    |> ClienteNativo.password_changeset(%{password: new_password})
+    |> PsqlRepo.update()
+  end
+
+  def eliminar(%ClienteNativo{} = c), do: PsqlRepo.delete(c)
+
+  def toggle_activo(%ClienteNativo{} = c) do
+    c
+    |> Ecto.Changeset.change(activo: !c.activo)
+    |> PsqlRepo.update()
+  end
+
+  @doc "Autentica un cliente nativo. Retorna {:ok, cliente} o {:error, :invalid_credentials}."
+  def authenticate(username, password) do
+    case get_by_username(username) do
+      nil ->
+        Pbkdf2.no_user_verify()
+        {:error, :invalid_credentials}
+
+      %ClienteNativo{activo: false} ->
+        Pbkdf2.no_user_verify()
+        {:error, :invalid_credentials}
+
+      cliente ->
+        if ClienteNativo.verify_password(cliente, password) do
+          {:ok, cliente}
+        else
+          {:error, :invalid_credentials}
+        end
+    end
+  end
+end

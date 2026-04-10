@@ -640,6 +640,8 @@ defmodule PrettycoreWeb.ClienteFormEditLive do
      |> assign(:current_page, "clientes")
      |> assign(:sidebar_open, true)
      |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
      |> assign(:current_path, current_path)
      |> assign(:form, form)
      |> assign(:page_title, page_title)

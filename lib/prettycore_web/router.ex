@@ -60,6 +60,12 @@ defmodule PrettycoreWeb.Router do
       live "/super-categorias", SuperCategoriasLive
       live "/secciones", SeccionesLive
       live "/seccion/:tipo", SeccionEditorLive
+      live "/productos-nativos", ProductosNativosLive
+      live "/clientes-nativos", ClientesNativosLive
+      live "/listas-precios", ListasPreciosLive
+      live "/sucursales", SucursalesLive
+      live "/stock", StockLive
+      live "/categorias-nativas", CategoriasNativasLive
       live "/usuarios", Users.UsersCreateLive
       live "/clientes/new", ClienteFormNewLive
       live "/clientes/new/:tab", ClienteFormNewLive

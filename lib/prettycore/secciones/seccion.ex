@@ -28,7 +28,7 @@ defmodule Prettycore.Secciones.Seccion do
   def tipo_label("productos"),  do: "Tienda"
   def tipo_label("top10"),      do: "Top 10"
   def tipo_label("favoritos"),  do: "Favoritos"
-  def tipo_label("destacados"), do: "Destacados"
+  def tipo_label("destacados"), do: "Carrusel Dest."
   def tipo_label("publicidad"), do: "Publicidad"
   def tipo_label("envios"),     do: "Envíos"
   def tipo_label(t),            do: t

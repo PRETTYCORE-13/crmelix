@@ -3,11 +3,14 @@ defmodule PrettycoreWeb.AuthOnMount do
   import Phoenix.Component, only: [assign: 3]
 
   alias Prettycore.Auth
+  alias Prettycore.ClientesNativos
+  alias Prettycore.SysAdmin
 
   def on_mount(:ensure_authenticated, params, session, socket) do
     user_id = session["user_id"]
     email_from_session = session["user_email"]
     email_from_url = params["email"]
+    session_role = session["role"]
 
     cond do
       # Sin sesión → fuera
@@ -20,17 +23,23 @@ defmodule PrettycoreWeb.AuthOnMount do
         {:halt, redirect(socket, to: correct_path)}
 
       true ->
-        # Obtener token FROG de la sesión
-        frog_token = session["frog_token"]
-        # Obtener el logo de la empresa desde la API
+        frog_token   = session["frog_token"]
         company_logo = get_company_logo(frog_token)
-        # Obtener nombre de usuario de la sesión
-        user_name = session["user_name"]
+        user_name    = session["user_name"]
+        modo_nativo  = SysAdmin.get_config().modo_nativo == true
 
-        # Cargar permisos del usuario desde DB
-        user = Auth.get_user(user_id)
-        user_role = (user && user.role) || "user"
-        user_permissions = (user && user.permissions) || ["inicio"]
+        {user_role, user_permissions, lista_precios, sucursal_numero} =
+          if session_role == "cliente_nativo" do
+            cliente = ClientesNativos.get(user_id)
+            lp  = (cliente && cliente.lista_precios)  || 1
+            suc = (cliente && cliente.sucursal_numero)
+            {"cliente_nativo", ["inicio", "tienda"], lp, suc}
+          else
+            user = Auth.get_user(user_id)
+            role  = (user && user.role) || "user"
+            perms = (user && user.permissions) || ["inicio"]
+            {role, perms, nil, nil}
+          end
 
         {:cont,
          socket
@@ -40,7 +49,10 @@ defmodule PrettycoreWeb.AuthOnMount do
          |> assign(:company_logo, company_logo)
          |> assign(:frog_token, frog_token)
          |> assign(:user_role, user_role)
-         |> assign(:user_permissions, user_permissions)}
+         |> assign(:user_permissions, user_permissions)
+         |> assign(:lista_precios, lista_precios)
+         |> assign(:sucursal_numero, sucursal_numero)
+         |> assign(:modo_nativo, modo_nativo)}
     end
   end
 

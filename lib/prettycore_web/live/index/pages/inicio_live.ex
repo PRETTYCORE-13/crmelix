@@ -12,6 +12,8 @@ defmodule PrettycoreWeb.Inicio do
      |> assign(:current_page, "inicio")
      |> assign(:sidebar_open, true)
      |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
      |> assign(:current_path, current_path)}
   end
 
@@ -29,6 +31,8 @@ defmodule PrettycoreWeb.Inicio do
          socket
          |> assign(:current_page, "inicio")
          |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
          |> push_navigate(to: ~p"/admin/platform")}
 
       "programacion" ->
@@ -41,7 +45,13 @@ defmodule PrettycoreWeb.Inicio do
         {:noreply, push_navigate(socket, to: ~p"/admin/workorder")}
 
       "clientes" ->
+        {:noreply, update(socket, :show_clientes_children, &(not &1))}
+
+      "clientes_frog" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
+
+      "clientes_nativos" ->
+        {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
 
       "tienda" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
@@ -64,11 +74,18 @@ defmodule PrettycoreWeb.Inicio do
       "usuarios" ->
         {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
 
-      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
+      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
+      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
+      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
+      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
+      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
+      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
+      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
+      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
+      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
+      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
+      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
 
       _ ->
         {:noreply, socket}

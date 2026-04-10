@@ -60,7 +60,9 @@
       "Bash(find d:/prettycore/lib/prettycore_web -name *sidebar* -o -name *menu* -o -name *layout*)",
       "Bash(xargs grep:*)",
       "Bash(python3 -c \":*)",
-      "Bash(grep -r \"on_mount\\\\|live_view_admin\" d:/prettycore/lib/prettycore_web/ --include=*.ex -l)"
+      "Bash(grep -r \"on_mount\\\\|live_view_admin\" d:/prettycore/lib/prettycore_web/ --include=*.ex -l)",
+      "Bash(grep -v \"^    │\\\\|^    └\\\\|^  [0-9]\\\\|^$\")",
+      "Bash(find d:/prettycore/lib/prettycore/productos* -name \"*.ex\")"
     ],
     "deny": [],
     "ask": []

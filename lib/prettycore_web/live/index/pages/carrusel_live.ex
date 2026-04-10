@@ -13,6 +13,8 @@ defmodule PrettycoreWeb.CarruselLive do
       |> assign(:current_page, "carrusel")
       |> assign(:sidebar_open, true)
       |> assign(:show_programacion_children, false)
+     |> assign(:show_clientes_children, false)
+     |> assign(:show_prettycore_children, false)
       |> assign(:imagenes, [])
       |> assign(:upload_error, nil)
       |> assign(:uploading, false)
@@ -37,20 +39,29 @@ defmodule PrettycoreWeb.CarruselLive do
     case id do
       "toggle_sidebar"    -> {:noreply, update(socket, :sidebar_open, &(not &1))}
       "inicio"            -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"          -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "tienda"            -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"        -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"  -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"          -> {:noreply, socket}
-      "secciones"         -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"          -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                   -> {:noreply, socket}
+      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
+      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
+      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
+      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
+      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
+      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
+      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
+      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
+      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
+      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
+      "carrusel"                   -> {:noreply, socket}
+      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
+      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
+      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
+      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
+      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
+      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
+      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
+      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
+      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
+      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
+      _                            -> {:noreply, socket}
     end
   end
 
@@ -143,7 +154,9 @@ defmodule PrettycoreWeb.CarruselLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <section class="p-4 sm:p-6 min-h-screen bg-gray-50">
+    <div class="flex min-h-screen bg-gray-100">
+      <PrettycoreWeb.MenuLayout.secciones_panel current_page={@current_page} />
+      <section class="flex-1 p-4 sm:p-6 min-w-0 bg-gray-50">
       <!-- Header -->
       <header class="mb-6">
         <div class="flex items-center justify-between gap-4">
@@ -177,7 +190,7 @@ defmodule PrettycoreWeb.CarruselLive do
             </svg>
             <span class="text-xs text-purple-500 font-medium">Seleccionar imagen</span>
             <span class="text-[10px] text-purple-400 mt-0.5">JPG, PNG, WEBP, GIF — máx 10MB</span>
-            <.live_file_input upload={@uploads.imagen} class="sr-only" />
+            <.live_file_input upload={@uploads.imagen} id="img-input-carrusel" phx-hook="ImageCompressor" class="sr-only" />
           </label>
 
           <!-- Preview + progreso -->
@@ -310,6 +323,7 @@ defmodule PrettycoreWeb.CarruselLive do
         </div>
       <% end %>
     </section>
+    </div>
     """
   end
 end
