@@ -47,7 +47,8 @@
   flex-direction: column;
   width: 68px;
   padding: 16px 12px;
-  background: #141414;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
@@ -62,7 +63,7 @@
   align-items: center;
   justify-content: space-between;
   padding-bottom: 20px;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid #e5e7eb;
   margin-bottom: 6px;
   min-height: 44px;
 }
@@ -108,15 +109,15 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #525252;
+  color: #6b7280;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
 .pc-sidebar-toggle:hover {
-  background: #262626;
-  color: #d4d4d4;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 /* Sidebar cerrado: centrar toggle */
@@ -140,7 +141,7 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #525252;
+  color: #9ca3af;
   padding: 16px 8px 8px;
   white-space: nowrap;
   overflow: hidden;
@@ -168,7 +169,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #a3a3a3;
+  color: #374151;
   cursor: pointer;
   text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
@@ -176,14 +177,14 @@
 }
 
 .pc-nav-item:hover {
-  background: #1f1f1f;
-  color: #ffffff;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 /* Activo */
 .pc-nav-item-active {
-  background: #1f1f1f;
-  color: #ffffff;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 /* ---- NAV ICON ---- */
@@ -191,14 +192,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
 }
 
 .pc-nav-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   color: inherit;
 }
 
@@ -247,7 +248,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #737373;
+  color: #4b5563;
   cursor: pointer;
   font-size: 13px;
   transition: background 0.15s ease, color 0.15s ease;
@@ -257,18 +258,18 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #6366f1;
+  background: #7c3aed;
   flex-shrink: 0;
 }
 
 .pc-submenu-item:hover {
-  background: #1f1f1f;
-  color: #ffffff;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .pc-submenu-item-active {
-  background: #1f1f1f;
-  color: #ffffff;
+  background: #ede9fe;
+  color: #6d28d9;
 }
 
 .pc-subsubmenu {
@@ -287,7 +288,7 @@
   border-radius: 7px;
   border: none;
   background: transparent;
-  color: #525252;
+  color: #6b7280;
   cursor: pointer;
   font-size: 12px;
   transition: background 0.15s ease, color 0.15s ease;
@@ -297,23 +298,23 @@
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  background: #a78bfa;
+  background: #7c3aed;
   flex-shrink: 0;
 }
 
 .pc-subsubmenu-item:hover {
-  background: #1f1f1f;
-  color: #ffffff;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .pc-subsubmenu-item-active {
-  background: #1f1f1f;
-  color: #e5e7eb;
+  background: #ede9fe;
+  color: #6d28d9;
 }
 
 /* ---- LOGOUT ---- */
 .pc-nav-logout {
-  color: #525252;
+  color: #6b7280;
 }
 
 .pc-nav-logout:hover {
@@ -339,8 +340,8 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #262626;
-  color: #a3a3a3;
+  background: #e5e7eb;
+  color: #374151;
   font-size: 13px;
   font-weight: 600;
   display: flex;
@@ -367,12 +368,12 @@
 }
 
 .pc-sidebar-body::-webkit-scrollbar-thumb {
-  background: #262626;
+  background: #d1d5db;
   border-radius: 999px;
 }
 
 .pc-sidebar-body::-webkit-scrollbar-thumb:hover {
-  background: #404040;
+  background: #9ca3af;
 }
 
 /* ---- MOBILE HAMBURGER BUTTON ---- */
@@ -426,6 +427,8 @@
     z-index: 50;
     transform: translateX(-100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: #ffffff;
+    border-right: 1px solid #e5e7eb;
   }
 
   /* When toggled open on mobile via JS: slide in */

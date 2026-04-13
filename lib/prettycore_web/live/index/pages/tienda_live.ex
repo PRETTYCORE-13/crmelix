@@ -69,7 +69,20 @@ defmodule PrettycoreWeb.Tienda do
 
   @impl true
   def handle_info(:load_categorias, socket) do
-    {:noreply, assign(socket, categorias: Categorias.list_categorias())}
+    todas = Categorias.list_categorias()
+    # Categorías que tienen al menos un producto nativo activo (una sola consulta)
+    cats_usadas =
+      ProductosNativos.list_activos()
+      |> Enum.map(& &1.categoria)
+      |> MapSet.new()
+
+    cats_con_productos =
+      Enum.filter(todas, fn cat ->
+        String.downcase(cat.nombre) in ["todos", "inicio"] or
+        MapSet.member?(cats_usadas, cat.nombre)
+      end)
+
+    {:noreply, assign(socket, categorias: cats_con_productos)}
   end
 
   @impl true
@@ -92,8 +105,15 @@ defmodule PrettycoreWeb.Tienda do
     precios_nativos = Enum.reduce(nativos, %{}, fn p, acc ->
       Map.put(acc, p.codigo, Map.get(precios_lista, p.codigo, p[:precio_base] || 0.0))
     end)
+    # Aplicar filtro de categoría actual (si el usuario vuelve mientras tenía una categoría activa)
+    cat = socket.assigns.cat_nombre
+    productos = if cat in [nil, "", "Todos", "INICIO"] do
+      nativos
+    else
+      Enum.filter(nativos, fn p -> p.categoria == cat end)
+    end
     {:noreply, assign(socket,
-      productos: nativos,
+      productos: productos,
       precios_nativos: precios_nativos,
       stock_map: stock_map,
       loading: false
@@ -123,10 +143,11 @@ defmodule PrettycoreWeb.Tienda do
   @impl true
   def handle_event("filtrar_categoria", %{"categoria" => cat}, socket) do
     cats = socket.assigns.categorias
+    es_todos = String.downcase(cat) in ["inicio", "todos", "all", "inicio", ""]
+    nombre_filtro = if es_todos, do: "Todos", else: cat
     idx = Enum.find_index(cats, &(&1.nombre == cat)) || 0
-    nombre_filtro = if cat == "INICIO", do: "Todos", else: cat
     productos = list_productos_by_categoria(socket, nombre_filtro)
-    {:noreply, assign(socket, cat_idx: idx, cat_nombre: cat, search: "", productos: productos)}
+    {:noreply, assign(socket, cat_idx: idx, cat_nombre: nombre_filtro, search: "", productos: productos)}
   end
 
   @impl true
@@ -439,7 +460,7 @@ defmodule PrettycoreWeb.Tienda do
           secs_all = if @secciones_tienda == [],
             do: [%{tipo: "carrusel", nombre: "Carrusel"}, %{tipo: "productos", nombre: "Tienda"}],
             else: @secciones_tienda
-          en_inicio = @cat_nombre in ["Todos", "INICIO"] and @search == ""
+          en_inicio = (String.downcase(@cat_nombre || "") in ["todos", "inicio", "all", ""]) and @search == ""
           secs = if en_inicio, do: secs_all, else: Enum.filter(secs_all, &(&1.tipo == "productos"))
           puede_editar = can_edit_images?(@user_role, @user_permissions)
         %>
@@ -551,8 +572,11 @@ defmodule PrettycoreWeb.Tienda do
               <div style={"position:relative;z-index:30;background:#ffffff;padding:10px 8px 24px;#{if prev_tipo == "carrusel", do: "margin-top:-16px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}"}>
                     <%= if Enum.empty?(@productos) do %>
                       <div class="text-center py-20 text-gray-400">
-                        <p class="text-sm font-medium">Sin productos</p>
-                        <p class="text-xs mt-1">Presiona "Sincronizar" para cargar el catálogo</p>
+                        <p class="text-sm font-medium">Sin productos en esta categoría</p>
+                        <button phx-click="filtrar_categoria" phx-value-categoria="Todos"
+                          class="mt-3 px-4 py-2 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-500 transition">
+                          Ver todos los productos
+                        </button>
                       </div>
                     <% else %>
                       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
@@ -772,7 +796,7 @@ defmodule PrettycoreWeb.Tienda do
                   <div class="relative">
                     <h2 class="text-2xl font-bold mb-2"><%= pub_cfg["titulo"] || sec.nombre %></h2>
                     <p class="text-white/70 text-sm max-w-md"><%= pub_cfg["subtitulo"] || "Explora nuestro catálogo completo y encuentra los mejores productos para ti." %></p>
-                    <button phx-click="sync" class="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm" style={"color:#{pub_c1};"}>
+                    <button class="mt-5 inline-flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm" style={"color:#{pub_c1};"}>
                       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
                       <%= pub_cfg["boton"] || "Ver catálogo" %>
                     </button>
@@ -1278,7 +1302,8 @@ defmodule PrettycoreWeb.Tienda do
 
   defp list_productos_by_categoria(_socket, cat_nombre) do
     all = ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1)
-    if cat_nombre in [nil, "", "Todos"] do
+    es_todos = cat_nombre in [nil, ""] or String.downcase(cat_nombre) in ["todos", "inicio", "all"]
+    if es_todos do
       all
     else
       Enum.filter(all, fn p -> p.categoria == cat_nombre end)

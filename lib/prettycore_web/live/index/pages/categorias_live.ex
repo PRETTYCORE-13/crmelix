@@ -152,7 +152,8 @@ defmodule PrettycoreWeb.CategoriasLive do
 
   # ── Búsqueda en modal ──────────────────────────────────────────────
 
-  def handle_event("modal_search", %{"q" => q}, socket) do
+  def handle_event("modal_search", params, socket) do
+    q = params["q"] || params["modal_search_input"] || ""
     {:noreply, assign(socket, modal_search: q)}
   end
 
@@ -371,6 +372,7 @@ defmodule PrettycoreWeb.CategoriasLive do
                       value={@modal_search}
                       phx-change="modal_search"
                       name="modal_search_input"
+                      onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();}"
                       class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
                     />
                   </div>
