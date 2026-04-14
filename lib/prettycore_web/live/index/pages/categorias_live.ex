@@ -27,9 +27,6 @@ defmodule PrettycoreWeb.CategoriasLive do
       |> assign(:form_error, nil)
       |> assign(:upload_error, nil)
       |> assign(:uploading, false)
-      |> assign(:todos_productos, [])
-      |> assign(:cat_productos_codigos, MapSet.new())
-      |> assign(:modal_search, "")
       |> allow_upload(:imagen,
           accept: ~w(.jpg .jpeg .png .webp .gif),
           max_entries: 1,
@@ -84,21 +81,12 @@ defmodule PrettycoreWeb.CategoriasLive do
 
   def handle_event("editar", %{"id" => id}, socket) do
     cat = Categorias.get_categoria_con_productos(id)
-    todos = ProductosNativos.list_todos()
-    # Productos cuyo campo categoria coincide con el nombre de esta categoría
-    codigos = todos
-      |> Enum.filter(&(&1.categoria == cat.nombre))
-      |> Enum.map(& &1.codigo)
-      |> MapSet.new()
     {:noreply, assign(socket,
       modal: :editar,
       selected: cat,
       form_nombre: cat.nombre,
       form_orden: "#{cat.orden}",
-      form_error: nil,
-      todos_productos: todos,
-      cat_productos_codigos: codigos,
-      modal_search: ""
+      form_error: nil
     )}
   end
 
@@ -122,7 +110,7 @@ defmodule PrettycoreWeb.CategoriasLive do
       case Categorias.create_categoria(attrs) do
         {:ok, _} ->
           cats = Categorias.list_categorias()
-          {:noreply, assign(socket, categorias: cats, modal: nil, form_error: nil)}
+          {:noreply, socket |> assign(categorias: cats, modal: nil, form_error: nil) |> put_flash(:info, "Categoría creada correctamente")}
         {:error, cs} ->
           msg = cs.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
           {:noreply, assign(socket, form_error: msg)}
@@ -138,34 +126,15 @@ defmodule PrettycoreWeb.CategoriasLive do
       {:noreply, assign(socket, form_error: "El nombre no puede estar vacío")}
     else
       attrs = %{nombre: nombre, orden: String.to_integer(orden)}
-      with {:ok, cat} <- Categorias.update_categoria(socket.assigns.selected, attrs) do
-        ProductosNativos.asignar_categoria(cat.nombre, MapSet.to_list(socket.assigns.cat_productos_codigos))
+      with {:ok, _cat} <- Categorias.update_categoria(socket.assigns.selected, attrs) do
         cats = Categorias.list_categorias()
-        {:noreply, assign(socket, categorias: cats, modal: nil, form_error: nil)}
+        {:noreply, socket |> assign(categorias: cats, modal: nil, form_error: nil) |> put_flash(:info, "Categoría actualizada correctamente")}
       else
         {:error, cs} ->
           msg = cs.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
           {:noreply, assign(socket, form_error: msg)}
       end
     end
-  end
-
-  # ── Búsqueda en modal ──────────────────────────────────────────────
-
-  def handle_event("modal_search", params, socket) do
-    q = params["q"] || params["modal_search_input"] || ""
-    {:noreply, assign(socket, modal_search: q)}
-  end
-
-  # ── Toggle producto en categoría ───────────────────────────────────
-
-  def handle_event("toggle_producto", %{"codigo" => codigo}, socket) do
-    codigos = socket.assigns.cat_productos_codigos
-    codigos =
-      if MapSet.member?(codigos, codigo),
-        do: MapSet.delete(codigos, codigo),
-        else: MapSet.put(codigos, codigo)
-    {:noreply, assign(socket, cat_productos_codigos: codigos)}
   end
 
   # ── Eliminar ──────────────────────────────────────────────────────
@@ -331,98 +300,17 @@ defmodule PrettycoreWeb.CategoriasLive do
                     value={@form_nombre}
                     required
                     autofocus
+                    maxlength="150"
                     class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     placeholder="Ej: Bebidas"
                   />
                 </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Orden</label>
-                  <input
-                    type="number"
-                    name="orden"
-                    value={@form_orden}
-                    min="0"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
+                <input type="hidden" name="orden" value={@form_orden} />
                 <%= if @form_error do %>
                   <p class="text-sm text-red-600"><%= @form_error %></p>
                 <% end %>
               </div>
 
-              <!-- Sección de productos (solo en editar) -->
-              <%= if @modal == :editar do %>
-                <div class="px-6 mt-4 flex-1 flex flex-col overflow-hidden min-h-0">
-                  <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm font-medium text-gray-700">
-                      Productos en esta categoría
-                      <span class="ml-1.5 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
-                        <%= MapSet.size(@cat_productos_codigos) %>
-                      </span>
-                    </label>
-                  </div>
-                  <!-- Búsqueda -->
-                  <div class="relative mb-2">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Buscar producto..."
-                      value={@modal_search}
-                      phx-change="modal_search"
-                      name="modal_search_input"
-                      onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();}"
-                      class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent"
-                    />
-                  </div>
-                  <!-- Lista scrollable -->
-                  <div class="overflow-y-auto flex-1 border border-gray-100 rounded-xl divide-y divide-gray-50">
-                    <%
-                      term = String.downcase(@modal_search)
-                      productos_filtrados =
-                        if term == "" do
-                          @todos_productos
-                        else
-                          Enum.filter(@todos_productos, fn p ->
-                            String.contains?(String.downcase(p.descripcion || ""), term) or
-                            String.contains?(String.downcase(p.codigo || ""), term) or
-                            String.contains?(String.downcase(p.marca || ""), term)
-                          end)
-                        end
-                    %>
-                    <%= if productos_filtrados == [] do %>
-                      <p class="text-center text-xs text-gray-400 py-6">Sin resultados</p>
-                    <% end %>
-                    <%= for producto <- productos_filtrados do %>
-                      <% asignado = MapSet.member?(@cat_productos_codigos, producto.codigo) %>
-                      <button
-                        type="button"
-                        phx-click="toggle_producto"
-                        phx-value-codigo={producto.codigo}
-                        class={"w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-gray-50 #{if asignado, do: "bg-purple-50/60"}"}
-                      >
-                        <!-- Checkbox visual -->
-                        <div class={"w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors #{if asignado, do: "bg-purple-600 border-purple-600", else: "border-gray-300"}"}>
-                          <%= if asignado do %>
-                            <svg class="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          <% end %>
-                        </div>
-                        <!-- Info -->
-                        <div class="flex-1 min-w-0">
-                          <p class={"text-xs font-medium truncate #{if asignado, do: "text-purple-900", else: "text-gray-800"}"}><%= producto.descripcion %></p>
-                          <p class="text-[10px] text-gray-400">Cód. <%= producto.codigo %><%= if producto.marca && producto.marca != "", do: " · #{producto.marca}" %></p>
-                        </div>
-                        <%= if asignado do %>
-                          <span class="text-[10px] text-purple-600 font-medium flex-shrink-0">Asignado</span>
-                        <% end %>
-                      </button>
-                    <% end %>
-                  </div>
-                </div>
-              <% end %>
 
               <div class="flex gap-3 p-6 pt-4">
                 <button type="button" phx-click="cerrar_modal"

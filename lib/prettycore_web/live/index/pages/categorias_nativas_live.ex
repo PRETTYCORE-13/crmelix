@@ -129,7 +129,8 @@ defmodule PrettycoreWeb.CategoriasNativasLive do
         {:noreply, socket
          |> assign(:modal, nil)
          |> assign(:categorias, CategoriasNativas.list_todas())
-         |> assign(:super_categorias, SuperCategoriasNativas.list_todas())}
+         |> assign(:super_categorias, SuperCategoriasNativas.list_todas())
+         |> put_flash(:info, "Guardado correctamente")}
 
       {:error, cs} ->
         msg = cs.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
@@ -297,6 +298,7 @@ defmodule PrettycoreWeb.CategoriasNativasLive do
             <div>
               <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre *</label>
               <input type="text" name="nombre" value={@form_nombre} required
+                maxlength="150"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 placeholder="Ej: Lácteos" />
             </div>

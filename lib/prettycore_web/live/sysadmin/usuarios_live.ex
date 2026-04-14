@@ -153,6 +153,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     type="text"
                     name="auth_user[username]"
                     value={@form[:username].value}
+                    maxlength="50"
                     class={"block w-full px-4 py-3 bg-black border rounded-xl text-white placeholder-zinc-600 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{if @form[:username].errors != [], do: "border-red-500", else: "border-zinc-800"}"}
                     placeholder="nombre_usuario"
                     autocomplete="off"
@@ -169,6 +170,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     type="text"
                     name="auth_user[usuario_frog]"
                     value={@form[:usuario_frog].value}
+                    maxlength="50"
                     class="block w-full px-4 py-3 bg-black border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
                     placeholder="Usuario FROG"
                     autocomplete="off"
@@ -182,6 +184,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     type="email"
                     name="auth_user[email]"
                     value={@form[:email].value}
+                    maxlength="100"
                     class="block w-full px-4 py-3 bg-black border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
                     placeholder="usuario@ejemplo.com"
                     autocomplete="off"
@@ -198,6 +201,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                       type={if @show_password, do: "text", else: "password"}
                       name="auth_user[password]"
                       value={@form[:password].value}
+                      maxlength="72"
                       class={"block w-full pr-12 px-4 py-3 bg-black border rounded-xl text-white placeholder-zinc-600 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{if @form[:password].errors != [], do: "border-red-500", else: "border-zinc-800"}"}
                       placeholder="Mínimo 6 caracteres"
                       autocomplete="new-password"
@@ -264,7 +268,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     {"inicio",          "Inicio",              :page},
                     {"clientes",        "Clientes",            :page},
                     {"tienda",          "Tienda",              :page},
-                    {"categorias",      "Categorías Tienda",   :page},
+                    {"administrar",     "Administrar Tienda",  :page},
                     {"usuarios",        "Usuarios",            :page},
                     {"editar_imagenes", "Imágenes Tienda",     :feature}
                   ] %>
@@ -365,9 +369,9 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
                                           </svg>
-                                        <% "categorias" -> %>
+                                        <% "administrar" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                                            <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                                           </svg>
                                         <% "usuarios" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

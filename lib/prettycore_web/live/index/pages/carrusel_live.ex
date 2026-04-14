@@ -179,6 +179,7 @@ defmodule PrettycoreWeb.CarruselLive do
               name="titulo"
               value={@titulo_input}
               placeholder="Ej: Promoción de verano"
+              maxlength="100"
               class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent"
             />
           </div>
@@ -266,6 +267,7 @@ defmodule PrettycoreWeb.CarruselLive do
                         name="titulo"
                         value={img.titulo || ""}
                         placeholder="Sin título"
+                        maxlength="100"
                         class="text-sm font-medium text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-purple-400 focus:outline-none px-0 py-0.5 w-full"
                       />
                       <button type="submit" class="text-[10px] text-gray-400 hover:text-purple-600 flex-shrink-0">Guardar</button>

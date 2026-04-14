@@ -119,7 +119,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
       {:ok, _} ->
         precios_map = ListasPrecios.get_precios_map(numero)
         numeros     = ListasPrecios.numeros_disponibles()
-        {:noreply, assign(socket, precios_map: precios_map, numeros: numeros, edits: %{}, saved: true)}
+        {:noreply, socket |> assign(precios_map: precios_map, numeros: numeros, edits: %{}, saved: true) |> put_flash(:info, "Lista de precios guardada correctamente")}
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Error al guardar precios")}
     end
@@ -174,7 +174,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
         <% end %>
         <!-- Nueva lista -->
         <form phx-submit="crear_lista" class="flex items-center gap-1.5 ml-2">
-          <input type="number" name="numero" value={@nuevo_numero} min="1"
+          <input type="number" name="numero" value={@nuevo_numero} min="1" max="9999"
             placeholder="Nueva #"
             phx-blur="set_nuevo_numero"
             class="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/20" />

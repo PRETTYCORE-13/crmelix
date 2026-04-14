@@ -115,7 +115,8 @@ defmodule PrettycoreWeb.SucursalesLive do
       {:ok, _} ->
         {:noreply, socket
          |> assign(:modal, nil)
-         |> assign(:sucursales, Sucursales.list_todas())}
+         |> assign(:sucursales, Sucursales.list_todas())
+         |> put_flash(:info, "Sucursal guardada correctamente")}
 
       {:error, changeset} ->
         msg = changeset.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
@@ -250,6 +251,7 @@ defmodule PrettycoreWeb.SucursalesLive do
                     value={@form_nombre}
                     placeholder="Ej: Sucursal Centro"
                     required
+                    maxlength="150"
                     class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                   />
                 </div>
@@ -264,6 +266,7 @@ defmodule PrettycoreWeb.SucursalesLive do
                   name="direccion"
                   value={@form_direccion}
                   placeholder="Opcional"
+                  maxlength="300"
                   class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 />
               </div>

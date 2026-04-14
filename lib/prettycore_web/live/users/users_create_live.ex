@@ -227,6 +227,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                     name="auth_user[username]"
                     id="username"
                     value={@form[:username].value}
+                    maxlength="50"
                     class={"block w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{if @form[:username].errors != [], do: "border-red-400", else: "border-gray-300"}"}
                     placeholder="nombre_usuario"
                     autocomplete="off"
@@ -262,6 +263,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                       name="auth_user[cliente_codigo]"
                       id="cliente_codigo"
                       value={@form[:cliente_codigo].value}
+                      maxlength="20"
                       class={"block w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{cond do
                         @cliente_lookup == :not_found -> "border-red-400"
                         match?({:ok, _}, @cliente_lookup) -> "border-green-400"
@@ -303,6 +305,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                       name="auth_user[dir_codigo]"
                       id="dir_codigo"
                       value={@form[:dir_codigo].value}
+                      maxlength="10"
                       class="block w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
                       placeholder="Ej: 1"
                       autocomplete="off"
@@ -327,6 +330,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                     name="auth_user[email]"
                     id="email"
                     value={@form[:email].value}
+                    maxlength="100"
                     class={"block w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{if @form[:email].errors != [], do: "border-red-400", else: "border-gray-300"}"}
                     placeholder="usuario@ejemplo.com"
                     autocomplete="off"
@@ -358,6 +362,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                     name="auth_user[password]"
                     id="password"
                     value={@form[:password].value}
+                    maxlength="72"
                     class={"block w-full pl-10 pr-12 py-3 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{if @form[:password].errors != [], do: "border-red-400", else: "border-gray-300"}"}
                     placeholder="Minimo 6 caracteres"
                     autocomplete="new-password"

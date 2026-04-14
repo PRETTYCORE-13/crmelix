@@ -15,7 +15,7 @@ defmodule Prettycore.Pedidos.Pedido do
     timestamps()
   end
 
-  @estados ~w(pendiente procesando enviado entregado cancelado)
+  @estados ~w(pendiente procesando enviado entregado cancelado cancelacion_solicitada)
 
   def changeset(pedido, attrs) do
     pedido

@@ -254,6 +254,7 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
           <div class="p-5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Usuario</label>
             <input type="text" name="usuario" value={@usuario} placeholder="Usuario de la API"
+              maxlength="100"
               class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
             <p class="mt-1 text-xs text-gray-400">Usuario para autenticación en la API.</p>
           </div>
@@ -261,6 +262,7 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
           <div class="p-5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Instancia</label>
             <input type="text" name="instancia" value={@instancia} placeholder="https://api.ejemplo.com:1950/SP/EN_RESTHELPER"
+              maxlength="500"
               class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
             <p class="mt-1 text-xs text-gray-400">URL base de la API REST.</p>
           </div>
@@ -268,6 +270,7 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
           <div class="p-5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Token</label>
             <input type="text" name="token" value={@token} placeholder="Bearer token de servicio"
+              maxlength="500"
               class="w-full text-sm font-mono rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
             <p class="mt-1 text-xs text-gray-400">Token de autenticación para las llamadas a la API.</p>
           </div>
@@ -275,6 +278,7 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
           <div class="p-5">
             <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">URL</label>
             <input type="text" name="url" value={@url} placeholder="https://ejemplo.com"
+              maxlength="500"
               class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition" />
             <p class="mt-1 text-xs text-gray-400">URL pública de la aplicación.</p>
           </div>

@@ -292,11 +292,16 @@ defmodule PrettycoreWeb.Tienda do
   end
 
   @impl true
-  def handle_event("update_cantidad", %{"id" => item_id, "cantidad" => cantidad_str}, socket) do
-    cantidad = String.to_integer(cantidad_str)
-    Carritos.update_cantidad(item_id, cantidad)
-    %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
-    {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+  def handle_event("update_cantidad", %{"id" => item_id} = params, socket) do
+    cantidad_str = Map.get(params, "cantidad") || Map.get(params, "value", "0")
+    case Integer.parse(cantidad_str) do
+      {cantidad, _} when cantidad > 0 ->
+        Carritos.update_cantidad(item_id, cantidad)
+        %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
+        {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+      _ ->
+        {:noreply, socket}
+    end
   end
 
   @impl true
@@ -310,11 +315,12 @@ defmodule PrettycoreWeb.Tienda do
     user    = Auth.get_user(socket.assigns.current_user_id)
     cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
     dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
+    precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
 
     case Pedidos.crear_desde_carrito(
            socket.assigns.current_user_id,
            socket.assigns.cart_items,
-           socket.assigns.precios,
+           precios,
            cliente,
            dir
          ) do
@@ -891,10 +897,24 @@ defmodule PrettycoreWeb.Tienda do
                           </div>
                           <div class="flex-1 min-w-0">
                             <p class="text-[10px] font-medium text-gray-800 truncate leading-tight"><%= if item.producto, do: item.producto.descripcion, else: item.producto_codigo %></p>
+                            <p class="text-[9px] text-gray-400 font-mono leading-tight"><%= item.producto_codigo %></p>
+                            <% p_mini = Map.get(@precios, item.producto_codigo) || Map.get(@precios_nativos, item.producto_codigo) || 0.0 %>
+                            <%= if p_mini > 0 do %>
+                              <p class="text-[10px] font-bold text-green-600 leading-tight">$<%= :erlang.float_to_binary(p_mini / 1, decimals: 2) %></p>
+                            <% end %>
                             <div class="flex items-center gap-1 mt-0.5">
                               <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad - 1}
                                 class="w-4 h-4 rounded bg-white border border-gray-200 text-gray-500 hover:text-red-500 flex items-center justify-center text-xs font-bold leading-none">−</button>
-                              <span class="text-[10px] font-semibold text-gray-700 w-4 text-center"><%= item.cantidad %></span>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.cantidad}
+                                phx-blur="update_cantidad"
+                                phx-value-id={item.id}
+                                name="cantidad"
+                                class="w-8 h-4 text-[10px] font-semibold text-gray-700 text-center border border-gray-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-purple-400"
+                                onkeydown="if(event.key==='Enter'){this.blur();}"
+                              />
                               <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad + 1}
                                 class="w-4 h-4 rounded bg-white border border-gray-200 text-gray-500 hover:text-purple-600 flex items-center justify-center text-xs font-bold leading-none">+</button>
                             </div>
@@ -1130,6 +1150,7 @@ defmodule PrettycoreWeb.Tienda do
                     </div>
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium text-gray-800 truncate leading-tight"><%= if item.producto, do: item.producto.descripcion, else: item.producto_codigo %></p>
+                      <p class="text-xs text-gray-400 font-mono leading-tight"><%= item.producto_codigo %></p>
                       <% p_drawer = Map.get(@precios, item.producto_codigo) || Map.get(@precios_nativos, item.producto_codigo) || Map.get(@precios, "0") %>
                       <%= if p_drawer do %>
                         <p class="text-xs text-green-600 font-bold mt-0.5">$<%= :erlang.float_to_binary(p_drawer / 1, decimals: 2) %></p>
@@ -1138,7 +1159,16 @@ defmodule PrettycoreWeb.Tienda do
                     <div class="flex items-center gap-1.5 flex-shrink-0">
                       <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad - 1}
                         class="w-7 h-7 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-500 flex items-center justify-center text-sm font-bold shadow-sm">−</button>
-                      <span class="text-sm font-semibold text-gray-700 w-5 text-center"><%= item.cantidad %></span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.cantidad}
+                        phx-blur="update_cantidad"
+                        phx-value-id={item.id}
+                        name="cantidad"
+                        class="w-12 h-7 text-sm font-semibold text-gray-700 text-center border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-purple-400"
+                        onkeydown="if(event.key==='Enter'){this.blur();}"
+                      />
                       <button phx-click="update_cantidad" phx-value-id={item.id} phx-value-cantidad={item.cantidad + 1}
                         class="w-7 h-7 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-purple-600 flex items-center justify-center text-sm font-bold shadow-sm">+</button>
                       <button phx-click="remove_from_cart" phx-value-id={item.id}

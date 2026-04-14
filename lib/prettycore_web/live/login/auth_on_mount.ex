@@ -33,7 +33,7 @@ defmodule PrettycoreWeb.AuthOnMount do
             cliente = ClientesNativos.get(user_id)
             lp  = (cliente && cliente.lista_precios)  || 1
             suc = (cliente && cliente.sucursal_numero)
-            {"cliente_nativo", ["inicio", "tienda"], lp, suc}
+            {"cliente_nativo", ["inicio", "tienda", "pedidos"], lp, suc}
           else
             user = Auth.get_user(user_id)
             role  = (user && user.role) || "user"

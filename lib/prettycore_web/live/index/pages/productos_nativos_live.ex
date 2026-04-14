@@ -197,7 +197,8 @@ defmodule PrettycoreWeb.ProductosNativosLive do
 
     case result do
       {:ok, _} ->
-        {:noreply, socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_productos()}
+        msg = if socket.assigns.modal == :nuevo, do: "Producto creado correctamente", else: "Producto actualizado correctamente"
+        {:noreply, socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_productos() |> put_flash(:info, msg)}
 
       {:error, changeset} ->
         error = changeset.errors
@@ -509,6 +510,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   value={@form_precio}
                   step="0.01"
                   min="0"
+                  max="999999.99"
                   required
                   class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 />
@@ -525,6 +527,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                 value={@form_descripcion}
                 placeholder="Nombre completo del producto"
                 required
+                maxlength="200"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             </div>
@@ -538,6 +541,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                 name="desc_corta"
                 value={@form_desc_corta}
                 placeholder="Subtítulo breve (opcional)"
+                maxlength="100"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             </div>
@@ -550,6 +554,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   name="unidad"
                   value={@form_unidad}
                   placeholder="PZA"
+                  maxlength="20"
                   class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 />
               </div>
@@ -560,6 +565,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   name="marca"
                   value={@form_marca}
                   placeholder="Opcional"
+                  maxlength="100"
                   class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 />
               </div>
@@ -594,6 +600,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                 name="notas"
                 rows="2"
                 placeholder="Observaciones internas (no se muestran al cliente)"
+                maxlength="500"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
               ><%= @form_notas %></textarea>
             </div>

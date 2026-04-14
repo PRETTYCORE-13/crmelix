@@ -204,7 +204,8 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
     case result do
       {:ok, _} ->
-        {:noreply, socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_clientes()}
+        msg = if socket.assigns.modal == :nuevo, do: "Cliente creado correctamente", else: "Cliente actualizado correctamente"
+        {:noreply, socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_clientes() |> put_flash(:info, msg)}
 
       {:error, changeset} ->
         error = changeset.errors
@@ -408,6 +409,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
               <div>
                 <label class="block text-xs font-semibold text-gray-700 mb-1">Nombre completo *</label>
                 <input type="text" name="nombre" value={@form_nombre} required
+                  maxlength="150"
                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                   placeholder="Nombre del cliente" />
               </div>
@@ -421,6 +423,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                   required={@modal == :nuevo}
                   readonly={@modal == :editar}
                   autocomplete="off"
+                  maxlength="50"
                   class={"w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20 #{if @modal == :editar, do: "bg-gray-50 text-gray-400"}"}
                   placeholder="Nombre de usuario para inicio de sesión" />
                 <div class="mt-1.5 flex items-center gap-1.5">
@@ -440,12 +443,14 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">Email</label>
                   <input type="email" name="email" value={@form_email}
+                    maxlength="100"
                     class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     placeholder="correo@ejemplo.com" />
                 </div>
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">Teléfono</label>
                   <input type="text" name="telefono" value={@form_telefono}
+                    maxlength="20"
                     class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     placeholder="10 dígitos" />
                 </div>
@@ -456,6 +461,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">RFC</label>
                   <input type="text" name="rfc" value={@form_rfc}
+                    maxlength="20"
                     class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     placeholder="RFC del cliente" />
                 </div>
@@ -500,6 +506,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
               <div>
                 <label class="block text-xs font-semibold text-gray-700 mb-1">Dirección</label>
                 <input type="text" name="direccion" value={@form_direccion}
+                  maxlength="300"
                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                   placeholder="Dirección completa" />
               </div>
@@ -508,6 +515,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
               <div>
                 <label class="block text-xs font-semibold text-gray-700 mb-1">Notas</label>
                 <textarea name="notas" rows="2"
+                  maxlength="500"
                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20 resize-none"
                   placeholder="Notas internas..."><%= @form_notas %></textarea>
               </div>
@@ -517,7 +525,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">Contraseña *</label>
                   <div class="relative">
-                    <input id="pw_nuevo" type="password" name="password" value={@form_password} required minlength="6"
+                    <input id="pw_nuevo" type="password" name="password" value={@form_password} required minlength="6" maxlength="72"
                       autocomplete="new-password"
                       class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                       placeholder="Mínimo 6 caracteres" />
@@ -532,7 +540,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">Confirmar contraseña *</label>
                   <div class="relative">
-                    <input id="pw_confirm" type="password" name="password_confirm" required minlength="6"
+                    <input id="pw_confirm" type="password" name="password_confirm" required minlength="6" maxlength="72"
                       autocomplete="new-password"
                       oninput="var a=document.getElementById('pw_nuevo').value,b=this.value;this.setCustomValidity(a!==b?'Las contraseñas no coinciden':'')"
                       class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
@@ -558,6 +566,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                     <div class="mt-2 relative">
                       <input id="pw_edit" type="password" name="password" value=""
                         autocomplete="new-password"
+                        maxlength="72"
                         class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                         placeholder="Nueva contraseña (mín. 6 caracteres)" />
                       <button type="button" tabindex="-1"

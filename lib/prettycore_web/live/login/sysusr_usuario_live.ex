@@ -40,6 +40,7 @@ defmodule PrettycoreWeb.LoginLive do
             name="username"
             label="Usuario (correo)"
             value={@username}
+            maxlength="100"
             class="w-full px-3.5 py-2.5 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm placeholder:text-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 focus:shadow-lg focus:shadow-purple-900/50 transition-all"
           />
           <.input
@@ -48,6 +49,7 @@ defmodule PrettycoreWeb.LoginLive do
             name="password"
             label="Contraseña"
             value={@password}
+            maxlength="72"
             class="w-full px-3.5 py-2.5 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm placeholder:text-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 focus:shadow-lg focus:shadow-purple-900/50 transition-all"
           />
           <.button

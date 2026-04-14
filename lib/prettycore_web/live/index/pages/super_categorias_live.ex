@@ -123,7 +123,7 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
       case SuperCategorias.create_super_categoria(attrs) do
         {:ok, _} ->
           scs = SuperCategorias.list_super_categorias()
-          {:noreply, assign(socket, super_categorias: scs, modal: nil, form_error: nil)}
+          {:noreply, socket |> assign(super_categorias: scs, modal: nil, form_error: nil) |> put_flash(:info, "Super categoría creada correctamente")}
         {:error, cs} ->
           msg = cs.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
           {:noreply, assign(socket, form_error: msg)}
@@ -142,7 +142,7 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
       with {:ok, sc} <- SuperCategorias.update_super_categoria(socket.assigns.selected, attrs),
            {:ok, _}  <- SuperCategorias.set_productos(sc, MapSet.to_list(socket.assigns.sc_productos_codigos)) do
         scs = SuperCategorias.list_super_categorias()
-        {:noreply, assign(socket, super_categorias: scs, modal: nil, form_error: nil)}
+        {:noreply, socket |> assign(super_categorias: scs, modal: nil, form_error: nil) |> put_flash(:info, "Super categoría actualizada correctamente")}
       else
         {:error, cs} ->
           msg = cs.errors |> Enum.map(fn {f, {m, _}} -> "#{f}: #{m}" end) |> Enum.join(", ")
@@ -334,18 +334,20 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
                   <input type="text" name="nombre" value={@form_nombre} required autofocus
+                    maxlength="150"
                     class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     placeholder="Ej: Familia Bebidas, Temporada Verano..." />
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
                   <input type="text" name="descripcion" value={@form_descripcion}
+                    maxlength="300"
                     class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     placeholder="Ej: Todos los refrescos y jugos de la temporada" />
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Orden</label>
-                  <input type="number" name="orden" value={@form_orden} min="0"
+                  <input type="number" name="orden" value={@form_orden} min="0" max="9999"
                     class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
                 </div>
                 <%= if @form_error do %>

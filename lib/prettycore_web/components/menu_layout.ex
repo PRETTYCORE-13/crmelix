@@ -45,7 +45,7 @@ defmodule PrettycoreWeb.MenuLayout do
           </svg>
         </button>
         <img
-          src="https://prettycore.xyz/IMAGENES/PRETTYCORE.png"
+          src="https://prettycore.xyz/IMAGENES/PRETTYCORE_NEGRO.png"
           alt="PRETTYCORE"
           class="pc-topbar-logo"
         />
@@ -114,7 +114,7 @@ defmodule PrettycoreWeb.MenuLayout do
                     </button>
                   </div>
                 <% end %>
-                <%= if item.id == "clientes" and @show_clientes_children and @user_role in ["admin", "sysadmin"] do %>
+                <%= if item.id == "clientes" and @show_clientes_children and (@user_role == "sysadmin" or "clientes" in (@user_permissions || [])) do %>
                   <div class="pc-submenu">
                     <button
                       type="button"
@@ -130,93 +130,98 @@ defmodule PrettycoreWeb.MenuLayout do
                 <%= if item.id == "tienda" and @current_page in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
                       "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_publicidad", "seccion_envios",
                       "productos_nativos", "clientes_nativos", "listas_precios", "lista_productos",
-                      "stock", "sucursales", "categorias_nativas"] and can_see_categorias?(@user_role, @user_permissions) do %>
+                      "stock", "sucursales"] and
+                    (can_see_categorias?(@user_role, @user_permissions) or
+                     (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions))) do %>
                   <div class="pc-submenu">
-                    <!-- Desktop: enlace directo a secciones (sin dropdown) -->
-                    <div class="hidden md:block">
+                    <%= if can_see_categorias?(@user_role, @user_permissions) do %>
+                      <!-- Desktop: enlace directo a secciones (sin dropdown) -->
+                      <div class="hidden md:block">
+                        <button
+                          type="button"
+                          class={submenu_item_class("secciones", @current_page) <> " w-full text-left"}
+                          phx-click={@menu_event}
+                          phx-value-id="secciones"
+                        >
+                          <span class="pc-submenu-dot" />
+                          <span class="pc-nav-label">Administrar</span>
+                        </button>
+                      </div>
+                      <!-- Móvil: dropdown con todos los links -->
+                      <div class="md:hidden">
+                        <button
+                          type="button"
+                          class={"flex items-center justify-between w-full " <> submenu_item_class("secciones", @current_page)}
+                          phx-click={JS.toggle(to: "#admin-mobile-menu")}
+                        >
+                          <span class="flex items-center gap-1.5">
+                            <span class="pc-submenu-dot" />
+                            <span class="pc-nav-label">Administrar</span>
+                          </span>
+                          <svg class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                          </svg>
+                        </button>
+                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_top10","seccion_favoritos","seccion_destacados","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
+                          <div class="pl-3 pt-1 pb-1 space-y-0.5">
+                            <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
+                            <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={@menu_event} phx-value-id="categorias">Categorías</button>
+                            <button type="button" class={mobile_admin_item_class("super_categorias", @current_page)} phx-click={@menu_event} phx-value-id="super_categorias">Super Categorías</button>
+                            <button type="button" class={mobile_admin_item_class("productos_nativos", @current_page)} phx-click={@menu_event} phx-value-id="productos_nativos">Productos</button>
+                            <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Tienda</p>
+                            <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={@menu_event} phx-value-id="carrusel">Carrusel</button>
+                            <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={@menu_event} phx-value-id="secciones">Secciones</button>
+                            <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={@menu_event} phx-value-id="stock">Stock</button>
+                            <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={@menu_event} phx-value-id="sucursales">Sucursales</button>
+                            <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Contenido</p>
+                            <button type="button" class={mobile_admin_item_class("seccion_top10", @current_page)} phx-click={@menu_event} phx-value-id="seccion_top10">Top 10</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_favoritos", @current_page)} phx-click={@menu_event} phx-value-id="seccion_favoritos">Favoritos</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_destacados", @current_page)} phx-click={@menu_event} phx-value-id="seccion_destacados">Destacados</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={@menu_event} phx-value-id="seccion_publicidad">Publicidad</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={@menu_event} phx-value-id="seccion_envios">Envíos</button>
+                          </div>
+                        </div>
+                      </div>
+                    <% end %>
+                    <!-- Toggle Clientes Nativos: solo si puede ver clientes -->
+                    <%= if not @modo_nativo or can_see_clientes_nativos?(@user_role, @user_permissions) do %>
                       <button
                         type="button"
-                        class={submenu_item_class("secciones", @current_page) <> " w-full text-left"}
+                        class={submenu_item_class("clientes_nativos", @current_page) <> " flex items-center justify-between w-full"}
                         phx-click={@menu_event}
-                        phx-value-id="secciones"
-                      >
-                        <span class="pc-submenu-dot" />
-                        <span class="pc-nav-label">Administrar</span>
-                      </button>
-                    </div>
-                    <!-- Móvil: dropdown con todos los links -->
-                    <div class="md:hidden">
-                      <button
-                        type="button"
-                        class={"flex items-center justify-between w-full " <> submenu_item_class("secciones", @current_page)}
-                        phx-click={JS.toggle(to: "#admin-mobile-menu")}
+                        phx-value-id="toggle_prettycore_children"
                       >
                         <span class="flex items-center gap-1.5">
                           <span class="pc-submenu-dot" />
-                          <span class="pc-nav-label">Administrar</span>
+                          <span class="pc-nav-label">Clientes</span>
                         </span>
-                        <svg class="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <svg class={"w-3 h-3 flex-shrink-0 transition-transform #{if @show_prettycore_children or @current_page in ["clientes_nativos","listas_precios","lista_productos"], do: "rotate-180", else: ""}"}
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                         </svg>
                       </button>
-                      <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","categorias_nativas","seccion_top10","seccion_favoritos","seccion_destacados","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
-                        <div class="pl-3 pt-1 pb-1 space-y-0.5">
-                          <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
-                          <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={@menu_event} phx-value-id="categorias">Categorías</button>
-                          <button type="button" class={mobile_admin_item_class("super_categorias", @current_page)} phx-click={@menu_event} phx-value-id="super_categorias">Super Categorías</button>
-                          <button type="button" class={mobile_admin_item_class("productos_nativos", @current_page)} phx-click={@menu_event} phx-value-id="productos_nativos">Productos</button>
-                          <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Tienda</p>
-                          <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={@menu_event} phx-value-id="carrusel">Carrusel</button>
-                          <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={@menu_event} phx-value-id="secciones">Secciones</button>
-                          <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={@menu_event} phx-value-id="stock">Stock</button>
-                          <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={@menu_event} phx-value-id="sucursales">Sucursales</button>
-                          <button type="button" class={mobile_admin_item_class("categorias_nativas", @current_page)} phx-click={@menu_event} phx-value-id="categorias_nativas">Categorías Nativas</button>
-                          <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Contenido</p>
-                          <button type="button" class={mobile_admin_item_class("seccion_top10", @current_page)} phx-click={@menu_event} phx-value-id="seccion_top10">Top 10</button>
-                          <button type="button" class={mobile_admin_item_class("seccion_favoritos", @current_page)} phx-click={@menu_event} phx-value-id="seccion_favoritos">Favoritos</button>
-                          <button type="button" class={mobile_admin_item_class("seccion_destacados", @current_page)} phx-click={@menu_event} phx-value-id="seccion_destacados">Destacados</button>
-                          <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={@menu_event} phx-value-id="seccion_publicidad">Publicidad</button>
-                          <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={@menu_event} phx-value-id="seccion_envios">Envíos</button>
+                      <%= if @show_prettycore_children or @current_page in ["clientes_nativos", "listas_precios", "lista_productos"] do %>
+                        <div class="pc-subsubmenu">
+                          <button type="button"
+                            class={subsubmenu_item_class("clientes_nativos", @current_page)}
+                            phx-click={@menu_event} phx-value-id="clientes_nativos">
+                            <span class="pc-subsubmenu-dot" />
+                            <span class="pc-nav-label">Clientes</span>
+                          </button>
+                          <button type="button"
+                            class={subsubmenu_item_class("listas_precios", @current_page)}
+                            phx-click={@menu_event} phx-value-id="listas_precios">
+                            <span class="pc-subsubmenu-dot" />
+                            <span class="pc-nav-label">Lista de Precios</span>
+                          </button>
+                          <button type="button"
+                            class={subsubmenu_item_class("productos_nativos", @current_page)}
+                            phx-click={@menu_event} phx-value-id="lista_productos">
+                            <span class="pc-subsubmenu-dot" />
+                            <span class="pc-nav-label">Lista de Productos</span>
+                          </button>
                         </div>
-                      </div>
-                    </div>
-                    <!-- Toggle Clientes Prettycore -->
-                    <button
-                      type="button"
-                      class={submenu_item_class("clientes_nativos", @current_page) <> " flex items-center justify-between w-full"}
-                      phx-click={@menu_event}
-                      phx-value-id="toggle_prettycore_children"
-                    >
-                      <span class="flex items-center gap-1.5">
-                        <span class="pc-submenu-dot" />
-                        <span class="pc-nav-label">Clientes</span>
-                      </span>
-                      <svg class={"w-3 h-3 flex-shrink-0 transition-transform #{if @show_prettycore_children or @current_page in ["clientes_nativos","listas_precios","lista_productos"], do: "rotate-180", else: ""}"}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                      </svg>
-                    </button>
-                    <%= if @show_prettycore_children or @current_page in ["clientes_nativos", "listas_precios", "lista_productos"] do %>
-                      <div class="pc-subsubmenu">
-                        <button type="button"
-                          class={subsubmenu_item_class("clientes_nativos", @current_page)}
-                          phx-click={@menu_event} phx-value-id="clientes_nativos">
-                          <span class="pc-subsubmenu-dot" />
-                          <span class="pc-nav-label">Clientes</span>
-                        </button>
-                        <button type="button"
-                          class={subsubmenu_item_class("listas_precios", @current_page)}
-                          phx-click={@menu_event} phx-value-id="listas_precios">
-                          <span class="pc-subsubmenu-dot" />
-                          <span class="pc-nav-label">Lista de Precios</span>
-                        </button>
-                        <button type="button"
-                          class={subsubmenu_item_class("productos_nativos", @current_page)}
-                          phx-click={@menu_event} phx-value-id="lista_productos">
-                          <span class="pc-subsubmenu-dot" />
-                          <span class="pc-nav-label">Lista de Productos</span>
-                        </button>
-                      </div>
+                      <% end %>
                     <% end %>
                   </div>
                 <% end %>
@@ -357,7 +362,8 @@ defmodule PrettycoreWeb.MenuLayout do
     |> do_filter_menu(perms, role)
   end
 
-  defp do_filter_menu(menu, _perms, role) when role in ["admin", "sysadmin"], do: menu
+  defp do_filter_menu(menu, _perms, "sysadmin"), do: menu
+  defp do_filter_menu(menu, nil, "user"), do: Enum.filter(menu, &(&1.id == "inicio"))
   defp do_filter_menu(menu, nil, _role), do: Enum.reject(menu, &Map.get(&1, :admin_only, false))
   defp do_filter_menu(menu, perms, _role) do
     menu
@@ -375,7 +381,7 @@ defmodule PrettycoreWeb.MenuLayout do
                         "seccion_top10", "seccion_favoritos", "seccion_destacados",
                         "seccion_publicidad", "seccion_envios", "productos_nativos",
                         "clientes_nativos", "listas_precios", "lista_productos",
-                        "stock", "sucursales", "categorias_nativas"],
+                        "stock", "sucursales"],
        do: true
 
   defp menu_active?("clientes", current)
@@ -386,9 +392,13 @@ defmodule PrettycoreWeb.MenuLayout do
 
   defp menu_active?(id, current), do: id == current
 
-  defp can_see_categorias?(role, _perms) when role in ["admin", "sysadmin"], do: true
+  defp can_see_categorias?("sysadmin", _perms), do: true
   defp can_see_categorias?(_role, nil), do: false
-  defp can_see_categorias?(_role, perms), do: "categorias" in perms
+  defp can_see_categorias?(_role, perms), do: "categorias" in perms or "administrar" in perms
+
+  defp can_see_clientes_nativos?("sysadmin", _perms), do: true
+  defp can_see_clientes_nativos?(_role, nil), do: false
+  defp can_see_clientes_nativos?(_role, perms), do: "clientes" in perms
 
   defp menu_item_class(true), do: "pc-nav-item pc-nav-item-active"
   defp menu_item_class(false), do: "pc-nav-item"
@@ -441,7 +451,6 @@ defmodule PrettycoreWeb.MenuLayout do
           <.sp_item img="/images/carrusel.png"   label="Carrusel"   href="/admin/carrusel"   active={@current_page == "carrusel"} />
           <.sp_item img="/images/stock.png"     label="Stock"     href="/admin/stock"     active={@current_page == "stock"} />
           <.sp_item img="/images/sucursales.png" label="Sucursales" href="/admin/sucursales" active={@current_page == "sucursales"} />
-          <.sp_item img="/images/categorias.png" label="Categorías Nativas" href="/admin/categorias-nativas" active={@current_page == "categorias_nativas"} />
         </div>
       </div>
 

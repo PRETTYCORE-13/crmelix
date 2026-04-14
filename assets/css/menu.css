@@ -11,13 +11,14 @@
   background: #f5f5f5;
 }
 
-/* Barra negra superior full-width */
+/* Barra superior full-width */
 .pc-topbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   width: 100%;
-  background: #000000;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
   padding: 8px 24px;
   flex-shrink: 0;
 }
@@ -384,8 +385,8 @@
   height: 36px;
   border-radius: 8px;
   border: none;
-  background: rgba(255,255,255,0.15);
-  color: #ffffff;
+  background: rgba(0,0,0,0.06);
+  color: #111827;
   cursor: pointer;
   align-items: center;
   justify-content: center;

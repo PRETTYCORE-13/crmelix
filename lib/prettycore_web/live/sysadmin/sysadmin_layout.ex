@@ -12,7 +12,7 @@ defmodule PrettycoreWeb.SysAdminLayout do
       <!-- Barra negra superior -->
       <div class="pc-topbar">
         <img
-          src="https://prettycore.xyz/IMAGENES/PRETTYCORE.png"
+          src="https://prettycore.xyz/IMAGENES/PRETTYCORE_NEGRO.png"
           alt="PRETTYCORE"
           class="pc-topbar-logo"
         />

@@ -3,6 +3,7 @@ defmodule Prettycore.Carritos do
   alias Prettycore.PsqlRepo, as: Repo
   alias Prettycore.Carritos.{Carrito, CarritoItem}
   alias Prettycore.Productos.Producto
+  alias Prettycore.ProductosNativos.ProductoNativo
 
   @doc "Retorna el carrito activo del usuario con sus items y productos cargados."
   def get_carrito(user_id) do
@@ -19,9 +20,16 @@ defmodule Prettycore.Carritos do
 
       c ->
         codigos = Enum.map(c.items, & &1.producto_codigo)
-        productos_map =
+
+        frog_map =
           Repo.all(from p in Producto, where: p.codigo in ^codigos, select: p)
-          |> Map.new(& {&1.codigo, &1})
+          |> Map.new(& {&1.codigo, %{descripcion: &1.descripcion, imagen_url: &1.imagen_url}})
+
+        nativos_map =
+          Repo.all(from p in ProductoNativo, where: p.codigo in ^codigos, select: p)
+          |> Map.new(& {&1.codigo, %{descripcion: &1.descripcion, imagen_url: &1.imagen_url}})
+
+        productos_map = Map.merge(frog_map, nativos_map)
 
         items =
           Enum.map(c.items, fn item ->

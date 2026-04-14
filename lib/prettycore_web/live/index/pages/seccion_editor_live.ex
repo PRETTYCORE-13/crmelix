@@ -335,7 +335,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
       config_to_save = Map.put(socket.assigns.config, "slides_orden", socket.assigns.slides_list)
       case Secciones.update_config(socket.assigns.seccion, config_to_save) do
         {:ok, sec} ->
-          {:noreply, assign(socket, seccion: sec, guardando: false, saved: true)}
+          {:noreply, socket |> assign(seccion: sec, guardando: false, saved: true) |> put_flash(:info, "Sección guardada correctamente")}
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Error al guardar")}
       end
@@ -397,18 +397,21 @@ defmodule PrettycoreWeb.SeccionEditorLive do
               <label class="block text-xs font-semibold text-gray-600 mb-1">Título</label>
               <input type="text" value={@config["titulo"] || @seccion.nombre}
                 phx-blur="update_pub" phx-value-field="titulo"
+                maxlength="100"
                 class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Subtítulo</label>
               <input type="text" value={@config["subtitulo"] || "Explora nuestro catálogo completo y encuentra los mejores productos para ti."}
                 phx-blur="update_pub" phx-value-field="subtitulo"
+                maxlength="200"
                 class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-600 mb-1">Texto del botón</label>
               <input type="text" value={@config["boton"] || "Ver catálogo"}
                 phx-blur="update_pub" phx-value-field="boton"
+                maxlength="50"
                 class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
             </div>
 
@@ -475,12 +478,14 @@ defmodule PrettycoreWeb.SeccionEditorLive do
                     <label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Título</label>
                     <input type="text" value={card["titulo"]}
                       phx-blur="update_card" phx-value-idx={idx} phx-value-field="titulo"
+                      maxlength="50"
                       class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
                   </div>
                   <div>
                     <label class="block text-[11px] font-semibold text-gray-500 mb-0.5">Descripción</label>
                     <input type="text" value={card["descripcion"]}
                       phx-blur="update_card" phx-value-idx={idx} phx-value-field="descripcion"
+                      maxlength="100"
                       class="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
                   </div>
                 </div>
@@ -506,6 +511,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
                 <input type="text" placeholder="Título (opcional)"
                   value={@nueva_imagen_titulo}
                   phx-blur="update_nueva_imagen"
+                  maxlength="100"
                   class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
 
                 <!-- Preview + barra de progreso cuando hay archivo seleccionado -->
@@ -721,6 +727,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
               <label class="block text-xs font-semibold text-gray-600 mb-1">Título de la sección</label>
               <input type="text" value={sec_titulo}
                 phx-blur="update_pub" phx-value-field="titulo"
+                maxlength="100"
                 class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
             </div>
             <div>

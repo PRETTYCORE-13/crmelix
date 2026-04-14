@@ -77,11 +77,21 @@ defmodule Prettycore.Pedidos do
     end
   end
 
-  @doc "Cancela un pedido (solo si está pendiente o procesando)."
-  def cancelar(pedido_id) do
+  @doc "Solicita cancelación de un pedido (cliente). Queda en espera de aprobación del admin."
+  def solicitar_cancelacion(pedido_id) do
     case Repo.get(Pedido, pedido_id) do
       nil -> {:error, :not_found}
       %{estado: e} = p when e in ["pendiente", "procesando"] ->
+        p |> Pedido.changeset(%{estado: "cancelacion_solicitada"}) |> Repo.update()
+      _ -> {:error, :no_cancelable}
+    end
+  end
+
+  @doc "Cancela un pedido directamente (admin)."
+  def cancelar(pedido_id) do
+    case Repo.get(Pedido, pedido_id) do
+      nil -> {:error, :not_found}
+      %{estado: e} = p when e in ["pendiente", "procesando", "cancelacion_solicitada"] ->
         p |> Pedido.changeset(%{estado: "cancelado"}) |> Repo.update()
       _ -> {:error, :no_cancelable}
     end

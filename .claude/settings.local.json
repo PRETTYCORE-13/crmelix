@@ -62,7 +62,15 @@
       "Bash(python3 -c \":*)",
       "Bash(grep -r \"on_mount\\\\|live_view_admin\" d:/prettycore/lib/prettycore_web/ --include=*.ex -l)",
       "Bash(grep -v \"^    │\\\\|^    └\\\\|^  [0-9]\\\\|^$\")",
-      "Bash(find d:/prettycore/lib/prettycore/productos* -name \"*.ex\")"
+      "Bash(find d:/prettycore/lib/prettycore/productos* -name \"*.ex\")",
+      "Bash(dir \"d:\\\\prettycore\\\\priv\\\\repo\\\\migrations\\\\\" 2>&1 | tail -20)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(find /d/prettycore/lib/prettycore_web/live -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn 'type=\"\\\\\\(text\\\\|number\\\\|email\\\\|password\\\\\\)\"' {} \\\\;)",
+      "Bash(find /d/prettycore/lib/prettycore_web/live -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn '<textarea' {} \\\\;)",
+      "Bash(find /d/prettycore/lib/prettycore_web/components -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn 'type=\"\\\\\\(text\\\\|number\\\\|email\\\\|password\\\\\\)\"' {} \\\\;)",
+      "Bash(find /d/prettycore/lib/prettycore_web/components -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn '<textarea' {} \\\\;)",
+      "Bash(bash /tmp/analyze_inputs.sh)",
+      "Bash(python /tmp/extract_inputs.py)"
     ],
     "deny": [],
     "ask": []

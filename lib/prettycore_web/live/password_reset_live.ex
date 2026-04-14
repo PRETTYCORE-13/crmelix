@@ -130,6 +130,7 @@ defmodule PrettycoreWeb.PasswordResetLive do
                 name="username"
                 type="text"
                 required
+                maxlength="50"
                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
               />
             </div>
@@ -172,6 +173,7 @@ defmodule PrettycoreWeb.PasswordResetLive do
                 name="new_password"
                 type="password"
                 minlength="8"
+                maxlength="72"
                 required
                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
               />
@@ -186,6 +188,7 @@ defmodule PrettycoreWeb.PasswordResetLive do
                 name="confirm_password"
                 type="password"
                 minlength="8"
+                maxlength="72"
                 required
                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
               />

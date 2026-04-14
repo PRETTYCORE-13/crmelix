@@ -5,11 +5,12 @@ defmodule PrettycoreWeb.PedidosLive do
   alias Prettycore.Auth
 
   @estados_color %{
-    "pendiente"   => "bg-yellow-100 text-yellow-700",
-    "procesando"  => "bg-blue-100 text-blue-700",
-    "enviado"     => "bg-purple-100 text-purple-700",
-    "entregado"   => "bg-green-100 text-green-700",
-    "cancelado"   => "bg-red-100 text-red-500"
+    "pendiente"              => "bg-yellow-100 text-yellow-700",
+    "procesando"             => "bg-blue-100 text-blue-700",
+    "enviado"                => "bg-purple-100 text-purple-700",
+    "entregado"              => "bg-green-100 text-green-700",
+    "cancelado"              => "bg-red-100 text-red-500",
+    "cancelacion_solicitada" => "bg-orange-100 text-orange-700"
   }
 
   @impl true
@@ -50,9 +51,22 @@ defmodule PrettycoreWeb.PedidosLive do
     case Pedidos.cambiar_estado(id, estado) do
       {:ok, _} ->
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
-        {:noreply, assign(socket, pedidos: pedidos)}
+        {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "No se pudo cambiar el estado")}
+    end
+  end
+
+  @impl true
+  def handle_event("solicitar_cancelacion", %{"id" => id}, socket) do
+    case Pedidos.solicitar_cancelacion(id) do
+      {:ok, _} ->
+        pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
+        {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Solicitud de cancelación enviada. El equipo la revisará.")}
+      {:error, :no_cancelable} ->
+        {:noreply, put_flash(socket, :error, "Este pedido ya no puede cancelarse")}
+      _ ->
+        {:noreply, put_flash(socket, :error, "Error al solicitar cancelación")}
     end
   end
 
@@ -61,7 +75,7 @@ defmodule PrettycoreWeb.PedidosLive do
     case Pedidos.cancelar(id) do
       {:ok, _} ->
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
-        {:noreply, assign(socket, pedidos: pedidos)}
+        {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Pedido cancelado")}
       {:error, :no_cancelable} ->
         {:noreply, put_flash(socket, :error, "Solo se pueden cancelar pedidos pendientes o en proceso")}
       _ ->
@@ -176,10 +190,35 @@ defmodule PrettycoreWeb.PedidosLive do
                     </div>
                     <div class="flex items-center gap-2">
                       <span class={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold #{color}"}>
-                        <%= String.capitalize(pedido.estado) %>
+                        <%= case pedido.estado do
+                          "cancelacion_solicitada" -> "Cancelación solicitada"
+                          e -> String.capitalize(e)
+                        end %>
                       </span>
-                      <!-- Cambio de estado: solo admin/sysadmin -->
-                      <%= if @user_role in ["admin", "sysadmin"] do %>
+                      <!-- Admin: aprobar/declinar cancelación solicitada -->
+                      <%= if @user_role in ["admin", "sysadmin"] and pedido.estado == "cancelacion_solicitada" do %>
+                        <div class="flex items-center gap-1.5">
+                          <button
+                            phx-click="cancelar"
+                            phx-value-id={pedido.id}
+                            data-confirm="¿Aprobar cancelación del pedido?"
+                            class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                          >
+                            Aprobar cancelación
+                          </button>
+                          <button
+                            phx-click="cambiar_estado"
+                            phx-value-id={pedido.id}
+                            phx-value-estado="pendiente"
+                            data-confirm="¿Declinar la solicitud y regresar a pendiente?"
+                            class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                          >
+                            Declinar
+                          </button>
+                        </div>
+                      <% end %>
+                      <!-- Admin: cambio de estado normal (cuando no es cancelacion_solicitada) -->
+                      <%= if @user_role in ["admin", "sysadmin"] and pedido.estado != "cancelacion_solicitada" do %>
                         <select
                           phx-change="cambiar_estado"
                           name="estado"
@@ -191,12 +230,12 @@ defmodule PrettycoreWeb.PedidosLive do
                           <% end %>
                         </select>
                       <% end %>
-                      <!-- Cancelar: cliente si está pendiente -->
+                      <!-- Cliente: solicitar cancelación si está pendiente o procesando -->
                       <%= if @user_role not in ["admin", "sysadmin"] and pedido.estado in ["pendiente", "procesando"] do %>
                         <button
-                          phx-click="cancelar"
+                          phx-click="solicitar_cancelacion"
                           phx-value-id={pedido.id}
-                          data-confirm="¿Cancelar este pedido?"
+                          data-confirm="¿Solicitar cancelación de este pedido?"
                           class="text-xs text-red-400 hover:text-red-600 transition-colors"
                         >
                           Cancelar
