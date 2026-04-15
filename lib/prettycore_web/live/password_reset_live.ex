@@ -44,6 +44,20 @@ defmodule PrettycoreWeb.PasswordResetLive do
          |> assign(:error, nil)
          |> assign(:loading, false)}
 
+      {:error, :not_found} ->
+        {:noreply,
+         socket
+         |> assign(:error, "Lo sentimos, este usuario es incorrecto.")
+         |> assign(:message, nil)
+         |> assign(:loading, false)}
+
+      {:error, :inactive} ->
+        {:noreply,
+         socket
+         |> assign(:error, "Lo sentimos, este usuario se encuentra inactivo.")
+         |> assign(:message, nil)
+         |> assign(:loading, false)}
+
       {:error, reason} ->
         {:noreply,
          socket

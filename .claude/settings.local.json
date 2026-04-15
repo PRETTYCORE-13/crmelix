@@ -72,7 +72,8 @@
       "Bash(bash /tmp/analyze_inputs.sh)",
       "Bash(python /tmp/extract_inputs.py)",
       "Bash(grep -rn \"phx-value-.*{.*\\\\..*}\" /d/prettycore/lib/prettycore_web/live/index/pages --include=\"*.ex\")",
-      "Bash(grep -rn \"def render\" /d/prettycore/lib/prettycore_web/live/index/pages/*.ex)"
+      "Bash(grep -rn \"def render\" /d/prettycore/lib/prettycore_web/live/index/pages/*.ex)",
+      "Bash(mix ecto.migrations --repo Prettycore.PsqlRepo)"
     ],
     "deny": [],
     "ask": []

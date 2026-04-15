@@ -280,8 +280,10 @@ defmodule Prettycore.Auth do
 
     case user do
       nil ->
-        # Por seguridad, siempre retorna éxito
-        {:ok, "Si el usuario existe, recibirás un código en tu email"}
+        {:error, :not_found}
+
+      %AuthUser{active: false} ->
+        {:error, :inactive}
 
       %AuthUser{} = user ->
         if user.email && user.email != "" do

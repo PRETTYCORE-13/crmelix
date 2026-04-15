@@ -31,8 +31,7 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
       |> allow_upload(:imagen,
           accept: ~w(.jpg .jpeg .png .webp .gif),
           max_entries: 1,
-          max_file_size: @max_file_size,
-          auto_upload: true)
+          max_file_size: @max_file_size)
 
     if connected?(socket), do: send(self(), :load_super_categorias)
     {:ok, socket}
@@ -64,6 +63,7 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
@@ -109,17 +109,24 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
   end
 
   def handle_event("cerrar_modal", _, socket) do
+    socket = Enum.reduce(socket.assigns.uploads.imagen.entries, socket, fn entry, acc ->
+      cancel_upload(acc, :imagen, entry.ref)
+    end)
     {:noreply, assign(socket, modal: nil, selected: nil, form_error: nil, upload_error: nil)}
+  end
+
+  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :imagen, ref)}
   end
 
   # ── Guardar nueva ──────────────────────────────────────────────────
 
-  def handle_event("guardar_nueva", %{"nombre" => nombre, "descripcion" => desc, "orden" => orden}, socket) do
+  def handle_event("guardar_nueva", %{"nombre" => nombre}, socket) do
     nombre = String.trim(nombre)
     if nombre == "" do
       {:noreply, assign(socket, form_error: "El nombre no puede estar vacío")}
     else
-      attrs = %{nombre: nombre, descripcion: String.trim(desc), orden: String.to_integer(orden)}
+      attrs = %{nombre: nombre, orden: length(socket.assigns.super_categorias)}
       case SuperCategorias.create_super_categoria(attrs) do
         {:ok, _} ->
           scs = SuperCategorias.list_super_categorias()
@@ -133,12 +140,12 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
 
   # ── Guardar edición ────────────────────────────────────────────────
 
-  def handle_event("guardar_edicion", %{"nombre" => nombre, "descripcion" => desc, "orden" => orden}, socket) do
+  def handle_event("guardar_edicion", %{"nombre" => nombre}, socket) do
     nombre = String.trim(nombre)
     if nombre == "" do
       {:noreply, assign(socket, form_error: "El nombre no puede estar vacío")}
     else
-      attrs = %{nombre: nombre, descripcion: String.trim(desc), orden: String.to_integer(orden)}
+      attrs = %{nombre: nombre}
       with {:ok, sc} <- SuperCategorias.update_super_categoria(socket.assigns.selected, attrs),
            {:ok, _}  <- SuperCategorias.set_productos(sc, MapSet.to_list(socket.assigns.sc_productos_codigos)) do
         scs = SuperCategorias.list_super_categorias()
@@ -172,7 +179,12 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
 
   def handle_event("eliminar", %{"id" => id}, socket) do
     sc = Enum.find(socket.assigns.super_categorias, &(&1.id == id))
-    if sc, do: SuperCategorias.delete_super_categoria(sc)
+    if sc do
+      if sc.imagen_url && sc.imagen_url != "" do
+        Task.start(fn -> Sftp.delete_by_url(sc.imagen_url) end)
+      end
+      SuperCategorias.delete_super_categoria(sc)
+    end
     scs = SuperCategorias.list_super_categorias()
     {:noreply, assign(socket, super_categorias: scs)}
   end
@@ -190,11 +202,17 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
     else
       socket = assign(socket, uploading: true, upload_error: nil)
 
+      old_url = sc.imagen_url
+      # Borrar imagen anterior ANTES de subir la nueva
+      if old_url && old_url != "" do
+        Sftp.delete_by_url(old_url)
+      end
+
       results =
         consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, entry ->
           ext = Path.extname(entry.client_name) |> String.downcase()
           content = File.read!(tmp_path)
-          slug = sc.nombre |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
+          slug = "#{sc.nombre |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")}_#{System.system_time(:second)}"
           case Sftp.upload_super_categoria_image(slug, ext, content) do
             {:ok, url}       -> {:ok, {:ok, url}}
             {:error, reason} -> {:ok, {:error, reason}}
@@ -288,12 +306,6 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
               <!-- Info + acciones -->
               <div class="p-3 flex flex-col flex-1">
                 <p class="text-sm font-semibold text-gray-900 truncate"><%= sc.nombre %></p>
-                <%= if sc.descripcion && sc.descripcion != "" do %>
-                  <p class="text-xs text-gray-400 mt-0.5 line-clamp-2"><%= sc.descripcion %></p>
-                <% end %>
-                <p class="text-xs text-purple-500 mt-1 font-medium">
-                  Orden: <%= sc.orden %>
-                </p>
                 <div class="mt-auto pt-2 flex gap-1.5">
                   <button
                     phx-click="editar"
@@ -338,82 +350,11 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
                     class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     placeholder="Ej: Familia Bebidas, Temporada Verano..." />
                 </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
-                  <input type="text" name="descripcion" value={@form_descripcion}
-                    maxlength="300"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Ej: Todos los refrescos y jugos de la temporada" />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Orden</label>
-                  <input type="number" name="orden" value={@form_orden} min="0" max="9999"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
-                </div>
                 <%= if @form_error do %>
                   <p class="text-sm text-red-600"><%= @form_error %></p>
                 <% end %>
               </div>
 
-              <!-- Productos (solo en editar) -->
-              <%= if @modal == :editar do %>
-                <div class="px-6 mt-4 flex-1 flex flex-col overflow-hidden min-h-0">
-                  <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm font-medium text-gray-700">
-                      Productos en esta super categoría
-                      <span class="ml-1.5 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
-                        <%= MapSet.size(@sc_productos_codigos) %>
-                      </span>
-                    </label>
-                  </div>
-                  <div class="relative mb-2">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input type="text" placeholder="Buscar producto..." value={@modal_search}
-                      phx-change="modal_search" name="modal_search_input"
-                      class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
-                  </div>
-                  <div class="overflow-y-auto flex-1 border border-gray-100 rounded-xl divide-y divide-gray-50">
-                    <%
-                      term = String.downcase(@modal_search)
-                      productos_filtrados =
-                        if term == "" do
-                          @todos_productos
-                        else
-                          Enum.filter(@todos_productos, fn p ->
-                            String.contains?(String.downcase(p.descripcion || ""), term) or
-                            String.contains?(String.downcase(p.codigo || ""), term) or
-                            String.contains?(String.downcase(p.marca || ""), term)
-                          end)
-                        end
-                    %>
-                    <%= if productos_filtrados == [] do %>
-                      <p class="text-center text-xs text-gray-400 py-6">Sin resultados</p>
-                    <% end %>
-                    <%= for producto <- productos_filtrados do %>
-                      <% asignado = MapSet.member?(@sc_productos_codigos, producto.codigo) %>
-                      <button type="button" phx-click="toggle_producto" phx-value-codigo={producto.codigo}
-                        class={"w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-gray-50 #{if asignado, do: "bg-purple-50/60"}"}>
-                        <div class={"w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors #{if asignado, do: "bg-purple-600 border-purple-600", else: "border-gray-300"}"}>
-                          <%= if asignado do %>
-                            <svg class="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                          <% end %>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                          <p class={"text-xs font-medium truncate #{if asignado, do: "text-purple-900", else: "text-gray-800"}"}><%= producto.descripcion %></p>
-                          <p class="text-[10px] text-gray-400">Cód. <%= producto.codigo %><%= if producto.marca && producto.marca != "", do: " · #{producto.marca}" %></p>
-                        </div>
-                        <%= if asignado do %>
-                          <span class="text-[10px] text-purple-600 font-medium flex-shrink-0">Asignado</span>
-                        <% end %>
-                      </button>
-                    <% end %>
-                  </div>
-                </div>
-              <% end %>
 
               <div class="flex gap-3 p-6 pt-4">
                 <button type="button" phx-click="cerrar_modal"
@@ -451,20 +392,21 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                   </svg>
                   <span class="text-xs text-purple-500 font-medium">Seleccionar imagen</span>
-                  <.live_file_input upload={@uploads.imagen} id="img-input-supercat" phx-hook="ImageCompressor" class="sr-only" />
+                  <.live_file_input upload={@uploads.imagen} id="img-input-supercat" class="sr-only" />
                 </label>
               </div>
 
               <%= for entry <- @uploads.imagen.entries do %>
-                <div class="mb-3 p-3 bg-gray-50 rounded-xl">
-                  <div class="flex items-center gap-3 mb-2">
-                    <span class="text-xs text-gray-700 truncate flex-1"><%= entry.client_name %></span>
-                    <span class="text-xs text-purple-500 font-medium flex-shrink-0"><%= entry.progress %>%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                    <div class={"h-1.5 rounded-full transition-all duration-300 #{if entry.progress == 100, do: "bg-green-500", else: "bg-purple-500"}"}
-                      style={"width: #{entry.progress}%"}></div>
-                  </div>
+                <div class="mb-3 p-3 bg-purple-50 rounded-xl flex items-center gap-2">
+                  <svg class="w-4 h-4 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span class="text-xs text-gray-700 truncate flex-1"><%= entry.client_name %></span>
+                  <button type="button" phx-click="cancel_upload" phx-value-ref={entry.ref} class="text-gray-400 hover:text-red-500">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
                 </div>
               <% end %>
 
@@ -478,9 +420,7 @@ defmodule PrettycoreWeb.SuperCategoriasLive do
                   Cancelar
                 </button>
                 <% ready = Enum.any?(@uploads.imagen.entries) and
-                           Enum.all?(@uploads.imagen.entries, &(&1.progress == 100)) and
-                           upload_errors(@uploads.imagen) == [] and
-                           Enum.all?(@uploads.imagen.entries, &(upload_errors(@uploads.imagen, &1) == [])) %>
+                           upload_errors(@uploads.imagen) == [] %>
                 <button type="submit" disabled={not ready or @uploading}
                   class={[
                     "flex-1 py-2 rounded-xl text-sm font-medium transition-all",

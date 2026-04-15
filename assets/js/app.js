@@ -345,6 +345,48 @@ const Carrusel = {
   }
 }
 
+// Hook para el carrusel de Ofertas (Top10/Dest/Favs + imágenes publicidad)
+const PromoCarrusel = {
+  mounted() {
+    this.idx = 0
+    this.total = this.el.children.length
+    if (this.total <= 1) return
+
+    const prev = document.getElementById('promo-prev')
+    const next = document.getElementById('promo-next')
+    if (prev) prev.addEventListener('click', () => this.prev())
+    if (next) next.addEventListener('click', () => this.next())
+
+    this.el.addEventListener('scroll', () => {
+      const cw = this.cardWidth()
+      if (cw === 0) return
+      this.idx = Math.round(this.el.scrollLeft / cw)
+      this.updateDots()
+    }, { passive: true })
+  },
+  cardWidth() {
+    return this.el.children[0]?.offsetWidth || this.el.clientWidth
+  },
+  next() {
+    this.idx = (this.idx + 1) % this.total
+    this.scrollTo(this.idx)
+  },
+  prev() {
+    this.idx = (this.idx - 1 + this.total) % this.total
+    this.scrollTo(this.idx)
+  },
+  scrollTo(i) {
+    this.el.scrollTo({ left: i * this.cardWidth(), behavior: 'smooth' })
+    this.updateDots()
+  },
+  updateDots() {
+    document.querySelectorAll('[id^="promo-dot-"]').forEach((dot, i) => {
+      dot.style.opacity = i === this.idx ? '1' : '0.4'
+    })
+  },
+  destroyed() {}
+}
+
 // Hook para reordenar listas con drag-and-drop
 const DragSort = {
   mounted() {
@@ -546,7 +588,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync, ImageCompressor, ImagePreview},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, PromoCarrusel, DragSort, TiendaSync, ImageCompressor, ImagePreview},
 })
 
 // Show progress bar on live navigation and form submits

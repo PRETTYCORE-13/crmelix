@@ -3,6 +3,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
   alias Prettycore.Secciones
   alias Prettycore.ProductosNativos
+  alias Prettycore.Sftp
 
   @default_cards [
     %{"titulo" => "Envío rápido",  "descripcion" => "Entrega en 24-48h",         "color" => "purple"},
@@ -45,6 +46,8 @@ defmodule PrettycoreWeb.SeccionEditorLive do
       |> assign(:slides_list, [])
       |> assign(:nueva_imagen_url, "")
       |> assign(:nueva_imagen_titulo, "")
+      |> assign(:uploading, false)
+      |> assign(:upload_error, nil)
       |> allow_upload(:imagen_carrusel,
           accept: ~w(.jpg .jpeg .png .gif .webp),
           max_entries: 1,
@@ -58,6 +61,8 @@ defmodule PrettycoreWeb.SeccionEditorLive do
   @impl true
   def handle_info(:load_data, socket) do
     tipo = socket.assigns.tipo
+    # list_secciones triggers auto-seeding of missing section tipos
+    Secciones.list_secciones()
     seccion = Secciones.get_seccion_by_tipo(tipo)
     config  = (seccion && seccion.config) || %{}
 
@@ -67,7 +72,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
         else: []
 
     {promo_secciones, promo_configs, slides_list} =
-      if tipo == "destacados" do
+      if tipo in ["destacados", "ofertas"] do
         secs =
           ~w(top10 favoritos destacados)
           |> Enum.map(&Secciones.get_seccion_by_tipo/1)
@@ -125,6 +130,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       _                            -> {:noreply, socket}
@@ -161,7 +167,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
   end
 
   @impl true
-  def handle_event("search", %{"q" => q}, socket) do
+  def handle_event("search", %{"value" => q}, socket) do
     {:noreply, assign(socket, search: q)}
   end
 
@@ -236,35 +242,78 @@ defmodule PrettycoreWeb.SeccionEditorLive do
     {:noreply, socket}
   end
 
-  # Cuando el usuario confirma agregar la imagen ya subida
   @impl true
-  def handle_event("subir_imagen", _params, socket) do
-    titulo = socket.assigns.nueva_imagen_titulo
-    uploaded_urls =
-      consume_uploaded_entries(socket, :imagen_carrusel, fn %{path: path}, ent ->
-        ext      = Path.extname(ent.client_name)
-        filename = "#{System.unique_integer([:positive])}#{ext}"
-        priv_dir = Application.app_dir(:prettycore, "priv")
-        dest     = Path.join([priv_dir, "static", "uploads", "carrusel", filename])
-        File.mkdir_p!(Path.dirname(dest))
-        File.cp!(path, dest)
-        {:ok, "/uploads/carrusel/#{filename}"}
-      end)
-    case uploaded_urls do
-      [url | _] ->
-        nuevo       = %{"kind" => "imagen", "url" => url, "titulo" => String.trim(titulo)}
-        slides_list = socket.assigns.slides_list ++ [nuevo]
-        {:noreply, assign(socket, slides_list: slides_list, nueva_imagen_titulo: "", saved: false)}
-      _ ->
-        {:noreply, socket}
+  def handle_event("validate_upload_carrusel", _params, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("cancel_upload_carrusel", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :imagen_carrusel, ref)}
+  end
+
+  # Cuando el usuario confirma agregar la imagen al FTP
+  @impl true
+  def handle_event("subir_imagen", params, socket) do
+    entries = socket.assigns.uploads.imagen_carrusel.entries
+    if entries == [] do
+      {:noreply, assign(socket, upload_error: "Selecciona una imagen primero")}
+    else
+      titulo = Map.get(params, "titulo", "") |> String.trim()
+      socket = assign(socket, uploading: true, upload_error: nil)
+      now_ts = System.system_time(:second)
+
+      results =
+        consume_uploaded_entries(socket, :imagen_carrusel, fn %{path: tmp_path}, entry ->
+          ext     = Path.extname(entry.client_name) |> String.downcase()
+          content = File.read!(tmp_path)
+          filename = "destacados_#{now_ts}"
+          case Sftp.upload_carrusel_destacados_image(filename, ext, content) do
+            {:ok, url}       -> {:ok, {:ok, url}}
+            {:error, reason} -> {:ok, {:error, reason}}
+          end
+        end)
+
+      case results do
+        [{:ok, url}] ->
+          img_count = socket.assigns.slides_list |> Enum.filter(&(&1["kind"] == "imagen")) |> length()
+          titulo_final = if titulo == "", do: "Publicidad #{img_count + 1}", else: titulo
+          nuevo       = %{"kind" => "imagen", "url" => url, "titulo" => titulo_final}
+          slides_list = socket.assigns.slides_list ++ [nuevo]
+          # Auto-guardar inmediatamente en la BD para no perder la imagen si el usuario navega
+          config_guardado = Map.put(socket.assigns.config, "slides_orden", slides_list)
+          seccion = case socket.assigns.seccion && Secciones.update_config(socket.assigns.seccion, config_guardado) do
+            {:ok, sec} -> sec
+            _ -> socket.assigns.seccion
+          end
+          {:noreply,
+           socket
+           |> assign(slides_list: slides_list, seccion: seccion, config: config_guardado,
+                     nueva_imagen_titulo: "", uploading: false, upload_error: nil, saved: true)
+           |> put_flash(:info, "Imagen subida y guardada correctamente")}
+        [{:error, reason}] ->
+          {:noreply, assign(socket, uploading: false, upload_error: "Error SFTP: #{inspect(reason)}")}
+        _ ->
+          {:noreply, assign(socket, uploading: false, upload_error: "Error inesperado al subir")}
+      end
     end
   end
 
   @impl true
   def handle_event("quitar_slide", %{"idx" => idx_str}, socket) do
     idx  = String.to_integer(idx_str)
-    list = List.delete_at(socket.assigns.slides_list, idx)
-    {:noreply, assign(socket, slides_list: list, saved: false)}
+    list = socket.assigns.slides_list
+    slide = Enum.at(list, idx)
+    # Si es imagen, borrar del FTP en background
+    if slide && slide["kind"] == "imagen" && slide["url"] do
+      Task.start(fn -> Sftp.delete_by_url(slide["url"]) end)
+    end
+    list = List.delete_at(list, idx)
+    # Auto-guardar al eliminar para que el cambio persista
+    config_guardado = Map.put(socket.assigns.config, "slides_orden", list)
+    seccion = case socket.assigns.seccion && Secciones.update_config(socket.assigns.seccion, config_guardado) do
+      {:ok, sec} -> sec
+      _ -> socket.assigns.seccion
+    end
+    {:noreply, assign(socket, slides_list: list, seccion: seccion, config: config_guardado, saved: true)}
   end
 
   # Mantener compatibilidad con el nombre viejo
@@ -311,8 +360,8 @@ defmodule PrettycoreWeb.SeccionEditorLive do
   @impl true
   def handle_event("guardar", _params, socket) do
     if socket.assigns.seccion do
-      # Si es el editor del Carrusel de Ofertas
-      if socket.assigns.tipo == "destacados" do
+      # Si es el editor del Carrusel de Ofertas (tipo "ofertas" o "destacados" legacy)
+      if socket.assigns.tipo in ["destacados", "ofertas"] do
         # Extraer el orden de secciones promo del slides_list para reordenar en DB
         promo_tipos = ~w(top10 favoritos destacados)
         promo_ids =
@@ -494,8 +543,8 @@ defmodule PrettycoreWeb.SeccionEditorLive do
           </div>
         <% end %>
 
-        <!-- ── CARRUSEL DE OFERTAS (destacados = editor maestro) ── -->
-        <%= if @tipo == "destacados" do %>
+        <!-- ── CARRUSEL DE OFERTAS (Top 10, Destacados y Favs) ── -->
+        <%= if @tipo == "ofertas" do %>
           <div class="space-y-6 max-w-2xl">
 
             <!-- 1. Imágenes del carrusel -->
@@ -504,26 +553,39 @@ defmodule PrettycoreWeb.SeccionEditorLive do
               <p class="text-xs text-gray-400 mb-4">Sube tu imagen al FTP y pega la URL aquí. Aparecerán como slides antes de las secciones de productos.</p>
 
               <!-- Agregar nueva imagen -->
-              <div class="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">
+              <form phx-submit="subir_imagen" phx-change="validate_upload_carrusel" class="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">
                 <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Agregar imagen</p>
 
                 <!-- Título -->
-                <input type="text" placeholder="Título (opcional)"
+                <input type="text" name="titulo" placeholder="Título (opcional)"
                   value={@nueva_imagen_titulo}
-                  phx-blur="update_nueva_imagen"
                   maxlength="100"
                   class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
 
+                <!-- Zona de selección -->
+                <label class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer bg-purple-50 hover:bg-purple-100 transition-colors">
+                  <svg class="w-7 h-7 text-purple-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                  </svg>
+                  <span class="text-xs text-purple-500 font-medium">Seleccionar imagen</span>
+                  <span class="text-[10px] text-purple-400 mt-0.5">JPG, PNG, WEBP — máx 10MB</span>
+                  <.live_file_input upload={@uploads.imagen_carrusel} id="img-input-seccion" phx-hook="ImageCompressor" class="sr-only" />
+                </label>
+
                 <!-- Preview + barra de progreso cuando hay archivo seleccionado -->
                 <%= for entry <- @uploads.imagen_carrusel.entries do %>
-                  <div class="rounded-2xl overflow-hidden bg-gray-100 relative" style="height:160px;">
+                  <div class="rounded-2xl overflow-hidden bg-gray-100 relative" style="height:140px;">
                     <.live_img_preview entry={entry} class="w-full h-full object-cover" />
+                    <div class="absolute top-2 right-2">
+                      <button type="button" phx-click="cancel_upload_carrusel" phx-value-ref={entry.ref}
+                        class="bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">✕</button>
+                    </div>
                     <%= if entry.progress < 100 do %>
                       <div class="absolute bottom-0 left-0 right-0 bg-black/50 px-3 py-2">
                         <div class="h-1.5 bg-white/30 rounded-full overflow-hidden">
                           <div class="h-full bg-white rounded-full transition-all" style={"width:#{entry.progress}%"}></div>
                         </div>
-                        <p class="text-white text-[10px] font-semibold mt-1">Transfiriendo... <%= entry.progress %>%</p>
+                        <p class="text-white text-[10px] font-semibold mt-1">Procesando... <%= entry.progress %>%</p>
                       </div>
                     <% end %>
                   </div>
@@ -532,29 +594,33 @@ defmodule PrettycoreWeb.SeccionEditorLive do
                   <% end %>
                 <% end %>
 
-                <!-- Botones -->
-                <div class="flex gap-2">
-                  <label class="flex-1 flex items-center justify-center gap-2 cursor-pointer px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition-colors">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                    </svg>
-                    Seleccionar imagen
-                    <.live_file_input upload={@uploads.imagen_carrusel} id="img-input-seccion" phx-hook="ImageCompressor" class="hidden" />
-                  </label>
-                  <%= if @uploads.imagen_carrusel.entries != [] and hd(@uploads.imagen_carrusel.entries).progress == 100 do %>
-                    <button type="button" phx-click="subir_imagen"
-                      class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm rounded-xl transition-colors">
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                <!-- Botón submit -->
+                <%= if @uploads.imagen_carrusel.entries != [] and hd(@uploads.imagen_carrusel.entries).progress == 100 do %>
+                  <button type="submit"
+                    disabled={@uploading}
+                    class={"w-full flex items-center justify-center gap-2 px-4 py-3 text-white font-semibold text-sm rounded-xl transition-colors #{if @uploading, do: "bg-purple-400 cursor-not-allowed", else: "bg-purple-600 hover:bg-purple-500"}"}>
+                    <%= if @uploading do %>
+                      <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                       </svg>
-                      Agregar imagen
-                    </button>
-                  <% end %>
-                </div>
+                      Subiendo...
+                    <% else %>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                      </svg>
+                      Subir
+                    <% end %>
+                  </button>
+                <% end %>
+
+                <%= if @upload_error do %>
+                  <p class="text-xs text-red-500"><%= @upload_error %></p>
+                <% end %>
                 <%= for err <- upload_errors(@uploads.imagen_carrusel) do %>
                   <p class="text-xs text-red-500"><%= error_to_string(err) %></p>
                 <% end %>
-              </div>
+              </form>
             </div>
 
             <!-- 2. Orden unificado de slides -->
@@ -566,13 +632,13 @@ defmodule PrettycoreWeb.SeccionEditorLive do
                   <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                     <%= if slide["kind"] == "imagen" do %>
                       <!-- Thumbnail de imagen -->
-                      <div class="w-12 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-gray-200">
+                      <div class="w-12 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-pink-100">
                         <img src={slide["url"]} class="w-full h-full object-cover" />
                       </div>
                       <span class="w-5 text-center text-xs font-bold text-gray-400"><%= idx + 1 %></span>
                       <div class="flex-1 min-w-0">
-                        <p class="text-sm font-semibold text-gray-800 truncate"><%= slide["titulo"] || "(imagen)" %></p>
-                        <p class="text-[10px] text-purple-500 font-semibold uppercase tracking-wide">Imagen</p>
+                        <p class="text-sm font-semibold text-gray-800 truncate"><%= slide["titulo"] || "Publicidad" %></p>
+                        <p class="text-[10px] text-pink-500 font-semibold uppercase tracking-wide">Publicidad</p>
                       </div>
                     <% else %>
                       <%
@@ -621,105 +687,31 @@ defmodule PrettycoreWeb.SeccionEditorLive do
               </div>
             </div>
 
-            <!-- 3. Selección de productos por sección -->
-            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-              <h2 class="font-bold text-gray-900 mb-3">Productos por sección</h2>
-              <!-- Tabs -->
-              <div class="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl">
-                <%= for ps <- @promo_secciones do %>
-                  <%
-                    ps_color = (ps.config || %{})["color"] || case ps.tipo do
-                      "top10"      -> "#c0392b"
-                      "favoritos"  -> "#1a5276"
-                      "destacados" -> "#1e8449"
-                      _            -> "#6c3483"
-                    end
-                    ps_label = (ps.config || %{})["titulo"] || ps.nombre
-                    ps_count = length(get_codigos(Map.get(@promo_configs, ps.tipo, %{})))
-                  %>
-                  <button type="button" phx-click="set_promo_tab" phx-value-tipo={ps.tipo}
-                    class={"flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all #{if @promo_tab == ps.tipo, do: "bg-white shadow text-gray-900", else: "text-gray-500 hover:text-gray-700"}"}>
-                    <span class="w-2 h-2 rounded-full flex-shrink-0" style={"background:#{ps_color};"}></span>
-                    <span class="truncate"><%= ps_label %></span>
-                    <span class={"text-[10px] font-bold px-1 py-0.5 rounded #{if @promo_tab == ps.tipo, do: "bg-purple-100 text-purple-700", else: "bg-gray-200 text-gray-500"}"}><%= ps_count %></span>
-                  </button>
-                <% end %>
-              </div>
-              <%
-                codigos  = get_codigos(Map.get(@promo_configs, @promo_tab, %{}))
-                filtered =
-                  if @search != "",
-                    do: Enum.filter(@productos, fn p ->
-                      s = String.downcase(@search)
-                      String.contains?(String.downcase(p.descripcion || ""), s) or
-                      String.contains?(String.downcase(p.codigo || ""), s)
-                    end),
-                    else: @productos
-              %>
-              <div class="mb-3 flex items-center gap-3">
-                <div class="flex-1 relative">
-                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                  </div>
-                  <input type="text" phx-keyup="search" name="q" value={@search}
-                    placeholder="Buscar producto..."
-                    class="block w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none shadow-sm" />
-                </div>
-                <span class="text-sm text-gray-500 font-medium flex-shrink-0"><%= length(codigos) %> seleccionados</span>
-              </div>
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto pr-1">
-                <%= for prod <- filtered do %>
-                  <% seleccionado = prod.codigo in codigos %>
-                  <button type="button" phx-click="toggle_producto" phx-value-codigo={prod.codigo}
-                    class={"relative bg-white rounded-xl overflow-hidden border-2 transition-all #{if seleccionado, do: "border-purple-500 shadow-md", else: "border-gray-100 hover:border-gray-300"}"}>
-                    <div class="aspect-square bg-gray-50 overflow-hidden">
-                      <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                        <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-cover" />
-                      <% else %>
-                        <div class="w-full h-full flex items-center justify-center">
-                          <svg class="w-8 h-8 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                          </svg>
-                        </div>
-                      <% end %>
-                    </div>
-                    <div class="p-2 text-left">
-                      <p class="text-[10px] font-semibold text-gray-800 line-clamp-2 leading-tight"><%= prod.descripcion %></p>
-                      <p class="text-[9px] text-gray-400 font-mono mt-0.5"><%= prod.codigo %></p>
-                    </div>
-                    <%= if seleccionado do %>
-                      <div class="absolute top-1.5 right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
-                        <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                        </svg>
-                      </div>
-                    <% end %>
-                  </button>
-                <% end %>
-              </div>
-            </div>
           </div>
         <% end %>
 
-        <!-- ── SECCIONES DE PRODUCTOS individuales (top10 / favoritos) ── -->
-        <%= if @tipo in ["top10", "favoritos"] do %>
+        <!-- ── SECCIONES DE PRODUCTOS individuales (top10 / favoritos / destacados) ── -->
+        <%= if @tipo in ["top10", "favoritos", "destacados"] do %>
           <%
             codigos = get_codigos(@config)
             sec_color = @config["color"] || case @tipo do
               "top10"      -> "#c0392b"
               "favoritos"  -> "#1a5276"
+              "destacados" -> "#1e8449"
               _            -> "#6c3483"
             end
             sec_titulo = @config["titulo"] || @seccion.nombre
             filtered =
               if @search != "",
-                do: Enum.filter(@productos, fn p ->
-                  s = String.downcase(@search)
-                  String.contains?(String.downcase(p.descripcion || ""), s) or
-                  String.contains?(String.downcase(p.codigo || ""), s)
-                end),
+                do:
+                  (words = @search |> String.downcase() |> String.split(" ", trim: true)
+                   Enum.filter(@productos, fn p ->
+                     desc  = String.downcase(p.descripcion || "")
+                     cod   = String.downcase(p.codigo || "")
+                     Enum.all?(words, fn w ->
+                       String.contains?(desc, w) or String.contains?(cod, w)
+                     end)
+                   end)),
                 else: @productos
           %>
           <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5 max-w-lg space-y-4">

@@ -77,6 +77,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       _                            -> {:noreply, socket}
@@ -228,6 +229,9 @@ defmodule PrettycoreWeb.ProductosNativosLive do
         if Prettycore.Pedidos.producto_en_pedido_activo?(codigo) do
           {:noreply, put_flash(socket, :error, "No se puede eliminar: el producto tiene pedidos pendientes o en proceso")}
         else
+          if p.imagen_url && p.imagen_url != "" do
+            Task.start(fn -> Sftp.delete_by_url(p.imagen_url) end)
+          end
           ProductosNativos.eliminar(p)
           {:noreply, load_productos(socket)}
         end

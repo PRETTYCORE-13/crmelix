@@ -192,6 +192,7 @@ defmodule PrettycoreWeb.PedidosLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
@@ -246,7 +247,7 @@ defmodule PrettycoreWeb.PedidosLive do
           </svg>
           <input
             type="text"
-            placeholder="Buscar por nombre, usuario, teléfono o correo..."
+            placeholder="Buscar por # pedido, sucursal, teléfono o correo..."
             value={@search_pedidos}
             phx-keyup="search_pedidos"
             phx-change="search_pedidos"
@@ -295,13 +296,17 @@ defmodule PrettycoreWeb.PedidosLive do
                   q = String.downcase(@search_pedidos)
                   Enum.filter(@pedidos, fn p ->
                     info = Map.get(@clientes_map, p.user_id)
-                    if info do
-                      Enum.any?([info.nombre, info.username, info.email, info.telefono], fn campo ->
-                        campo && String.contains?(String.downcase(campo), q)
-                      end)
-                    else
-                      false
-                    end
+                    id_match = String.contains?(String.downcase(p.id), q)
+                    cliente_match =
+                      if info do
+                        Enum.any?(
+                          [info.nombre, info.username, info.email, info.telefono, info.sucursal],
+                          fn campo -> campo && String.contains?(String.downcase(campo), q) end
+                        )
+                      else
+                        false
+                      end
+                    id_match or cliente_match
                   end)
                 end
             %>

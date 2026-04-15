@@ -121,21 +121,25 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
 
   @impl true
   def handle_event("delete_user", %{"id" => id}, socket) do
-    user = Auth.get_user(id)
-
-    if user do
-      case Auth.delete_user(user) do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Usuario eliminado")
-           |> assign(:users, Auth.list_users())}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Error al eliminar usuario")}
-      end
+    if socket.assigns.user_role != "sysadmin" do
+      {:noreply, put_flash(socket, :error, "Solo el sysadmin puede eliminar usuarios.")}
     else
-      {:noreply, put_flash(socket, :error, "Usuario no encontrado")}
+      user = Auth.get_user(id)
+
+      if user do
+        case Auth.delete_user(user) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Usuario eliminado")
+             |> assign(:users, Auth.list_users())}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Error al eliminar usuario")}
+        end
+      else
+        {:noreply, put_flash(socket, :error, "Usuario no encontrado")}
+      end
     end
   end
 
@@ -495,7 +499,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                           </svg>
                         </button>
-                        <!-- Botón eliminar -->
+                        <!-- Botón eliminar: solo sysadmin -->
+                        <%= if @user_role == "sysadmin" do %>
                         <button
                           type="button"
                           phx-click="delete_user"
@@ -511,6 +516,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                           </svg>
                         </button>
+                        <% end %>
                         <!-- Toggle activo -->
                         <button
                           type="button"

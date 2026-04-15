@@ -8,7 +8,6 @@ defmodule PrettycoreWeb.MenuLayout do
   #  %{id: "workorder", label: "Orden T"},
     %{id: "clientes", label: "Clientes"},
     %{id: "tienda", label: "Tienda"},
-    %{id: "pedidos", label: "Pedidos"},
     %{id: "usuarios", label: "Usuarios", admin_only: true}
   ]
 
@@ -128,11 +127,12 @@ defmodule PrettycoreWeb.MenuLayout do
                   </div>
                 <% end %>
                 <%= if item.id == "tienda" and @current_page in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
-                      "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_publicidad", "seccion_envios",
+                      "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_ofertas", "seccion_publicidad", "seccion_envios",
                       "productos_nativos", "clientes_nativos", "listas_precios", "lista_productos",
-                      "stock", "sucursales"] and
+                      "stock", "sucursales", "pedidos"] and
                     (can_see_categorias?(@user_role, @user_permissions) or
-                     (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions))) do %>
+                     (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions)) or
+                     can_see_pedidos?(@user_role, @user_permissions)) do %>
                   <div class="pc-submenu">
                     <%= if can_see_categorias?(@user_role, @user_permissions) do %>
                       <!-- Desktop: enlace directo a secciones (sin dropdown) -->
@@ -162,14 +162,14 @@ defmodule PrettycoreWeb.MenuLayout do
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                           </svg>
                         </button>
-                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_top10","seccion_favoritos","seccion_destacados","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
+                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_top10","seccion_favoritos","seccion_destacados","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
                           <div class="pl-3 pt-1 pb-1 space-y-0.5">
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
                             <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={@menu_event} phx-value-id="categorias">Categorías</button>
                             <button type="button" class={mobile_admin_item_class("super_categorias", @current_page)} phx-click={@menu_event} phx-value-id="super_categorias">Super Categorías</button>
                             <button type="button" class={mobile_admin_item_class("productos_nativos", @current_page)} phx-click={@menu_event} phx-value-id="productos_nativos">Productos</button>
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Tienda</p>
-                            <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={@menu_event} phx-value-id="carrusel">Carrusel</button>
+                            <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={@menu_event} phx-value-id="carrusel">Anuncio</button>
                             <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={@menu_event} phx-value-id="secciones">Secciones</button>
                             <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={@menu_event} phx-value-id="stock">Stock</button>
                             <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={@menu_event} phx-value-id="sucursales">Sucursales</button>
@@ -177,11 +177,24 @@ defmodule PrettycoreWeb.MenuLayout do
                             <button type="button" class={mobile_admin_item_class("seccion_top10", @current_page)} phx-click={@menu_event} phx-value-id="seccion_top10">Top 10</button>
                             <button type="button" class={mobile_admin_item_class("seccion_favoritos", @current_page)} phx-click={@menu_event} phx-value-id="seccion_favoritos">Favoritos</button>
                             <button type="button" class={mobile_admin_item_class("seccion_destacados", @current_page)} phx-click={@menu_event} phx-value-id="seccion_destacados">Destacados</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={@menu_event} phx-value-id="seccion_ofertas">Top10, Dest. y Favs</button>
                             <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={@menu_event} phx-value-id="seccion_publicidad">Publicidad</button>
                             <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={@menu_event} phx-value-id="seccion_envios">Envíos</button>
                           </div>
                         </div>
                       </div>
+                    <% end %>
+                    <!-- Pedidos: solo si tiene permiso -->
+                    <%= if can_see_pedidos?(@user_role, @user_permissions) do %>
+                      <button
+                        type="button"
+                        class={submenu_item_class("pedidos", @current_page)}
+                        phx-click={@menu_event}
+                        phx-value-id="pedidos"
+                      >
+                        <span class="pc-submenu-dot" />
+                        <span class="pc-nav-label">Pedidos</span>
+                      </button>
                     <% end %>
                     <!-- Toggle Clientes Nativos: solo si puede ver clientes -->
                     <%= if not @modo_nativo or can_see_clientes_nativos?(@user_role, @user_permissions) do %>
@@ -253,27 +266,19 @@ defmodule PrettycoreWeb.MenuLayout do
         </aside>
         <!-- CONTENIDO -->
         <main class="pc-platform-main">
-          <!-- Banner carrusel -->
-          <div class="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 overflow-hidden whitespace-nowrap">
+          <!-- Banda de publicidad configurable -->
+          <%
+            _banda_cfg = Prettycore.SysAdmin.get_config()
+            banda_texto = _banda_cfg.banda_texto || "¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS"
+            banda_color = _banda_cfg.banda_color || "#4f46e5"
+          %>
+          <div class="w-full overflow-hidden whitespace-nowrap" style={"background-color: #{banda_color}"}>
             <div class="inline-flex animate-marquee">
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
-              <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
-                ¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS
-              </span>
+              <%= for _ <- 1..6 do %>
+                <span class="px-8 py-2 text-sm font-semibold text-white tracking-wide">
+                  <%= banda_texto %>
+                </span>
+              <% end %>
             </div>
           </div>
           {render_slot(@inner_block)}
@@ -372,17 +377,15 @@ defmodule PrettycoreWeb.MenuLayout do
 
   defp menu_active?("tienda", current)
        when current in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
-                        "seccion_top10", "seccion_favoritos", "seccion_destacados",
+                        "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_ofertas",
                         "seccion_publicidad", "seccion_envios", "productos_nativos",
                         "clientes_nativos", "listas_precios", "lista_productos",
-                        "stock", "sucursales"],
+                        "stock", "sucursales", "pedidos"],
        do: true
 
   defp menu_active?("clientes", current)
        when current in ["clientes"],
        do: true
-
-  defp menu_active?("pedidos", "pedidos"), do: true
 
   defp menu_active?(id, current), do: id == current
 
@@ -393,6 +396,10 @@ defmodule PrettycoreWeb.MenuLayout do
   defp can_see_clientes_nativos?("sysadmin", _perms), do: true
   defp can_see_clientes_nativos?(_role, nil), do: false
   defp can_see_clientes_nativos?(_role, perms), do: "clientes" in perms
+
+  defp can_see_pedidos?("sysadmin", _perms), do: true
+  defp can_see_pedidos?(_role, nil), do: false
+  defp can_see_pedidos?(_role, perms), do: "pedidos" in perms
 
   defp menu_item_class(true), do: "pc-nav-item pc-nav-item-active"
   defp menu_item_class(false), do: "pc-nav-item"
@@ -442,7 +449,7 @@ defmodule PrettycoreWeb.MenuLayout do
         <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mb-1">Tienda</p>
         <div class="bg-white rounded-2xl overflow-hidden shadow-sm divide-y divide-gray-100">
           <.sp_item img="/images/secciones.png" label="Secciones" href="/admin/secciones" active={@current_page == "secciones"} />
-          <.sp_item img="/images/carrusel.png"   label="Carrusel"   href="/admin/carrusel"   active={@current_page == "carrusel"} />
+          <.sp_item img="/images/carrusel.png"   label="Anuncio"    href="/admin/carrusel"   active={@current_page == "carrusel"} />
           <.sp_item img="/images/stock.png"     label="Stock"     href="/admin/stock"     active={@current_page == "stock"} />
           <.sp_item img="/images/sucursales.png" label="Sucursales" href="/admin/sucursales" active={@current_page == "sucursales"} />
         </div>
@@ -455,6 +462,7 @@ defmodule PrettycoreWeb.MenuLayout do
           <.sp_item img="/images/top10.png"      label="Top 10"     href="/admin/seccion/top10"      active={@current_page == "seccion_top10"} />
           <.sp_item img="/images/favoritos.png"  label="Favoritos"  href="/admin/seccion/favoritos"  active={@current_page == "seccion_favoritos"} />
           <.sp_item img="/images/destacados.png" label="Destacados" href="/admin/seccion/destacados" active={@current_page == "seccion_destacados"} />
+          <.sp_item img="/images/top10.png"      label="Top10, Dest. y Favs" href="/admin/seccion/ofertas" active={@current_page == "seccion_ofertas"} />
           <.sp_item img="/images/publicidad.png" label="Publicidad"  href="/admin/seccion/publicidad" active={@current_page == "seccion_publicidad"} />
           <.sp_item img="/images/envios.png"     label="Envíos"      href="/admin/seccion/envios"     active={@current_page == "seccion_envios"} />
         </div>

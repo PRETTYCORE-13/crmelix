@@ -31,6 +31,10 @@ defmodule Prettycore.Sftp do
   @dir_productos_nativos "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/PRODUCTOS_NATIVOS"
   @make_dirs_productos_nativos [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/PRODUCTOS_NATIVOS"]
 
+  @url_carrusel_dest   "https://prettycore.xyz/ELIXIR/PRETTYCORE/CARRUSEL_DESTACADOS"
+  @dir_carrusel_dest   "domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CARRUSEL_DESTACADOS"
+  @make_dirs_carrusel_dest [~c"domains/prettycore.xyz/public_html/ELIXIR", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE", ~c"domains/prettycore.xyz/public_html/ELIXIR/PRETTYCORE/CARRUSEL_DESTACADOS"]
+
   def upload_producto_nativo_image(codigo, ext, content) when is_binary(content) do
     name = "#{codigo}#{ext}"
     upload("#{@dir_productos_nativos}/#{name}", "#{@url_productos_nativos}/#{name}", @make_dirs_productos_nativos, content, "producto_nativo")
@@ -88,6 +92,11 @@ defmodule Prettycore.Sftp do
   def upload_carrusel_image(filename, ext, content) when is_binary(content) do
     name = "#{filename}#{ext}"
     upload("#{@dir_carrusel}/#{name}", "#{@url_carrusel}/#{name}", @make_dirs_carrusel, content, "carrusel")
+  end
+
+  def upload_carrusel_destacados_image(filename, ext, content) when is_binary(content) do
+    name = "#{filename}#{ext}"
+    upload("#{@dir_carrusel_dest}/#{name}", "#{@url_carrusel_dest}/#{name}", @make_dirs_carrusel_dest, content, "carrusel_destacados")
   end
 
   def upload_super_categoria_image(slug, ext, content) when is_binary(content) do

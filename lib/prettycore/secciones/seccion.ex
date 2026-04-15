@@ -4,7 +4,7 @@ defmodule Prettycore.Secciones.Seccion do
 
   @primary_key {:id, :binary_id, autogenerate: true}
 
-  @tipos ~w(carrusel productos top10 favoritos destacados publicidad envios)
+  @tipos ~w(carrusel productos top10 favoritos destacados ofertas publicidad envios)
 
   schema "secciones" do
     field :nombre, :string
@@ -30,6 +30,7 @@ defmodule Prettycore.Secciones.Seccion do
   def tipo_label("favoritos"),  do: "Favoritos"
   def tipo_label("destacados"), do: "Carrusel Dest."
   def tipo_label("publicidad"), do: "Publicidad"
+  def tipo_label("ofertas"),    do: "Top10, Dest. y Favs"
   def tipo_label("envios"),     do: "Envíos"
   def tipo_label(t),            do: t
 end

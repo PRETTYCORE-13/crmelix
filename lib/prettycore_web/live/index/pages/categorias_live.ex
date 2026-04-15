@@ -63,6 +63,7 @@ defmodule PrettycoreWeb.CategoriasLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
@@ -96,7 +97,14 @@ defmodule PrettycoreWeb.CategoriasLive do
   end
 
   def handle_event("cerrar_modal", _, socket) do
+    socket = Enum.reduce(socket.assigns.uploads.imagen.entries, socket, fn entry, acc ->
+      cancel_upload(acc, :imagen, entry.ref)
+    end)
     {:noreply, assign(socket, modal: nil, selected: nil, form_error: nil, upload_error: nil)}
+  end
+
+  def handle_event("cancel_upload", %{"ref" => ref}, socket) do
+    {:noreply, cancel_upload(socket, :imagen, ref)}
   end
 
   # ── Guardar nueva categoría ────────────────────────────────────────
@@ -146,6 +154,9 @@ defmodule PrettycoreWeb.CategoriasLive do
         {:error, :protegida} ->
           put_flash(socket, :error, "La categoría \"#{cat.nombre}\" no puede eliminarse")
         _ ->
+          if cat && cat.imagen_url && cat.imagen_url != "" do
+            Task.start(fn -> Sftp.delete_by_url(cat.imagen_url) end)
+          end
           socket
       end
     cats = Categorias.list_categorias()
@@ -165,11 +176,16 @@ defmodule PrettycoreWeb.CategoriasLive do
     else
       socket = assign(socket, uploading: true, upload_error: nil)
 
+      old_url = cat.imagen_url
+      if old_url && old_url != "" do
+        Sftp.delete_by_url(old_url)
+      end
+
       results =
         consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, entry ->
           ext = Path.extname(entry.client_name) |> String.downcase()
           content = File.read!(tmp_path)
-          slug = cat.nombre |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")
+          slug = "#{cat.nombre |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")}_#{System.system_time(:second)}"
           case Sftp.upload_categoria_image(slug, ext, content) do
             {:ok, url}       -> {:ok, {:ok, url}}
             {:error, reason} -> {:ok, {:error, reason}}

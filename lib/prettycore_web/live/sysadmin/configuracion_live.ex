@@ -29,6 +29,8 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
      |> assign(:editing_mode, false)
      |> assign(:permitir_edicion, config.permitir_edicion != false)
      |> assign(:modo_nativo, config.modo_nativo == true)
+     |> assign(:banda_texto, config.banda_texto || "¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS")
+     |> assign(:banda_color, config.banda_color || "#4f46e5")
      |> assign(:arch_scan_status, :idle)
      |> assign(:arch_scan_stats, nil)}
   end
@@ -91,9 +93,14 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
     url       = String.trim(params["url"]       || "")
     foto      = socket.assigns.foto
 
+    banda_texto = String.trim(params["banda_texto"] || socket.assigns.banda_texto)
+    banda_color = String.trim(params["banda_color"] || socket.assigns.banda_color)
+
     attrs = %{usuario: usuario, instancia: instancia, token: token, url: url, foto: foto,
               permitir_edicion: socket.assigns.permitir_edicion,
-              modo_nativo: socket.assigns.modo_nativo}
+              modo_nativo: socket.assigns.modo_nativo,
+              banda_texto: banda_texto,
+              banda_color: banda_color}
 
     case SysAdmin.save_config(attrs) do
       {:ok, _config} ->
@@ -103,6 +110,8 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
          |> assign(:instancia, instancia)
          |> assign(:token, token)
          |> assign(:url, url)
+         |> assign(:banda_texto, banda_texto)
+         |> assign(:banda_color, banda_color)
          |> assign(:saved, true)
          |> assign(:error, nil)
          |> assign(:show_confirm_modal, false)
@@ -157,6 +166,8 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
      |> assign(:token, config.token || "")
      |> assign(:url, config.url || "")
      |> assign(:foto, config.foto || "")
+     |> assign(:banda_texto, config.banda_texto || "¿Tienes alguna idea de app web y no sabes cómo hacerla realidad? CONTÁCTANOS")
+     |> assign(:banda_color, config.banda_color || "#4f46e5")
      |> assign(:editing_mode, false)
      |> assign(:error, nil)}
   end
@@ -164,6 +175,25 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
   @impl true
   def handle_event("dismiss_saved", _, socket) do
     {:noreply, assign(socket, :saved, false)}
+  end
+
+  @impl true
+  def handle_event("update_banda_texto", %{"value" => texto}, socket) do
+    {:noreply, assign(socket, :banda_texto, texto)}
+  end
+
+  @impl true
+  def handle_event("update_banda_color", %{"banda_color" => color}, socket) do
+    {:noreply, assign(socket, :banda_color, color)}
+  end
+
+  @impl true
+  def handle_event("update_banda_color_hex", %{"value" => color}, socket) do
+    if String.match?(color, ~r/^#[0-9a-fA-F]{6}$/) do
+      {:noreply, assign(socket, :banda_color, color)}
+    else
+      {:noreply, socket}
+    end
   end
 
   # ── Arquitectura: escaneo + descarga ────────────────────────────────────────
@@ -290,6 +320,58 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
           <input type="hidden" name="url"       value={@url} />
           <% end %>
 
+          <!-- Banda de Publicidad -->
+          <div class="p-5">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Banda de Publicidad</p>
+
+            <!-- Preview -->
+            <div class="mb-3 rounded-lg overflow-hidden">
+              <div class="overflow-hidden whitespace-nowrap py-2 px-4 text-sm font-semibold text-white text-center truncate rounded-lg"
+                   style={"background-color: #{@banda_color}"}>
+                <%= @banda_texto %>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Texto</label>
+                <input
+                  type="text"
+                  name="banda_texto"
+                  value={@banda_texto}
+                  maxlength="200"
+                  placeholder="Texto de la banda superior..."
+                  phx-keyup="update_banda_texto"
+                  phx-debounce="300"
+                  class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 transition"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Color de fondo</label>
+                <div class="flex items-center gap-3">
+                  <input
+                    type="color"
+                    name="banda_color"
+                    value={@banda_color}
+                    phx-change="update_banda_color"
+                    class="h-9 w-16 rounded-lg border border-gray-300 cursor-pointer p-0.5"
+                  />
+                  <input
+                    type="text"
+                    name="banda_color_hex"
+                    value={@banda_color}
+                    maxlength="7"
+                    placeholder="#4f46e5"
+                    phx-keyup="update_banda_color_hex"
+                    phx-debounce="300"
+                    class="w-28 text-sm font-mono rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 transition"
+                  />
+                  <span class="text-xs text-gray-400">Hex p. ej. #4f46e5</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="p-5 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
             <button type="button" phx-click="cancelar_edicion"
               class="px-6 py-2 text-sm font-semibold rounded-xl border text-gray-700 bg-white border-gray-300 hover:bg-gray-100 transition-colors">
@@ -303,54 +385,6 @@ defmodule PrettycoreWeb.SysAdmin.ConfiguracionLive do
         </form>
       </div>
 
-      <!-- ═══════════════════════════════════════ HERRAMIENTAS ADMINISTRATIVAS ═══ -->
-      <div class="p-8 max-w-2xl pt-0">
-        <div class="border border-gray-200 rounded-2xl bg-white shadow-sm overflow-hidden">
-          <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-            <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <h2 class="text-sm font-semibold text-gray-700">Herramientas administrativas</h2>
-          </div>
-
-          <div class="p-5 flex items-start justify-between gap-4">
-            <div class="flex-1">
-              <p class="text-sm font-medium text-gray-800">Generar Excel Arquitectura</p>
-              <p class="text-xs text-gray-400 mt-0.5">
-                Escanea LiveViews, Controllers, Contexts, Schemas y Migraciones del proyecto.
-                Genera un archivo <code class="bg-gray-100 px-1 rounded text-[10px]">.xlsx</code> descargable con la estructura completa.
-              </p>
-              <%= if @arch_scan_status == :done and @arch_scan_stats do %>
-                <div class="mt-2 flex items-center gap-3">
-                  <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                    <%= @arch_scan_stats.funcionalidades %> funcionalidades
-                  </span>
-                  <span class="inline-flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                    <%= @arch_scan_stats.tablas %> tablas
-                  </span>
-                  <button phx-click="reset_arch_status" class="text-[10px] text-gray-400 hover:text-gray-600 underline">limpiar</button>
-                </div>
-              <% end %>
-            </div>
-
-            <%!-- Enlace de descarga oculto --%>
-            <a id="arch-dl-link" href="/sysadmin/architecture-scan" download class="hidden"></a>
-
-            <button
-              phx-click={JS.dispatch("click", to: "#arch-dl-link") |> JS.push("scan_architecture")}
-              class="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-semibold rounded-xl transition-colors"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Generar Excel Arquitectura
-            </button>
-          </div>
-        </div>
-      </div>
     </.sidebar>
 
     <!-- ═══════════════════════════════════════════════════ MODAL CONFIRMACIÓN ═══ -->

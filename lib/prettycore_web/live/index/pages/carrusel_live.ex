@@ -55,6 +55,7 @@ defmodule PrettycoreWeb.CarruselLive do
       "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
@@ -97,14 +98,19 @@ defmodule PrettycoreWeb.CarruselLive do
 
       case results do
         [{:ok, url}] ->
-          orden = length(socket.assigns.imagenes)
+          # Borrar imagen anterior de FTP y BD antes de guardar la nueva
+          Enum.each(socket.assigns.imagenes, fn img ->
+            old_url = img.url
+            Task.start(fn -> Sftp.delete_by_url(old_url) end)
+            Carrusel.delete_imagen(img)
+          end)
           titulo_val = String.trim(titulo)
-          {:ok, _} = Carrusel.create_imagen(%{url: url, titulo: if(titulo_val == "", do: nil, else: titulo_val), orden: orden})
+          {:ok, _} = Carrusel.create_imagen(%{url: url, titulo: if(titulo_val == "", do: nil, else: titulo_val), orden: 0})
           imagenes = Carrusel.list_all()
           {:noreply,
            socket
            |> assign(imagenes: imagenes, uploading: false, upload_error: nil, titulo_input: "")
-           |> put_flash(:info, "✓ Imagen agregada al carrusel")}
+           |> put_flash(:info, "✓ Imagen actualizada")}
         [{:error, reason}] ->
           {:noreply, assign(socket, uploading: false, upload_error: "Error SFTP: #{inspect(reason)}")}
         _ ->
@@ -121,23 +127,13 @@ defmodule PrettycoreWeb.CarruselLive do
   end
 
   @impl true
-  def handle_event("mover_arriba", %{"id" => id}, socket) do
-    img = Enum.find(socket.assigns.imagenes, &(&1.id == id))
-    if img, do: Carrusel.mover_arriba(img)
-    {:noreply, assign(socket, imagenes: Carrusel.list_all())}
-  end
-
-  @impl true
-  def handle_event("mover_abajo", %{"id" => id}, socket) do
-    img = Enum.find(socket.assigns.imagenes, &(&1.id == id))
-    if img, do: Carrusel.mover_abajo(img)
-    {:noreply, assign(socket, imagenes: Carrusel.list_all())}
-  end
-
-  @impl true
   def handle_event("eliminar", %{"id" => id}, socket) do
     img = Enum.find(socket.assigns.imagenes, &(&1.id == id))
-    if img, do: Carrusel.delete_imagen(img)
+    if img do
+      old_url = img.url
+      Task.start(fn -> Sftp.delete_by_url(old_url) end)
+      Carrusel.delete_imagen(img)
+    end
     {:noreply, assign(socket, imagenes: Carrusel.list_all())}
   end
 
@@ -161,15 +157,15 @@ defmodule PrettycoreWeb.CarruselLive do
       <header class="mb-6">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Carrusel</h1>
-            <p class="text-sm text-gray-500 mt-0.5">Imágenes del carrusel en la tienda</p>
+            <h1 class="text-2xl font-bold text-gray-900">Anuncio</h1>
+            <p class="text-sm text-gray-500 mt-0.5">Imagen de anuncio en la tienda (solo una activa)</p>
           </div>
         </div>
       </header>
 
       <!-- Formulario de subida -->
       <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6">
-        <h2 class="text-sm font-semibold text-gray-700 mb-4">Agregar nueva imagen</h2>
+        <h2 class="text-sm font-semibold text-gray-700 mb-4"><%= if @imagenes == [], do: "Subir imagen de anuncio", else: "Reemplazar imagen actual" %></h2>
         <form phx-submit="subir_imagen" phx-change="validate_upload">
           <!-- Título opcional -->
           <div class="mb-3">
@@ -224,7 +220,13 @@ defmodule PrettycoreWeb.CarruselLive do
 
           <% ready = Enum.any?(@uploads.imagen.entries) and
                      Enum.all?(@uploads.imagen.entries, &(&1.progress == 100)) and
-                     upload_errors(@uploads.imagen) == [] %>
+                     upload_errors(@uploads.imagen) == [] and
+                     @imagenes == [] %>
+          <%= if @imagenes != [] do %>
+            <p class="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+              Elimina la imagen actual antes de subir una nueva.
+            </p>
+          <% end %>
           <button
             type="submit"
             disabled={not ready or @uploading}
@@ -235,7 +237,7 @@ defmodule PrettycoreWeb.CarruselLive do
                 else: "bg-gray-100 text-gray-400 cursor-not-allowed")
             ]}
           >
-            <%= if @uploading, do: "Subiendo...", else: "Agregar al carrusel" %>
+            <%= if @uploading, do: "Subiendo...", else: "Subir" %>
           </button>
         </form>
       </div>
@@ -246,12 +248,12 @@ defmodule PrettycoreWeb.CarruselLive do
           <svg class="w-12 h-12 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <p class="text-sm font-medium">Sin imágenes en el carrusel</p>
-          <p class="text-xs mt-1">Sube tu primera imagen arriba</p>
+          <p class="text-sm font-medium">Sin imagen de anuncio</p>
+          <p class="text-xs mt-1">Sube tu imagen arriba</p>
         </div>
       <% else %>
         <div class="space-y-3">
-          <%= for {img, i} <- Enum.with_index(@imagenes) do %>
+          <%= for img <- @imagenes do %>
             <div class={"bg-white rounded-2xl border shadow-sm overflow-hidden flex gap-0 group #{if img.activo, do: "border-gray-200", else: "border-gray-100 opacity-60"}"}>
               <!-- Imagen preview -->
               <div class="w-32 sm:w-48 flex-shrink-0 bg-gray-100 relative overflow-hidden" style="aspect-ratio: 16/7;">
@@ -272,7 +274,6 @@ defmodule PrettycoreWeb.CarruselLive do
                       />
                       <button type="submit" class="text-[10px] text-gray-400 hover:text-purple-600 flex-shrink-0">Guardar</button>
                     </form>
-                    <p class="text-[10px] text-gray-400 mt-1">Pos. <%= i + 1 %></p>
                   </div>
                   <!-- Estado activo -->
                   <button
@@ -286,31 +287,9 @@ defmodule PrettycoreWeb.CarruselLive do
                 <!-- Controles -->
                 <div class="flex items-center gap-1.5 mt-3">
                   <button
-                    phx-click="mover_arriba"
-                    phx-value-id={img.id}
-                    disabled={i == 0}
-                    class="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    title="Subir"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-                    </svg>
-                  </button>
-                  <button
-                    phx-click="mover_abajo"
-                    phx-value-id={img.id}
-                    disabled={i == length(@imagenes) - 1}
-                    class="p-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    title="Bajar"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  <button
                     phx-click="eliminar"
                     phx-value-id={img.id}
-                    data-confirm="¿Eliminar esta imagen del carrusel?"
+                    data-confirm="¿Eliminar esta imagen del anuncio?"
                     class="p-1.5 rounded-lg bg-gray-50 hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors ml-auto"
                     title="Eliminar"
                   >

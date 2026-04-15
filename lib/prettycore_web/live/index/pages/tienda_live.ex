@@ -284,6 +284,7 @@ defmodule PrettycoreWeb.Tienda do
       "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
       "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
       "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
+      "seccion_ofertas"   -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
       "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
       "seccion_envios"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
       "productos_nativos"  -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
@@ -574,14 +575,11 @@ defmodule PrettycoreWeb.Tienda do
                                 </div>
                               <% else %>
                                 <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
-                                  <div class="mt-2 flex gap-1">
+                                  <div class="mt-2">
                                     <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
-                                      class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-transparent border border-gray-900 hover:bg-blue-500 hover:border-blue-500 hover:text-white text-gray-900 text-[11px] font-medium rounded-full transition-colors">
+                                      class="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-gray-900 hover:bg-blue-500 text-white text-[11px] font-medium rounded-full transition-colors">
                                       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                    </button>
-                                    <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
-                                      class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-900 hover:bg-blue-500 text-white text-[11px] font-medium rounded-full transition-colors">
-                                      Comprar
+                                      Agregar
                                     </button>
                                   </div>
                                 <% end %>
@@ -611,118 +609,117 @@ defmodule PrettycoreWeb.Tienda do
                 # Recolectar TODAS las secciones promo activas, sin importar posición
                 secs_promo_grupo = Enum.filter(secs, &(&1.tipo in tipos_promo))
                 margin_top = if prev_tipo == "carrusel", do: "margin-top:-16px;", else: ""
-                # Leer slides_orden unificado del config de destacados
+                # Leer slides_orden unificado del config de la sección "ofertas"
+                ofertas_sec = Enum.find(secs, &(&1.tipo == "ofertas"))
+                ofertas_cfg = (ofertas_sec && ofertas_sec.config) || %{}
                 destacados_cfg = (Enum.find(secs_promo_grupo, &(&1.tipo == "destacados")) || %{config: %{}}).config || %{}
                 slides_orden =
-                  case destacados_cfg["slides_orden"] do
+                  case ofertas_cfg["slides_orden"] do
                     list when is_list(list) and list != [] -> list
                     _ ->
-                      # Fallback: secciones en orden + imágenes viejas al final
-                      Enum.map(secs_promo_grupo, &%{"kind" => "seccion", "tipo" => &1.tipo}) ++
-                      Enum.map(destacados_cfg["imagen_slides"] || [], &Map.put(&1, "kind", "imagen"))
+                      case destacados_cfg["slides_orden"] do
+                        list when is_list(list) and list != [] -> list
+                        _ ->
+                          # Fallback: secciones en orden + imágenes viejas al final
+                          Enum.map(secs_promo_grupo, &%{"kind" => "seccion", "tipo" => &1.tipo}) ++
+                          Enum.map(destacados_cfg["imagen_slides"] || [], &Map.put(&1, "kind", "imagen"))
+                      end
                   end
               %>
+              <% slides_count = length(slides_orden) %>
               <div style={"padding:8px;#{margin_top}position:relative;z-index:20;"}>
-                <!-- Desktop: fila flex -->
-                <div class="hidden sm:flex gap-3 flex-wrap">
-                  <%= for slide <- slides_orden do %>
-                    <%= if slide["kind"] == "imagen" do %>
-                      <div class="flex-1 min-w-[220px] rounded-2xl overflow-hidden" style="max-height:200px;">
-                        <img src={slide["url"]} alt={slide["titulo"] || ""}
-                          class="w-full h-full object-cover rounded-2xl" style="max-height:200px;" />
-                      </div>
-                    <% else %>
-                      <%
-                        slide_sec = Enum.find(secs_promo_grupo, &(&1.tipo == slide["tipo"]))
-                        s_cfg     = (slide_sec && slide_sec.config) || %{}
-                        s_color   = s_cfg["color"] || case slide["tipo"] do
-                          "top10" -> "#c0392b"; "favoritos" -> "#1a5276"; "destacados" -> "#1e8449"; _ -> "#6c3483"
-                        end
-                        s_titulo  = s_cfg["titulo"] || (slide_sec && slide_sec.nombre) || slide["tipo"]
-                        s_prods   = case s_cfg do
-                          %{"codigos" => c} when is_list(c) and c != [] -> Enum.filter(@productos, &(&1.codigo in c))
-                          _ -> []
-                        end |> Enum.take(4)
-                      %>
-                      <%= if slide_sec && s_prods != [] do %>
-                        <div class="flex-1 min-w-[220px] rounded-2xl overflow-hidden p-3" style={"background-color:#{s_color};"}>
-                          <h3 class="text-white font-black text-base leading-tight mb-2 px-1"><%= s_titulo %></h3>
-                          <div class="grid grid-cols-2 gap-1.5">
-                            <%= for prod <- s_prods do %>
-                              <button phx-click="ver_detalle" phx-value-codigo={prod.codigo}
-                                class="relative bg-white rounded-xl overflow-hidden aspect-square flex items-center justify-center group active:scale-95 transition-transform">
-                                <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                                  <img src={prod.imagen_url} alt={prod.descripcion}
-                                    class="w-full h-full object-contain p-1.5 group-hover:scale-105 transition-transform duration-200" />
-                                <% else %>
-                                  <svg class="w-6 h-6 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <% end %>
-                              </button>
-                            <% end %>
-                            <%= for _ <- List.duplicate(nil, max(0, 4 - length(s_prods))) do %>
-                              <div class="bg-white/20 rounded-xl aspect-square"></div>
-                            <% end %>
-                          </div>
+                <%
+                  # En PC: ≤3 slides → fila fija (sin carrusel). ≥4 → carrusel con tarjetas de ancho fijo.
+                  # En móvil: siempre carrusel, 1 tarjeta por vez (w-full).
+                  # El ancho de la tarjeta en desktop para el modo carrusel es 240px (~w-60).
+                  # Con sm:overflow-x-visible + sm:flex-1 las ≤3 tarjetas llenan el espacio y son visibles todas.
+                  desktop_carousel = slides_count > 3
+                  track_overflow = if desktop_carousel, do: "sm:overflow-x-hidden", else: "sm:overflow-x-visible"
+                  card_desktop   = if desktop_carousel, do: "sm:w-80", else: "sm:flex-1"
+                  controls_hide  = if desktop_carousel, do: "", else: "sm:hidden"
+                %>
+                <div class="relative">
+                  <!-- Track con hook -->
+                  <div id="promo-carrusel"
+                    phx-hook="PromoCarrusel"
+                    class={"flex overflow-x-hidden snap-x snap-mandatory sm:gap-3 #{track_overflow}"}
+                    style="scrollbar-width:none;-ms-overflow-style:none;">
+                    <%= for {slide, _idx} <- Enum.with_index(slides_orden) do %>
+                      <%= if slide["kind"] == "imagen" do %>
+                        <div class={"flex-none snap-start w-full #{card_desktop} rounded-2xl overflow-hidden self-start"}
+                          style="aspect-ratio:0.87;">
+                          <img src={slide["url"]} alt={slide["titulo"] || ""}
+                            class="w-full h-full object-cover block" />
                         </div>
-                      <% end %>
-                    <% end %>
-                  <% end %>
-                </div>
-                <!-- Móvil: snap carousel -->
-                <div class="flex sm:hidden overflow-x-auto snap-x snap-mandatory gap-3" style="scrollbar-width:none;-ms-overflow-style:none;">
-                  <%= for slide <- slides_orden do %>
-                    <%= if slide["kind"] == "imagen" do %>
-                      <div class="flex-none snap-start rounded-2xl overflow-hidden" style="width:calc(100% - 16px);height:200px;">
-                        <img src={slide["url"]} alt={slide["titulo"] || ""} class="w-full h-full object-cover" />
-                      </div>
-                    <% else %>
-                      <%
-                        slide_sec = Enum.find(secs_promo_grupo, &(&1.tipo == slide["tipo"]))
-                        s_cfg     = (slide_sec && slide_sec.config) || %{}
-                        s_color   = s_cfg["color"] || case slide["tipo"] do
-                          "top10" -> "#c0392b"; "favoritos" -> "#1a5276"; "destacados" -> "#1e8449"; _ -> "#6c3483"
-                        end
-                        s_titulo  = s_cfg["titulo"] || (slide_sec && slide_sec.nombre) || slide["tipo"]
-                        s_prods   = case s_cfg do
-                          %{"codigos" => c} when is_list(c) and c != [] -> Enum.filter(@productos, &(&1.codigo in c))
-                          _ -> []
-                        end |> Enum.take(4)
-                      %>
-                      <%= if slide_sec && s_prods != [] do %>
-                        <div class="flex-none snap-start rounded-2xl overflow-hidden p-3" style={"width:calc(100% - 16px);background-color:#{s_color};"}>
-                          <h3 class="text-white font-black text-xl leading-tight mb-3 px-1"><%= s_titulo %></h3>
-                          <div class="grid grid-cols-2 gap-2">
-                            <%= for prod <- s_prods do %>
-                              <button phx-click="ver_detalle" phx-value-codigo={prod.codigo}
-                                class="relative bg-white rounded-xl overflow-hidden aspect-square flex items-center justify-center group active:scale-95 transition-transform">
-                                <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                                  <img src={prod.imagen_url} alt={prod.descripcion}
-                                    class="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" />
-                                <% else %>
-                                  <svg class="w-8 h-8 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <% end %>
-                                <% precio_sec = Map.get(@precios, prod.codigo) || Map.get(@precios_nativos, prod.codigo) %>
-                                <%= if precio_sec && Map.get(@precios, "0") && precio_sec < Map.get(@precios, "0") do %>
-                                  <span class="absolute bottom-1 left-1 bg-red-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
-                                    -<%= round((1 - precio_sec / Map.get(@precios, "0")) * 100) %>%
-                                  </span>
-                                <% end %>
-                              </button>
-                            <% end %>
-                            <%= for _ <- List.duplicate(nil, max(0, 4 - length(s_prods))) do %>
-                              <div class="bg-white/20 rounded-xl aspect-square"></div>
-                            <% end %>
-                          </div>
-                          <%= if length(slides_orden) > 1 do %>
-                            <div class="flex justify-center gap-1.5 mt-3">
-                              <%= for {dot, di} <- Enum.with_index(slides_orden) do %>
-                                <div class={"w-1.5 h-1.5 rounded-full #{if di == Enum.find_index(slides_orden, &(&1 == slide)), do: "bg-white", else: "bg-white/40"}"}></div>
+                      <% else %>
+                        <%
+                          slide_sec = Enum.find(secs_promo_grupo, &(&1.tipo == slide["tipo"]))
+                          s_cfg     = (slide_sec && slide_sec.config) || %{}
+                          s_color   = s_cfg["color"] || case slide["tipo"] do
+                            "top10" -> "#c0392b"; "favoritos" -> "#1a5276"; "destacados" -> "#1e8449"; _ -> "#6c3483"
+                          end
+                          s_titulo  = s_cfg["titulo"] || (slide_sec && slide_sec.nombre) || slide["tipo"]
+                          s_prods   = case s_cfg do
+                            %{"codigos" => c} when is_list(c) and c != [] -> Enum.filter(@productos, &(&1.codigo in c))
+                            _ -> []
+                          end |> Enum.take(4)
+                        %>
+                        <%= if slide_sec && s_prods != [] do %>
+                          <div class={"flex-none snap-start w-full #{card_desktop} rounded-2xl overflow-hidden p-3 self-start"}
+                            style={"background-color:#{s_color};"}>
+                            <h3 class="text-white font-black text-lg leading-tight mb-2 px-1"><%= s_titulo %></h3>
+                            <div class="grid grid-cols-2 gap-2">
+                              <%= for prod <- s_prods do %>
+                                <button phx-click="ver_detalle" phx-value-codigo={prod.codigo}
+                                  class="relative bg-white rounded-xl overflow-hidden aspect-square flex items-center justify-center group active:scale-95 transition-transform">
+                                  <%= if prod.imagen_url && prod.imagen_url != "" do %>
+                                    <img src={prod.imagen_url} alt={prod.descripcion}
+                                      class="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200" />
+                                  <% else %>
+                                    <svg class="w-7 h-7 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                  <% end %>
+                                  <% precio_sec = Map.get(@precios, prod.codigo) || Map.get(@precios_nativos, prod.codigo) %>
+                                  <%= if precio_sec && Map.get(@precios, "0") && precio_sec < Map.get(@precios, "0") do %>
+                                    <span class="absolute bottom-1 left-1 bg-red-500 text-white text-[8px] font-bold px-1 py-0.5 rounded">
+                                      -<%= round((1 - precio_sec / Map.get(@precios, "0")) * 100) %>%
+                                    </span>
+                                  <% end %>
+                                </button>
+                              <% end %>
+                              <%= for _ <- List.duplicate(nil, max(0, 4 - length(s_prods))) do %>
+                                <div class="bg-white/20 rounded-xl aspect-square"></div>
                               <% end %>
                             </div>
-                          <% end %>
-                        </div>
+                          </div>
+                        <% else %>
+                          <div class={"flex-none snap-start w-full #{card_desktop}"}></div>
+                        <% end %>
                       <% end %>
                     <% end %>
+                  </div>
+                  <!-- Botones prev / next (siempre en móvil, solo en PC si hay >3) -->
+                  <%= if slides_count > 1 do %>
+                    <button id="promo-prev"
+                      class={"absolute left-1 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/50 text-white rounded-full w-7 h-7 flex items-center justify-center shadow transition #{controls_hide}"}>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                      </svg>
+                    </button>
+                    <button id="promo-next"
+                      class={"absolute right-1 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/50 text-white rounded-full w-7 h-7 flex items-center justify-center shadow transition #{controls_hide}"}>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                      </svg>
+                    </button>
+                    <!-- Dots -->
+                    <div class={"flex justify-center gap-1.5 mt-2 #{controls_hide}"}>
+                      <%= for {_, di} <- Enum.with_index(slides_orden) do %>
+                        <div id={"promo-dot-#{di}"}
+                          class="w-1.5 h-1.5 rounded-full bg-gray-500 transition-opacity"
+                          style={"opacity:#{if di == 0, do: "1", else: "0.35"};"}>
+                        </div>
+                      <% end %>
+                    </div>
                   <% end %>
                 </div>
               </div>

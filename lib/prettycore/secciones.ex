@@ -4,13 +4,14 @@ defmodule Prettycore.Secciones do
   alias Prettycore.Secciones.Seccion
 
   @defaults [
-    %{nombre: "Carrusel",             tipo: "carrusel",   orden: 0, activo: true},
-    %{nombre: "Tienda",               tipo: "productos",  orden: 1, activo: true},
-    %{nombre: "Productos Favoritos",  tipo: "favoritos",  orden: 2, activo: true},
-    %{nombre: "Publicidad",           tipo: "publicidad", orden: 3, activo: true},
-    %{nombre: "Productos Destacados", tipo: "destacados", orden: 4, activo: true},
-    %{nombre: "Envíos",               tipo: "envios",     orden: 5, activo: true},
-    %{nombre: "Productos Top 10",     tipo: "top10",      orden: 6, activo: true},
+    %{nombre: "Carrusel",                    tipo: "carrusel",   orden: 0, activo: true},
+    %{nombre: "Tienda",                      tipo: "productos",  orden: 1, activo: true},
+    %{nombre: "Productos Favoritos",         tipo: "favoritos",  orden: 2, activo: true},
+    %{nombre: "Publicidad",                  tipo: "publicidad", orden: 3, activo: true},
+    %{nombre: "Productos Destacados",        tipo: "destacados", orden: 4, activo: true},
+    %{nombre: "Envíos",                      tipo: "envios",     orden: 5, activo: true},
+    %{nombre: "Productos Top 10",            tipo: "top10",      orden: 6, activo: true},
+    %{nombre: "Top 10, Destacados y Favs",   tipo: "ofertas",    orden: 7, activo: true},
   ]
 
   def list_secciones do
