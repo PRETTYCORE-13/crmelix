@@ -23,7 +23,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_codigo, "")
      |> assign(:form_descripcion, "")
      |> assign(:form_desc_corta, "")
-     |> assign(:form_precio, "0")
+     |> assign(:form_precio, "")
      |> assign(:form_stock, "")
      |> assign(:form_unidad, "PZA")
      |> assign(:form_marca, "")
@@ -31,7 +31,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_activo, true)
      |> assign(:form_categoria, "")
      |> assign(:form_super_categoria, "")
-     |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 == "Todos")))
+     |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 in ["Todos", "Inicio"])))
      |> assign(:super_categorias_list, SuperCategorias.list_super_categorias() |> Enum.map(& &1.nombre))
      |> assign(:form_imagen_url, "")
      |> assign(:form_error, nil)
@@ -100,7 +100,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_codigo, ProductosNativos.next_codigo())
      |> assign(:form_descripcion, "")
      |> assign(:form_desc_corta, "")
-     |> assign(:form_precio, "0")
+     |> assign(:form_precio, "")
      |> assign(:form_stock, "")
      |> assign(:form_unidad, "PZA")
      |> assign(:form_marca, "")
@@ -109,7 +109,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_categoria, "")
      |> assign(:form_super_categoria, "")
      |> assign(:form_imagen_url, "")
-     |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 == "Todos")))
+     |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 in ["Todos", "Inicio"])))
      |> assign(:super_categorias_list, SuperCategorias.list_super_categorias() |> Enum.map(& &1.nombre))
      |> assign(:form_error, nil)
      |> assign(:upload_error, nil)}
@@ -135,7 +135,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
          |> assign(:form_categoria, p.categoria || "")
          |> assign(:form_super_categoria, p.super_categoria || "")
          |> assign(:form_imagen_url, p.imagen_url || "")
-         |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 == "Todos")))
+         |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 in ["Todos", "Inicio"])))
          |> assign(:super_categorias_list, SuperCategorias.list_super_categorias() |> Enum.map(& &1.nombre))
          |> assign(:form_error, nil)
          |> assign(:upload_error, nil)}
@@ -144,7 +144,11 @@ defmodule PrettycoreWeb.ProductosNativosLive do
 
   @impl true
   def handle_event("cerrar_modal", _, socket) do
-    {:noreply, assign(socket, modal: nil, selected: nil, form_error: nil, upload_error: nil)}
+    if socket.assigns.uploads.imagen.entries != [] do
+      {:noreply, assign(socket, form_error: "Guarda o cancela la imagen antes de cerrar.")}
+    else
+      {:noreply, assign(socket, modal: nil, selected: nil, form_error: nil, upload_error: nil)}
+    end
   end
 
   @impl true
@@ -162,13 +166,19 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     imagen_url =
       case socket.assigns.uploads.imagen.entries do
         [entry | _] ->
+          # Eliminar imagen anterior del FTP si estamos editando
+          if socket.assigns.modal == :editar do
+            old_url = socket.assigns.form_imagen_url
+            if old_url && old_url != "", do: Sftp.delete_by_url(old_url)
+          end
+
           results = consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, _e ->
             ext     = Path.extname(entry.client_name)
             content = File.read!(tmp_path)
             Sftp.upload_producto_nativo_image(codigo, ext, content)
           end)
           case results do
-            [url] when is_binary(url) -> url
+            [url] when is_binary(url) -> url <> "?v=#{System.os_time(:second)}"
             _                        -> socket.assigns.form_imagen_url
           end
         [] ->
@@ -215,8 +225,12 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     case ProductosNativos.get(codigo) do
       nil -> {:noreply, socket}
       p ->
-        ProductosNativos.eliminar(p)
-        {:noreply, load_productos(socket)}
+        if Prettycore.Pedidos.producto_en_pedido_activo?(codigo) do
+          {:noreply, put_flash(socket, :error, "No se puede eliminar: el producto tiene pedidos pendientes o en proceso")}
+        else
+          ProductosNativos.eliminar(p)
+          {:noreply, load_productos(socket)}
+        end
     end
   end
 
@@ -270,18 +284,18 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     ~H"""
     <div class="flex min-h-screen bg-gray-100">
       <PrettycoreWeb.MenuLayout.secciones_panel current_page={@current_page} />
-      <div class="flex-1 p-6 min-w-0">
+      <div class="flex-1 p-3 sm:p-6 min-w-0">
       <!-- Encabezado -->
-      <div class="flex items-center justify-between mb-6">
-        <div>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div class="min-w-0">
           <h1 class="text-xl font-bold text-gray-900">Productos Nativos</h1>
-          <p class="text-sm text-gray-400 mt-0.5">
+          <p class="text-sm text-gray-400 mt-0.5 hidden sm:block">
             Productos creados directamente en esta app — aparecen en la tienda junto con los de la API.
           </p>
         </div>
         <button
           phx-click="nuevo"
-          class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -313,14 +327,14 @@ defmodule PrettycoreWeb.ProductosNativosLive do
           <p class="text-xs mt-1">Crea tu primer producto con el botón de arriba.</p>
         </div>
       <% else %>
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+          <table class="w-full text-sm min-w-[600px]">
             <thead class="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Imagen</th>
                 <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
                 <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descripción</th>
-                <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Precio</th>
+                <th class="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Precio público</th>
                 <th class="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
                 <th class="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Activo</th>
                 <th class="px-4 py-3"></th>
@@ -448,14 +462,21 @@ defmodule PrettycoreWeb.ProductosNativosLive do
 
                 <%= cond do %>
                   <% @uploads.imagen.entries != [] -> %>
-                    <div class="w-full h-full border-2 border-blue-300 bg-blue-50 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
-                      <svg class="w-8 h-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                      <span class="text-xs font-medium text-blue-600 px-4 truncate w-full text-center">
-                        <%= List.first(@uploads.imagen.entries).client_name %>
-                      </span>
-                      <span class="text-[10px] text-blue-400">Se subirá al guardar</span>
+                    <% entry = List.first(@uploads.imagen.entries) %>
+                    <!-- Estado: imagen seleccionada correctamente -->
+                    <div class="w-full h-full border-2 border-green-400 bg-green-50 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
+                      <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                      </div>
+                      <span class="text-xs font-semibold text-green-700">Imagen lista</span>
+                      <span class="text-[10px] text-green-500 px-4 truncate w-full text-center"><%= entry.client_name %></span>
+                      <%= if entry.progress > 0 and entry.progress < 100 do %>
+                        <div class="w-3/5 bg-green-200 rounded-full h-1.5 overflow-hidden">
+                          <div class="bg-green-500 rounded-full h-1.5 transition-all duration-300" style={"width: #{entry.progress}%"} />
+                        </div>
+                      <% end %>
                     </div>
 
                   <% @form_imagen_url && @form_imagen_url != "" -> %>
@@ -482,12 +503,13 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                     </div>
                 <% end %>
               </div>
+              <p class="text-[11px] text-gray-400 mt-1.5">Tamaño recomendado: 500 × 500 px</p>
               <%= if @upload_error do %>
-                <p class="text-xs text-red-500 mt-1.5"><%= @upload_error %></p>
+                <p class="text-xs text-red-500 mt-1"><%= @upload_error %></p>
               <% end %>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                   Código *
@@ -502,14 +524,14 @@ defmodule PrettycoreWeb.ProductosNativosLive do
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                  Precio Base *
+                  Precio Público *
                 </label>
                 <input
                   type="number"
                   name="precio_base"
                   value={@form_precio}
                   step="0.01"
-                  min="0"
+                  min="0.01"
                   max="999999.99"
                   required
                   class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
@@ -533,20 +555,24 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Descripción Corta
-              </label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Descripción Corta
+                </label>
+                <span id="desc_corta_count" class="text-xs text-gray-400"><%= String.length(@form_desc_corta) %>/40</span>
+              </div>
               <input
                 type="text"
                 name="desc_corta"
                 value={@form_desc_corta}
                 placeholder="Subtítulo breve (opcional)"
-                maxlength="100"
+                maxlength="40"
+                oninput="document.getElementById('desc_corta_count').textContent = this.value.length + '/40'"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
               />
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Unidad</label>
                 <input
@@ -571,7 +597,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoría</label>
                 <select name="categoria"
@@ -595,12 +621,16 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notas</label>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Notas</label>
+                <span id="notas_count" class="text-xs text-gray-400"><%= String.length(@form_notas) %>/40</span>
+              </div>
               <textarea
                 name="notas"
                 rows="2"
                 placeholder="Observaciones internas (no se muestran al cliente)"
-                maxlength="500"
+                maxlength="40"
+                oninput="document.getElementById('notas_count').textContent = this.value.length + '/40'"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
               ><%= @form_notas %></textarea>
             </div>

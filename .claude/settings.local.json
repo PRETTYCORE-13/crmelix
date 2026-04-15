@@ -70,7 +70,9 @@
       "Bash(find /d/prettycore/lib/prettycore_web/components -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn 'type=\"\\\\\\(text\\\\|number\\\\|email\\\\|password\\\\\\)\"' {} \\\\;)",
       "Bash(find /d/prettycore/lib/prettycore_web/components -type f \\\\\\( -name \"*.ex\" -o -name \"*.heex\" \\\\\\) -exec grep -Hn '<textarea' {} \\\\;)",
       "Bash(bash /tmp/analyze_inputs.sh)",
-      "Bash(python /tmp/extract_inputs.py)"
+      "Bash(python /tmp/extract_inputs.py)",
+      "Bash(grep -rn \"phx-value-.*{.*\\\\..*}\" /d/prettycore/lib/prettycore_web/live/index/pages --include=\"*.ex\")",
+      "Bash(grep -rn \"def render\" /d/prettycore/lib/prettycore_web/live/index/pages/*.ex)"
     ],
     "deny": [],
     "ask": []

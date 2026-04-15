@@ -10,12 +10,41 @@ defmodule Prettycore.ClientesNativos do
   end
 
   def search(q) do
-    term = "%#{String.downcase(q)}%"
-    PsqlRepo.all(
-      from c in ClienteNativo,
-        where: ilike(c.nombre, ^term) or ilike(c.username, ^term) or ilike(c.email, ^term),
-        order_by: c.nombre
-    )
+    words =
+      q
+      |> String.downcase()
+      |> String.split(~r/\s+/, trim: true)
+      |> Enum.map(&"%#{&1}%")
+
+    case words do
+      [] ->
+        list_todos()
+
+      _ ->
+        PsqlRepo.all(
+          from c in ClienteNativo,
+            where: ^build_search_filter(words),
+            order_by: c.nombre
+        )
+    end
+  end
+
+  defp build_search_filter([word | rest]) do
+    base =
+      dynamic(
+        [c],
+        ilike(c.nombre, ^word) or ilike(c.username, ^word) or
+          ilike(c.email, ^word) or ilike(c.telefono, ^word)
+      )
+
+    Enum.reduce(rest, base, fn w, acc ->
+      dynamic(
+        [c],
+        ^acc and
+          (ilike(c.nombre, ^w) or ilike(c.username, ^w) or
+             ilike(c.email, ^w) or ilike(c.telefono, ^w))
+      )
+    end)
   end
 
   def get(id), do: PsqlRepo.get(ClienteNativo, id)

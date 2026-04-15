@@ -55,19 +55,21 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
   def handle_event("delete_user", %{"id" => id}, socket) do
     user = Auth.get_user(id)
 
-    if user do
-      case Auth.delete_user(user) do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Usuario eliminado")
-           |> assign(:users, Auth.list_users())}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Error al eliminar usuario")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "Usuario no encontrado")}
+    cond do
+      user && user.role == "sysadmin" ->
+        {:noreply, put_flash(socket, :error, "El perfil sysadmin no puede eliminarse")}
+      user ->
+        case Auth.delete_user(user) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Usuario eliminado")
+             |> assign(:users, Auth.list_users())}
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Error al eliminar usuario")}
+        end
+      true ->
+        {:noreply, put_flash(socket, :error, "Usuario no encontrado")}
     end
   end
 
@@ -269,6 +271,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     {"clientes",        "Clientes",            :page},
                     {"tienda",          "Tienda",              :page},
                     {"administrar",     "Administrar Tienda",  :page},
+                    {"pedidos",         "Ver Pedidos",         :page},
                     {"usuarios",        "Usuarios",            :page},
                     {"editar_imagenes", "Imágenes Tienda",     :feature}
                   ] %>
@@ -279,7 +282,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                       <div class="flex items-center justify-between p-4">
                         <div class="flex items-center space-x-4">
                           <div class={"w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-zinc-700"}"}>
-                            <%= String.first(user.username) |> String.upcase() %>
+                            <%= (String.first(user.username || "?") || "?") |> String.upcase() %>
                           </div>
                           <div>
                             <p class="text-sm font-semibold text-white"><%= user.username %></p>
@@ -313,22 +316,24 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                             </svg>
                           </button>
-                          <!-- Botón eliminar -->
-                          <button
-                            type="button"
-                            phx-click="delete_user"
-                            phx-value-id={user.id}
-                            data-confirm={"¿Eliminar a #{user.username}? Esta acción no se puede deshacer."}
-                            class="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200"
-                            title="Eliminar usuario"
-                          >
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                              <path d="M10 11v6M14 11v6" />
-                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                            </svg>
-                          </button>
+                          <!-- Botón eliminar (nunca para sysadmin) -->
+                          <%= if user.role != "sysadmin" do %>
+                            <button
+                              type="button"
+                              phx-click="delete_user"
+                              phx-value-id={user.id}
+                              data-confirm={"¿Eliminar a #{user.username}? Esta acción no se puede deshacer."}
+                              class="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all duration-200"
+                              title="Eliminar usuario"
+                            >
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
+                            </button>
+                          <% end %>
                           <!-- Toggle activo -->
                           <button
                             type="button"
@@ -372,6 +377,10 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                                         <% "administrar" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                             <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                                          </svg>
+                                        <% "pedidos" -> %>
+                                          <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" />
                                           </svg>
                                         <% "usuarios" -> %>
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">

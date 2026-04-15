@@ -7,11 +7,13 @@ defmodule Prettycore.Carritos do
 
   @doc "Retorna el carrito activo del usuario con sus items y productos cargados."
   def get_carrito(user_id) do
+    items_query = from i in CarritoItem, order_by: [asc: i.inserted_at]
+
     carrito =
       Repo.one(
         from c in Carrito,
           where: c.user_id == ^user_id and c.estado == "activo",
-          preload: :items
+          preload: [items: ^items_query]
       )
 
     case carrito do

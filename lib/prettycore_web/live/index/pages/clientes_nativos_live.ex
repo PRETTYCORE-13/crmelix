@@ -5,6 +5,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
   alias Prettycore.ClientesNativos.ClienteNativo
   alias Prettycore.ListasPrecios
   alias Prettycore.Sucursales
+  alias Prettycore.Emails.BienvenidaCliente
 
   @impl true
   def mount(_params, _session, socket) do
@@ -80,6 +81,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
   @impl true
   def handle_event("search", %{"q" => q}, socket) do
+    {:noreply, socket |> assign(:search, q) |> load_clientes()}
+  end
+
+  @impl true
+  def handle_event("search", %{"value" => q}, socket) do
     {:noreply, socket |> assign(:search, q) |> load_clientes()}
   end
 
@@ -163,11 +169,12 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     result =
       case socket.assigns.modal do
         :nuevo ->
-          ClientesNativos.crear(%{
+          pw_generada = generar_password()
+          res = ClientesNativos.crear(%{
             "nombre"          => nombre,
             "username"        => username,
             "email"           => if(email == "", do: nil, else: email),
-            "password"        => password,
+            "password"        => pw_generada,
             "telefono"        => if(telefono == "", do: nil, else: telefono),
             "rfc"             => if(rfc == "", do: nil, else: rfc),
             "direccion"       => if(direccion == "", do: nil, else: direccion),
@@ -176,6 +183,10 @@ defmodule PrettycoreWeb.ClientesNativosLive do
             "lista_precios"   => lista_precios,
             "sucursal_numero" => sucursal_numero
           })
+          if match?({:ok, _}, res) and email != "" do
+            BienvenidaCliente.send_credenciales(email, nombre, username, pw_generada)
+          end
+          res
 
         :editar ->
           c = socket.assigns.selected
@@ -239,6 +250,14 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     end
   end
 
+  defp generar_password do
+    chars = ~c"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!"
+    len   = length(chars)
+    1..12
+    |> Enum.map(fn _ -> Enum.at(chars, :rand.uniform(len) - 1) end)
+    |> List.to_string()
+  end
+
   defp parse_int(nil, default), do: default
   defp parse_int("", default), do: default
   defp parse_int(v, _default) when is_integer(v), do: v
@@ -254,16 +273,16 @@ defmodule PrettycoreWeb.ClientesNativosLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-4 space-y-4">
+    <div class="p-3 sm:p-4 space-y-4">
         <!-- Encabezado -->
-        <div class="flex items-center justify-between">
-          <div>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0">
             <h1 class="text-lg font-bold text-gray-900">Clientes Prettycore</h1>
-            <p class="text-xs text-gray-500">Clientes registrados directamente en Prettycore</p>
+            <p class="text-xs text-gray-500 hidden sm:block">Clientes registrados directamente en Prettycore</p>
           </div>
           <button
             phx-click="nuevo"
-            class="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors"
+            class="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -279,8 +298,9 @@ defmodule PrettycoreWeb.ClientesNativosLive do
           </svg>
           <input
             type="text"
-            placeholder="Buscar por nombre, usuario o email..."
+            placeholder="Buscar por nombre, teléfono o usuario..."
             value={@search}
+            phx-keyup="search"
             phx-change="search"
             phx-debounce="300"
             name="q"
@@ -295,7 +315,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
               <svg class="w-12 h-12 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              <p class="text-sm text-gray-400">No hay clientes Prettycore aún</p>
+              <%= if @search != "" do %>
+                <p class="text-sm text-gray-400">Sin resultados para "<%= @search %>"</p>
+              <% else %>
+                <p class="text-sm text-gray-400">No hay clientes Prettycore aún</p>
+              <% end %>
             </div>
           <% else %>
             <div class="overflow-x-auto">
@@ -318,7 +342,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                       <td class="px-4 py-3">
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                            <%= String.first(c.nombre) |> String.upcase() %>
+                            <%= (String.first(c.nombre || "?") || "?") |> String.upcase() %>
                           </div>
                           <div>
                             <p class="font-medium text-gray-900 text-sm"><%= c.nombre %></p>
@@ -331,8 +355,36 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                       <td class="px-4 py-3">
                         <span class="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-700"><%= c.username %></span>
                       </td>
-                      <td class="px-4 py-3 text-gray-600 text-xs"><%= c.email || "—" %></td>
-                      <td class="px-4 py-3 text-gray-600 text-xs"><%= c.telefono || "—" %></td>
+                      <td class="px-4 py-3 text-gray-600 text-xs">
+                        <%= if c.email do %>
+                          <div class="flex items-center gap-1">
+                            <span><%= c.email %></span>
+                            <button type="button" data-val={c.email}
+                              onclick="navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
+                              class="text-gray-400 hover:text-indigo-600 transition-all" title="Copiar email">
+                              <svg class="icon-copy w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                              <svg class="icon-check w-3.5 h-3.5 hidden text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            </button>
+                          </div>
+                        <% else %>
+                          —
+                        <% end %>
+                      </td>
+                      <td class="px-4 py-3 text-gray-600 text-xs">
+                        <%= if c.telefono do %>
+                          <div class="flex items-center gap-1">
+                            <span><%= c.telefono %></span>
+                            <button type="button" data-val={c.telefono}
+                              onclick="navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
+                              class="text-gray-400 hover:text-indigo-600 transition-all" title="Copiar teléfono">
+                              <svg class="icon-copy w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                              <svg class="icon-check w-3.5 h-3.5 hidden text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            </button>
+                          </div>
+                        <% else %>
+                          —
+                        <% end %>
+                      </td>
                       <td class="px-4 py-3 text-center">
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
                           L<%= c.lista_precios || 1 %>
@@ -340,7 +392,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                       </td>
                       <td class="px-4 py-3 text-center text-xs text-gray-500">
                         <%= if c.sucursal_numero do %>
-                          <%= Enum.find_value(@sucursales_disponibles, "Suc. #{c.sucursal_numero}", fn s -> if s.numero == c.sucursal_numero, do: s.nombre end) %>
+                          <%= Enum.find_value(@sucursales_disponibles, "Suc. #{c.sucursal_numero}", fn s -> if s.numero == c.sucursal_numero, do: s.nombre end) || "—" %>
                         <% else %>
                           —
                         <% end %>
@@ -359,12 +411,19 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                               <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
-                          <button phx-click="eliminar" phx-value-id={c.id}
-                            data-confirm={"¿Eliminar a #{c.nombre}? Esta acción no se puede deshacer."}
-                            class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
+                          <button phx-click="toggle_activo" phx-value-id={c.id}
+                            data-confirm={if c.activo, do: "¿Inactivar a #{c.nombre}?", else: "¿Activar a #{c.nombre}?"}
+                            class={"p-1.5 rounded-lg transition-colors #{if c.activo, do: "text-green-500 hover:text-red-500 hover:bg-red-50", else: "text-red-500 hover:text-green-600 hover:bg-green-50"}"}
+                            title={if c.activo, do: "Inactivar cliente", else: "Activar cliente"}>
+                            <%= if c.activo do %>
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                            <% else %>
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                            <% end %>
                           </button>
                         </div>
                       </td>
@@ -439,25 +498,25 @@ defmodule PrettycoreWeb.ClientesNativosLive do
               </div>
 
               <!-- Email y Teléfono en fila -->
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Email *</label>
                   <input type="email" name="email" value={@form_email}
-                    maxlength="100"
+                    maxlength="100" required
                     class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     placeholder="correo@ejemplo.com" />
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Teléfono</label>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Teléfono *</label>
                   <input type="text" name="telefono" value={@form_telefono}
-                    maxlength="20"
+                    maxlength="20" required
                     class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                     placeholder="10 dígitos" />
                 </div>
               </div>
 
               <!-- RFC y Lista de Precios -->
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-semibold text-gray-700 mb-1">RFC</label>
                   <input type="text" name="rfc" value={@form_rfc}
@@ -466,7 +525,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                     placeholder="RFC del cliente" />
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Lista de precios</label>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Lista de precios *</label>
                   <%= if @listas_disponibles == [] do %>
                     <div class="w-full px-3 py-2 text-xs border border-dashed border-gray-200 rounded-xl text-gray-400 bg-gray-50">
                       Sin listas creadas aún
@@ -485,7 +544,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
                 <!-- Sucursal -->
                 <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Sucursal</label>
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Sucursal *</label>
                   <%= if @sucursales_disponibles == [] do %>
                     <div class="text-xs text-gray-400 px-3 py-2 border border-gray-200 rounded-xl">
                       Sin sucursales creadas
@@ -504,9 +563,9 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-semibold text-gray-700 mb-1">Dirección</label>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Dirección *</label>
                 <input type="text" name="direccion" value={@form_direccion}
-                  maxlength="300"
+                  maxlength="300" required
                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
                   placeholder="Dirección completa" />
               </div>
@@ -522,36 +581,13 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
               <!-- Password -->
               <%= if @modal == :nuevo do %>
-                <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Contraseña *</label>
-                  <div class="relative">
-                    <input id="pw_nuevo" type="password" name="password" value={@form_password} required minlength="6" maxlength="72"
-                      autocomplete="new-password"
-                      class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
-                      placeholder="Mínimo 6 caracteres" />
-                    <button type="button" tabindex="-1"
-                      onclick="var i=document.getElementById('pw_nuevo');i.type=i.type==='password'?'text':'password';this.querySelector('.eye-off').classList.toggle('hidden');this.querySelector('.eye-on').classList.toggle('hidden')"
-                      class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors">
-                      <svg class="eye-on w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                      <svg class="eye-off w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label class="block text-xs font-semibold text-gray-700 mb-1">Confirmar contraseña *</label>
-                  <div class="relative">
-                    <input id="pw_confirm" type="password" name="password_confirm" required minlength="6" maxlength="72"
-                      autocomplete="new-password"
-                      oninput="var a=document.getElementById('pw_nuevo').value,b=this.value;this.setCustomValidity(a!==b?'Las contraseñas no coinciden':'')"
-                      class="w-full px-3 py-2 pr-10 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20"
-                      placeholder="Repite la contraseña" />
-                    <button type="button" tabindex="-1"
-                      onclick="var i=document.getElementById('pw_confirm');i.type=i.type==='password'?'text':'password';this.querySelector('.eye-off').classList.toggle('hidden');this.querySelector('.eye-on').classList.toggle('hidden')"
-                      class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors">
-                      <svg class="eye-on w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                      <svg class="eye-off w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
-                    </button>
-                  </div>
+                <div class="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+                  <svg class="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p class="text-xs text-indigo-700 leading-relaxed">
+                    Se generará una contraseña segura automáticamente y se enviará al correo del cliente.
+                  </p>
                 </div>
               <% else %>
                 <div class="border border-gray-100 rounded-xl p-3">

@@ -482,9 +482,15 @@
     display: block;
   }
 
-  /* Main content full width, sin padding-top extra (topbar ya da espacio) */
+  /* Main content full width */
   .pc-platform-main {
     width: 100%;
     padding-top: 0;
+    min-width: 0;
+  }
+
+  /* Evitar que el contenido empuje la pantalla horizontalmente */
+  .pc-platform-row {
+    overflow-x: hidden;
   }
 }

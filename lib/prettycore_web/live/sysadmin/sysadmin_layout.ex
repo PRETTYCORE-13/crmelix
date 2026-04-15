@@ -127,7 +127,7 @@ defmodule PrettycoreWeb.SysAdminLayout do
               <nav class="pc-sidebar-nav">
                 <div class="pc-sidebar-user">
                   <div class="pc-sidebar-user-avatar">
-                    {String.first(@current_user_name) |> String.upcase()}
+                    {(String.first(@current_user_name || "?") || "?") |> String.upcase()}
                   </div>
                   <span class="pc-nav-label">{@current_user_name}</span>
                 </div>

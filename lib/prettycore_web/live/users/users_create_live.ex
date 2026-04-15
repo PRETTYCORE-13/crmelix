@@ -456,7 +456,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                     <div class="flex items-center justify-between p-4">
                       <div class="flex items-center space-x-4">
                         <div class={"w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-gray-400"}"}>
-                          <%= String.first(user.username) |> String.upcase() %>
+                          <%= (String.first(user.username || "?") || "?") |> String.upcase() %>
                         </div>
                         <div>
                           <p class="text-sm font-semibold text-gray-900"><%= user.username %></p>

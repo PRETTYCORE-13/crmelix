@@ -214,12 +214,6 @@ defmodule PrettycoreWeb.MenuLayout do
                             <span class="pc-subsubmenu-dot" />
                             <span class="pc-nav-label">Lista de Precios</span>
                           </button>
-                          <button type="button"
-                            class={subsubmenu_item_class("productos_nativos", @current_page)}
-                            phx-click={@menu_event} phx-value-id="lista_productos">
-                            <span class="pc-subsubmenu-dot" />
-                            <span class="pc-nav-label">Lista de Productos</span>
-                          </button>
                         </div>
                       <% end %>
                     <% end %>

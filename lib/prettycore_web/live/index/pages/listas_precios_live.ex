@@ -194,7 +194,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
       <% end %>
 
       <!-- Buscador -->
-      <div class="relative max-w-sm">
+      <div class="relative w-full sm:max-w-sm">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
@@ -216,13 +216,13 @@ defmodule PrettycoreWeb.ListasPreciosLive do
             @productos
           end
       %>
-      <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden overflow-x-auto">
+        <table class="w-full text-sm min-w-[520px]">
           <thead>
             <tr class="border-b border-gray-100 bg-gray-50/50">
               <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto</th>
               <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
-              <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Precio base</th>
+              <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Precio público</th>
               <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Precio Lista <%= @numero_activo %></th>
               <th class="px-4 py-3"></th>
             </tr>

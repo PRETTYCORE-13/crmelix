@@ -48,7 +48,15 @@ defmodule Prettycore.Auth do
   Crea un nuevo usuario.
   """
   def create_user(attrs) do
-    %AuthUser{}
+    perms_default =
+      case Map.get(attrs, "role", Map.get(attrs, :role, "user")) do
+        "user" -> ["inicio", "tienda", "pedidos"]
+        _      -> ["inicio"]
+      end
+
+    struct = %AuthUser{permissions: perms_default}
+
+    struct
     |> AuthUser.changeset(attrs)
     |> PsqlRepo.insert()
   end

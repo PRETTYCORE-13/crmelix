@@ -156,8 +156,8 @@ defmodule PrettycoreWeb.SucursalesLive do
       </div>
 
       <!-- Tabla -->
-      <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden overflow-x-auto">
+        <table class="w-full text-sm min-w-[400px]">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
@@ -228,7 +228,7 @@ defmodule PrettycoreWeb.SucursalesLive do
             <% end %>
 
             <form phx-submit="guardar" class="px-6 py-5 space-y-4">
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                     Número

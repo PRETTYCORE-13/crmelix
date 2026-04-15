@@ -17,12 +17,31 @@ defmodule Prettycore.ProductosNativos do
 
   @doc "Busca por descripción o código."
   def search(q) do
-    term = "%#{String.downcase(q)}%"
-    PsqlRepo.all(
-      from p in ProductoNativo,
-        where: ilike(p.descripcion, ^term) or ilike(p.codigo, ^term),
-        order_by: p.descripcion
-    )
+    words =
+      q
+      |> String.downcase()
+      |> String.split(~r/\s+/, trim: true)
+      |> Enum.map(&"%#{&1}%")
+
+    case words do
+      [] ->
+        list_todos()
+
+      _ ->
+        PsqlRepo.all(
+          from p in ProductoNativo,
+            where: ^build_search_filter(words),
+            order_by: p.descripcion
+        )
+    end
+  end
+
+  defp build_search_filter([word | rest]) do
+    base = dynamic([p], ilike(p.descripcion, ^word) or ilike(p.codigo, ^word))
+
+    Enum.reduce(rest, base, fn w, acc ->
+      dynamic([p], ^acc and (ilike(p.descripcion, ^w) or ilike(p.codigo, ^w)))
+    end)
   end
 
   @doc "Obtiene un producto por código."
@@ -123,7 +142,8 @@ defmodule Prettycore.ProductosNativos do
       iva:          0.0,
       raw:          %{},
       nativo:       true,
-      categoria:    p.categoria
+      categoria:    p.categoria,
+      precio_base:  p.precio_base || 0.0
     }
   end
 end

@@ -415,6 +415,7 @@ const DragSort = {
 // - Convierte a JPEG 82% de calidad
 // - Actúa en capture phase para interceptar antes que el listener de LiveView
 // - Si el archivo ya pesa < 250 KB, lo deja pasar sin comprimir
+// - Siempre genera una preview en data URL y la guarda en input._previewDataUrl
 const ImageCompressor = {
   mounted() {
     const input = this.el
@@ -426,8 +427,18 @@ const ImageCompressor = {
       const file = e.target.files && e.target.files[0]
       if (!file || !file.type.startsWith('image/')) return
 
-      // Archivos ya pequeños no necesitan compresión
-      if (file.size < 250 * 1024) return
+      // Archivos ya pequeños: generar preview y dejar pasar a LiveView
+      if (file.size < 250 * 1024) {
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          input._previewDataUrl = ev.target.result
+          input.dispatchEvent(new CustomEvent('image-preview-ready', {
+            detail: { url: ev.target.result }, bubbles: true
+          }))
+        }
+        reader.readAsDataURL(file)
+        return
+      }
 
       // Detener el evento para que LiveView NO vea el archivo original
       e.stopImmediatePropagation()
@@ -458,6 +469,16 @@ const ImageCompressor = {
             lastModified: Date.now()
           })
 
+          // Generar preview como data URL y notificar
+          const reader = new FileReader()
+          reader.onload = (ev) => {
+            input._previewDataUrl = ev.target.result
+            input.dispatchEvent(new CustomEvent('image-preview-ready', {
+              detail: { url: ev.target.result }, bubbles: true
+            }))
+          }
+          reader.readAsDataURL(blob)
+
           // Reemplazar el archivo en el input
           const dt = new DataTransfer()
           dt.items.add(compressed)
@@ -484,6 +505,36 @@ const ImageCompressor = {
   }
 }
 
+// Hook que muestra la preview de la imagen seleccionada en el input correspondiente.
+// Escucha el evento 'image-preview-ready' disparado por ImageCompressor
+// y en mounted() verifica si ya hay un data URL guardado en el input.
+const ImagePreview = {
+  mounted() {
+    const inputId = this.el.dataset.inputId
+    const input = document.getElementById(inputId)
+
+    // Fast path: la compresión ya terminó antes que el hook se montara
+    if (input && input._previewDataUrl) {
+      this.el.src = input._previewDataUrl
+      this.el.classList.remove('hidden')
+    }
+
+    // Slow path: esperar el evento (compresión aún en curso cuando se montó el hook)
+    this._previewHandler = (e) => {
+      if (e.target && e.target.id === inputId) {
+        this.el.src = e.detail.url
+        this.el.classList.remove('hidden')
+      }
+    }
+    document.addEventListener('image-preview-ready', this._previewHandler)
+  },
+  destroyed() {
+    if (this._previewHandler) {
+      document.removeEventListener('image-preview-ready', this._previewHandler)
+    }
+  }
+}
+
 // Hook para persistir estado de sincronización entre navegaciones.
 // Usa window (memoria) → se limpia al refrescar el navegador pero sobrevive
 // la navegación LiveView (push_navigate no recarga el JS).
@@ -495,7 +546,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync, ImageCompressor},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, DragSort, TiendaSync, ImageCompressor, ImagePreview},
 })
 
 // Show progress bar on live navigation and form submits

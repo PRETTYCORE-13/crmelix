@@ -184,8 +184,8 @@ defmodule PrettycoreWeb.StockLive do
           </div>
 
           <!-- Tabla de productos con stock -->
-          <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <table class="w-full text-sm">
+          <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden overflow-x-auto">
+            <table class="w-full text-sm min-w-[500px]">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Código</th>

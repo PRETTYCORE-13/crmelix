@@ -24,7 +24,7 @@ defmodule Prettycore.ClientesNativos.ClienteNativo do
   def changeset(cliente, attrs) do
     cliente
     |> cast(attrs, [:nombre, :username, :email, :password, :telefono, :rfc, :direccion, :notas, :activo, :lista_precios, :sucursal_numero])
-    |> validate_required([:nombre, :username, :password])
+    |> validate_required([:nombre, :username, :password, :email, :telefono, :direccion, :sucursal_numero])
     |> validate_length(:username, min: 3, max: 50)
     |> validate_length(:password, min: 6, max: 72)
     |> validate_length(:nombre, min: 2, max: 255)

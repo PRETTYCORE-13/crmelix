@@ -141,7 +141,13 @@ defmodule PrettycoreWeb.CategoriasLive do
 
   def handle_event("eliminar", %{"id" => id}, socket) do
     cat = Enum.find(socket.assigns.categorias, &(&1.id == id))
-    if cat, do: Categorias.delete_categoria(cat)
+    socket =
+      case cat && Categorias.delete_categoria(cat) do
+        {:error, :protegida} ->
+          put_flash(socket, :error, "La categoría \"#{cat.nombre}\" no puede eliminarse")
+        _ ->
+          socket
+      end
     cats = Categorias.list_categorias()
     {:noreply, assign(socket, categorias: cats)}
   end

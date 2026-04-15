@@ -3,7 +3,6 @@ defmodule PrettycoreWeb.Tienda do
 
   alias Prettycore.ProductosNativos
   alias Prettycore.ListasPrecios
-  alias Prettycore.Sftp
   alias Prettycore.Carritos
   alias Prettycore.Categorias
   alias Prettycore.Carrusel
@@ -11,8 +10,6 @@ defmodule PrettycoreWeb.Tienda do
   alias Prettycore.Pedidos
   alias Prettycore.Auth
   alias Prettycore.StockSucursal
-
-  @max_file_size 10_000_000  # 10 MB
 
   @impl true
   def mount(_params, _session, socket) do
@@ -28,9 +25,6 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:productos, [])
       |> assign(:loading, true)
       |> assign(:search, "")
-      |> assign(:editing_imagen_codigo, nil)
-      |> assign(:upload_error, nil)
-      |> assign(:uploading_imagen, false)
       |> assign(:cart_open, false)
       |> assign(:producto_detalle, nil)
       |> assign(:cart_items, [])
@@ -43,17 +37,12 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:precios, %{})
       |> assign(:precios_nativos, %{})
       |> assign(:stock_map, %{})
-      |> allow_upload(:imagen,
-          accept: ~w(.jpg .jpeg .png .webp .gif),
-          max_entries: 1,
-          max_file_size: @max_file_size)
-
     if connected?(socket) do
       send(self(), :load_productos)
       send(self(), :load_categorias)
       send(self(), :load_carrusel)
       send(self(), :load_secciones)
-      if role not in ["sysadmin"] do
+      if role not in ["sysadmin", "admin", "oficina"] do
         send(self(), :load_cart)
       end
     end
@@ -99,9 +88,17 @@ defmodule PrettycoreWeb.Tienda do
   def handle_info(:load_productos, socket) do
     lista        = socket.assigns[:lista_precios]   || 1
     sucursal_num = socket.assigns[:sucursal_numero]
-    nativos      = ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1)
+    raw_nativos  = ProductosNativos.list_activos()
+    nativos      = Enum.map(raw_nativos, &ProductosNativos.to_tienda_map/1)
     precios_lista = ListasPrecios.get_precios_map(lista)
-    stock_map    = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: %{}
+    stock_map    = if sucursal_num do
+      StockSucursal.get_stock_map(sucursal_num)
+    else
+      # Sin sucursal: solo incluir productos con stock explícitamente registrado (no nil)
+      raw_nativos
+      |> Enum.filter(fn p -> not is_nil(p.stock) end)
+      |> Map.new(fn p -> {p.codigo, p.stock} end)
+    end
     precios_nativos = Enum.reduce(nativos, %{}, fn p, acc ->
       Map.put(acc, p.codigo, Map.get(precios_lista, p.codigo, p[:precio_base] || 0.0))
     end)
@@ -164,91 +161,6 @@ defmodule PrettycoreWeb.Tienda do
     apply_categoria(socket, new_idx)
   end
 
-  @impl true
-  def handle_event("validate_upload", _params, socket) do
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_event("edit_imagen", %{"codigo" => codigo}, socket) do
-    {:noreply, assign(socket, editing_imagen_codigo: codigo, upload_error: nil)}
-  end
-
-  @impl true
-  def handle_event("cancel_imagen", _, socket) do
-    socket =
-      socket.assigns.uploads.imagen.entries
-      |> Enum.reduce(socket, fn entry, acc ->
-        cancel_upload(acc, :imagen, entry.ref)
-      end)
-    {:noreply, assign(socket, editing_imagen_codigo: nil, upload_error: nil)}
-  end
-
-  @impl true
-  def handle_event("subir_imagen", %{"codigo" => codigo}, socket) do
-    entries = socket.assigns.uploads.imagen.entries
-
-    if entries == [] do
-      {:noreply, assign(socket, upload_error: "Selecciona una imagen primero")}
-    else
-      socket = assign(socket, uploading_imagen: true, upload_error: nil)
-
-      results =
-        consume_uploaded_entries(socket, :imagen, fn %{path: path}, entry ->
-          content = File.read!(path)
-          ext = entry.client_name |> Path.extname() |> String.downcase()
-          case Sftp.upload_product_image(codigo, ext, content) do
-            {:ok, url}       -> {:ok, {:ok, url}}
-            {:error, reason} -> {:ok, {:error, reason}}
-          end
-        end)
-
-      case results do
-        [{:ok, url}] ->
-          case ProductosNativos.update_imagen(codigo, url) do
-            {:ok, _} ->
-              nativos = ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1)
-              lista = socket.assigns[:lista_precios] || 1
-              precios_lista = ListasPrecios.get_precios_map(lista)
-              precios_nativos = Enum.reduce(nativos, %{}, fn p, acc ->
-                Map.put(acc, p.codigo, Map.get(precios_lista, p.codigo, p[:precio_base] || 0.0))
-              end)
-              productos = if socket.assigns.search == "",
-                do: nativos,
-                else: Enum.filter(nativos, fn p ->
-                  q = String.downcase(socket.assigns.search)
-                  String.contains?(String.downcase(p.descripcion || ""), q) or
-                  String.contains?(String.downcase(p.codigo || ""), q)
-                end)
-
-              {:noreply,
-               socket
-               |> assign(
-                 editing_imagen_codigo: nil,
-                 upload_error: nil,
-                 uploading_imagen: false,
-                 productos: productos,
-                 precios_nativos: precios_nativos
-               )
-               |> put_flash(:info, "Imagen actualizada correctamente")}
-
-            {:error, _} ->
-              {:noreply,
-               assign(socket,
-                 upload_error: "Imagen subida al servidor pero error al guardar en BD",
-                 uploading_imagen: false
-               )}
-          end
-
-        [{:error, reason}] ->
-          {:noreply, assign(socket, upload_error: "Error SFTP: #{reason}", uploading_imagen: false)}
-
-        _ ->
-          {:noreply, assign(socket, upload_error: "Error inesperado", uploading_imagen: false)}
-      end
-    end
-  end
-
   # ── Carrito ──
 
   @impl true
@@ -268,7 +180,16 @@ defmodule PrettycoreWeb.Tienda do
   end
 
   @impl true
+  def handle_event("add_to_cart", _, socket) when socket.assigns.user_role in ["admin", "oficina"] do
+    {:noreply, put_flash(socket, :error, "Modo inspección: solo puedes ver la tienda")}
+  end
+
+  @impl true
   def handle_event("add_to_cart", %{"codigo" => codigo}, socket) do
+    stock_val = Map.get(socket.assigns.stock_map, codigo)
+    if stock_val != nil and stock_val == 0 do
+      {:noreply, put_flash(socket, :error, "Producto agotado")}
+    else
     case Carritos.add_item(socket.assigns.current_user_id, codigo) do
       {:ok, _} ->
         %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
@@ -281,6 +202,7 @@ defmodule PrettycoreWeb.Tienda do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Error al agregar al carrito")}
+    end
     end
   end
 
@@ -308,6 +230,11 @@ defmodule PrettycoreWeb.Tienda do
   def handle_event("vaciar_carrito", _, socket) do
     Carritos.vaciar_carrito(socket.assigns.current_user_id)
     {:noreply, assign(socket, cart_items: [], cart_total_items: 0)}
+  end
+
+  @impl true
+  def handle_event("hacer_pedido", _, socket) when socket.assigns.user_role in ["admin", "oficina"] do
+    {:noreply, put_flash(socket, :error, "Modo inspección: solo puedes ver la tienda")}
   end
 
   @impl true
@@ -366,17 +293,6 @@ defmodule PrettycoreWeb.Tienda do
       _                    -> {:noreply, socket}
     end
   end
-
-  # ── Helpers ──
-
-  defp can_edit_images?(role, permissions) do
-    role in ["admin", "sysadmin"] or "editar_imagenes" in (permissions || [])
-  end
-
-  defp upload_error_to_string(:too_large),      do: "Archivo muy grande (máx 10 MB)"
-  defp upload_error_to_string(:not_accepted),   do: "Tipo no permitido (jpg, png, webp, gif)"
-  defp upload_error_to_string(:too_many_files), do: "Solo se permite 1 imagen"
-  defp upload_error_to_string(_),               do: "Error al cargar archivo"
 
   # ── Render: SysAdmin (sin layout admin, con sidebar sysadmin) ──
 
@@ -468,7 +384,6 @@ defmodule PrettycoreWeb.Tienda do
             else: @secciones_tienda
           en_inicio = (String.downcase(@cat_nombre || "") in ["todos", "inicio", "all", ""]) and @search == ""
           secs = if en_inicio, do: secs_all, else: Enum.filter(secs_all, &(&1.tipo == "productos"))
-          puede_editar = can_edit_images?(@user_role, @user_permissions)
         %>
         <div class="flex flex-col md:flex-row gap-0 md:items-start bg-gray-100 min-h-screen">
           <!-- SIDEBAR CATEGORÍAS - solo desktop, lateral -->
@@ -478,22 +393,31 @@ defmodule PrettycoreWeb.Tienda do
                 style="height: calc(100vh - 130px); overflow-y: auto; position: relative; scrollbar-width: none; -ms-overflow-style: none;">
                 <%
                   n = length(@categorias)
-                  cats_triple = @categorias ++ @categorias ++ @categorias
                 %>
                 <div data-cat-list data-total={n} style="display:flex;flex-direction:column;align-items:center;">
-                  <%= for {cat, loop_idx} <- Enum.with_index(cats_triple) do %>
-                    <% real_idx = rem(loop_idx, max(n, 1)) %>
-                    <% activa = real_idx == @cat_idx %>
-                    <% es_referencia = activa and loop_idx >= n and loop_idx < 2 * n %>
+                  <%= for {cat, loop_idx} <- Enum.with_index(@categorias) do %>
+                    <% activa = loop_idx == @cat_idx %>
                     <button
                       phx-click="filtrar_categoria"
                       phx-value-categoria={cat.nombre}
-                      data-active={if es_referencia, do: "true", else: "false"}
+                      data-active={if activa, do: "true", else: "false"}
                       class="flex flex-col items-center w-full focus:outline-none"
                       style="padding:4px;background:transparent;transition:all 0.22s cubic-bezier(0.4,0,0.2,1);"
                     >
-                      <div style={"width:#{if activa, do: "60px", else: "42px"};height:#{if activa, do: "60px", else: "42px"};border-radius:50%;overflow:hidden;background:transparent;border:none;box-shadow:#{if activa, do: "0 4px 12px rgba(0,0,0,0.25)", else: "none"};transition:all 0.22s cubic-bezier(0.4,0,0.2,1);opacity:#{if activa, do: "1", else: "0.5"};"}>
-                        <img src={cat.imagen_url || "https://prettycore.xyz/IMAGENES/sr.j.png"} alt={cat.nombre} style="width:100%;height:100%;object-fit:cover;" />
+                      <%
+                        sz = if activa, do: "60px", else: "42px"
+                        fs = if activa, do: "18px", else: "13px"
+                        sh = if activa, do: "0 4px 12px rgba(0,0,0,0.25)", else: "none"
+                        op = if activa, do: "1", else: "0.5"
+                      %>
+                      <div style={"width:#{sz};height:#{sz};border-radius:50%;overflow:hidden;background:#e5e7eb;border:none;box-shadow:#{sh};transition:all 0.22s cubic-bezier(0.4,0,0.2,1);opacity:#{op};display:flex;align-items:center;justify-content:center;"}>
+                        <%= if cat.imagen_url && cat.imagen_url != "" do %>
+                          <img src={cat.imagen_url} alt={cat.nombre} style="width:100%;height:100%;object-fit:cover;" />
+                        <% else %>
+                          <span style={"font-size:#{fs};font-weight:700;color:#9ca3af;line-height:1;user-select:none;"}>
+                            <%= (String.first(cat.nombre || "?") || "?") |> String.upcase() %>
+                          </span>
+                        <% end %>
                       </div>
                       <span style={"font-family:'Outfit',sans-serif;font-size:#{if activa, do: "10px", else: "9px"};font-weight:#{if activa, do: "600", else: "400"};letter-spacing:0.01em;color:#{if activa, do: "#111827", else: "#9ca3af"};margin-top:3px;text-align:center;line-height:1.2;transition:all 0.22s ease-out;display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"}>
                         <%= cat.nombre %>
@@ -560,8 +484,20 @@ defmodule PrettycoreWeb.Tienda do
                         class="flex flex-col items-center gap-0.5 focus:outline-none flex-shrink-0"
                         style="transition:all 0.2s ease;"
                       >
-                        <div style={"width:#{if idx == @cat_idx, do: "50", else: "38"}px;height:#{if idx == @cat_idx, do: "50", else: "38"}px;border-radius:50%;overflow:hidden;opacity:#{if idx == @cat_idx, do: "1", else: "0.5"};box-shadow:#{if idx == @cat_idx, do: "0 3px 10px rgba(0,0,0,0.2)", else: "none"};transition:all 0.2s ease;"}>
-                          <img src={cat.imagen_url || "https://prettycore.xyz/IMAGENES/sr.j.png"} alt={cat.nombre} style="width:100%;height:100%;object-fit:cover;" />
+                        <%
+                          m_sz  = if idx == @cat_idx, do: "50px", else: "38px"
+                          m_fs  = if idx == @cat_idx, do: "16px", else: "12px"
+                          m_op  = if idx == @cat_idx, do: "1", else: "0.5"
+                          m_sh  = if idx == @cat_idx, do: "0 3px 10px rgba(0,0,0,0.2)", else: "none"
+                        %>
+                        <div style={"width:#{m_sz};height:#{m_sz};border-radius:50%;overflow:hidden;opacity:#{m_op};box-shadow:#{m_sh};transition:all 0.2s ease;background:#e5e7eb;display:flex;align-items:center;justify-content:center;"}>
+                          <%= if cat.imagen_url && cat.imagen_url != "" do %>
+                            <img src={cat.imagen_url} alt={cat.nombre} style="width:100%;height:100%;object-fit:cover;" />
+                          <% else %>
+                            <span style={"font-size:#{m_fs};font-weight:700;color:#9ca3af;line-height:1;user-select:none;"}>
+                              <%= (String.first(cat.nombre || "?") || "?") |> String.upcase() %>
+                            </span>
+                          <% end %>
                         </div>
                         <span style={"font-size:9px;font-weight:#{if idx == @cat_idx, do: "700", else: "400"};color:#{if idx == @cat_idx, do: "#111827", else: "#9ca3af"};white-space:nowrap;max-width:56px;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center;"}>
                           <%= cat.nombre %>
@@ -599,17 +535,6 @@ defmodule PrettycoreWeb.Tienda do
                               <span class={"absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold #{if producto.activo, do: "bg-green-500/90 text-white", else: "bg-black/40 text-white"}"}>
                                 <%= if producto.activo, do: "Activo", else: "Inactivo" %>
                               </span>
-                              <%= if puede_editar do %>
-                                <button type="button" phx-click="edit_imagen" phx-value-codigo={producto.codigo}
-                                  class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200 flex items-center justify-center" title="Cambiar imagen">
-                                  <span class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/95 rounded-lg p-2 shadow-md">
-                                    <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                  </span>
-                                </button>
-                              <% end %>
                             </div>
                             <div class="p-2.5 flex flex-col flex-1">
                               <h3 class="text-xs font-semibold text-gray-900 leading-tight line-clamp-2 mb-1"><%= producto.descripcion %></h3>
@@ -627,27 +552,46 @@ defmodule PrettycoreWeb.Tienda do
                                     <span class="font-bold text-green-600 text-xs">$<%= :erlang.float_to_binary(precio_val / 1, decimals: 2) %></span>
                                   </div>
                                 <% end %>
-                                <%= if @user_role == "cliente_nativo" && map_size(@stock_map) > 0 do %>
-                                  <% stock_val = Map.get(@stock_map, producto.codigo, 0) %>
-                                  <div class="flex justify-between items-center pt-0.5">
-                                    <span class="text-gray-400">Stock</span>
-                                    <span class={"font-semibold text-xs #{if stock_val > 0, do: "text-blue-600", else: "text-red-400"}"}>
-                                      <%= stock_val %> pza<%= if stock_val != 1, do: "s" %>
+                                <% stock_val = Map.get(@stock_map, producto.codigo) %>
+                                <div class="flex justify-between items-center pt-0.5">
+                                  <span class="text-gray-400">Stock</span>
+                                  <%= cond do %>
+                                    <% stock_val == nil -> %>
+                                      <span class="font-semibold text-xs text-gray-400">—</span>
+                                    <% stock_val == 0 -> %>
+                                      <span class="font-semibold text-xs text-red-500">Agotado</span>
+                                    <% true -> %>
+                                      <span class="font-semibold text-xs text-blue-600"><%= stock_val %> pza<%= if stock_val != 1, do: "s" %></span>
+                                  <% end %>
+                                </div>
+                              </div>
+                              <% agotado = Map.get(@stock_map, producto.codigo) == 0 %>
+                              <%= if agotado do %>
+                                <div class="mt-2">
+                                  <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 border border-red-200 text-red-500 text-[10px] font-semibold rounded-full">
+                                    Agotado
+                                  </span>
+                                </div>
+                              <% else %>
+                                <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
+                                  <div class="mt-2 flex gap-1">
+                                    <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
+                                      class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-transparent border border-gray-900 hover:bg-blue-500 hover:border-blue-500 hover:text-white text-gray-900 text-[11px] font-medium rounded-full transition-colors">
+                                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                    </button>
+                                    <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
+                                      class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-900 hover:bg-blue-500 text-white text-[11px] font-medium rounded-full transition-colors">
+                                      Comprar
+                                    </button>
+                                  </div>
+                                <% end %>
+                                <%= if @user_role in ["admin", "oficina"] do %>
+                                  <div class="mt-2">
+                                    <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[10px] font-medium rounded-full">
+                                      Solo inspección
                                     </span>
                                   </div>
                                 <% end %>
-                              </div>
-                              <%= if @user_role != "sysadmin" do %>
-                                <div class="mt-2 flex gap-1">
-                                  <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
-                                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-transparent border border-gray-900 hover:bg-blue-500 hover:border-blue-500 hover:text-white text-gray-900 text-[11px] font-medium rounded-full transition-colors">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                  </button>
-                                  <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
-                                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-900 hover:bg-blue-500 text-white text-[11px] font-medium rounded-full transition-colors">
-                                    Comprar
-                                  </button>
-                                </div>
                               <% end %>
                             </div>
                           </div>
@@ -947,16 +891,22 @@ defmodule PrettycoreWeb.Tienda do
                         <span class="font-bold text-green-600">$<%= :erlang.float_to_binary(total_mini / 1, decimals: 2) %></span>
                       </div>
                     <% end %>
-                    <button
-                      phx-click="hacer_pedido"
-                      data-confirm="¿Confirmar pedido?"
-                      class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold rounded-xl transition-colors"
-                    >
-                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                      </svg>
-                      Realizar Pedido
-                    </button>
+                    <%= if @user_role not in ["admin", "oficina"] do %>
+                      <button
+                        phx-click="hacer_pedido"
+                        data-confirm="¿Confirmar pedido?"
+                        class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold rounded-xl transition-colors"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        Realizar Pedido
+                      </button>
+                    <% else %>
+                      <div class="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] font-semibold rounded-xl">
+                        Solo inspección
+                      </div>
+                    <% end %>
                   </div>
                 <% end %>
               </div>
@@ -1078,7 +1028,7 @@ defmodule PrettycoreWeb.Tienda do
           </div>
 
           <!-- Footer fijo con botón agregar -->
-          <%= if @user_role != "sysadmin" do %>
+          <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
             <div class="border-t border-gray-100 px-5 py-4 bg-white">
               <button
                 phx-click="add_to_cart"
@@ -1092,12 +1042,23 @@ defmodule PrettycoreWeb.Tienda do
               </button>
             </div>
           <% end %>
+          <%= if @user_role in ["admin", "oficina"] do %>
+            <div class="border-t border-gray-100 px-5 py-4 bg-white">
+              <div class="w-full flex items-center justify-center gap-2 py-3 bg-amber-50 border border-amber-200 text-amber-600 font-medium rounded-xl text-sm">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                Modo inspección
+              </div>
+            </div>
+          <% end %>
         </div>
       </div>
     <% end %>
 
     <!-- DRAWER CARRITO MÓVIL (lg: oculto, lo maneja el sidebar) -->
-    <%= if @user_role != "sysadmin" and @cart_open do %>
+    <%= if @user_role not in ["sysadmin", "admin", "oficina"] and @cart_open do %>
       <div class="fixed inset-0 z-[60] flex items-end lg:hidden">
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" phx-click="toggle_cart"></div>
@@ -1196,130 +1157,28 @@ defmodule PrettycoreWeb.Tienda do
                   <span class="text-base font-bold text-green-600">$<%= :erlang.float_to_binary(total_drawer / 1, decimals: 2) %></span>
                 <% end %>
               </div>
-              <button
-                phx-click="hacer_pedido"
-                data-confirm="¿Confirmar pedido?"
-                class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors shadow-md"
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                Realizar Pedido
-              </button>
+              <%= if @user_role not in ["admin", "oficina"] do %>
+                <button
+                  phx-click="hacer_pedido"
+                  data-confirm="¿Confirmar pedido?"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors shadow-md"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  Realizar Pedido
+                </button>
+              <% else %>
+                <div class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 text-amber-600 text-sm font-semibold rounded-xl">
+                  Solo inspección
+                </div>
+              <% end %>
             </div>
           <% end %>
         </div>
       </div>
     <% end %>
 
-    <!-- MODAL UPLOAD IMAGEN -->
-    <%= if @editing_imagen_codigo do %>
-      <% producto_edit = Enum.find(@productos, &(&1.codigo == @editing_imagen_codigo)) %>
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="cancel_imagen"></div>
-        <div class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div>
-              <h3 class="text-base font-semibold text-gray-900">Imagen del producto</h3>
-              <%= if producto_edit do %>
-                <p class="text-xs text-gray-400 mt-0.5 truncate max-w-xs"><%= producto_edit.descripcion %></p>
-              <% end %>
-            </div>
-            <button type="button" phx-click="cancel_imagen" class="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg transition-colors">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div class="p-5">
-            <%= if producto_edit && producto_edit.imagen_url && producto_edit.imagen_url != "" do %>
-              <div class="mb-4">
-                <p class="text-xs font-medium text-gray-500 mb-2">Imagen actual</p>
-                <img
-                  src={"#{producto_edit.imagen_url}?t=#{DateTime.to_unix(producto_edit.updated_at)}"}
-                  alt="Imagen actual"
-                  class="w-full h-40 object-contain rounded-xl border border-gray-200 bg-gray-50"
-                />
-              </div>
-            <% end %>
-
-            <form phx-submit="subir_imagen" phx-change="validate_upload" id="form-upload-imagen">
-              <input type="hidden" name="codigo" value={@editing_imagen_codigo} />
-              <label class="block border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-purple-400 transition-colors mb-4 cursor-pointer">
-                <.live_file_input upload={@uploads.imagen} id="img-input-tienda" phx-hook="ImageCompressor" class="sr-only" />
-                <%= if Enum.empty?(@uploads.imagen.entries) do %>
-                  <svg class="w-8 h-8 text-gray-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p class="text-xs text-gray-400 mb-3">JPG, PNG, WebP o GIF · Máx 10 MB</p>
-                  <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg text-xs font-medium text-purple-600">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    Seleccionar archivo
-                  </span>
-                <% else %>
-                  <p class="text-xs text-purple-600 font-medium">Cambiar archivo seleccionado</p>
-                <% end %>
-              </label>
-
-              <%= for entry <- @uploads.imagen.entries do %>
-                <div class="mb-3 bg-gray-50 rounded-xl p-3">
-                  <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-xs font-medium text-gray-700 truncate max-w-[200px]"><%= entry.client_name %></span>
-                    <span class="text-xs text-gray-400"><%= entry.progress %>%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-1.5">
-                    <div class="bg-purple-500 h-1.5 rounded-full transition-all duration-300" style={"width: #{entry.progress}%"}></div>
-                  </div>
-                  <%= for err <- upload_errors(@uploads.imagen, entry) do %>
-                    <p class="text-xs text-red-500 mt-1"><%= upload_error_to_string(err) %></p>
-                  <% end %>
-                </div>
-              <% end %>
-
-              <%= for err <- upload_errors(@uploads.imagen) do %>
-                <p class="text-xs text-red-500 mb-2"><%= upload_error_to_string(err) %></p>
-              <% end %>
-
-              <%= if @upload_error do %>
-                <div class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
-                  <p class="text-xs text-red-600"><%= @upload_error %></p>
-                </div>
-              <% end %>
-
-              <% all_done = Enum.any?(@uploads.imagen.entries) and
-                            upload_errors(@uploads.imagen) == [] and
-                            Enum.all?(@uploads.imagen.entries, fn e ->
-                              upload_errors(@uploads.imagen, e) == []
-                            end) %>
-              <div class="flex gap-2 pt-2">
-                <button type="button" phx-click="cancel_imagen"
-                  class="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={not all_done or @uploading_imagen}
-                  class={"flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all #{if all_done and not @uploading_imagen, do: "bg-purple-600 text-white hover:bg-purple-500", else: "bg-gray-100 text-gray-400 cursor-not-allowed"}"}>
-                  <%= if @uploading_imagen do %>
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                    Subiendo...
-                  <% else %>
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Subir imagen
-                  <% end %>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    <% end %>
     """
   end
 

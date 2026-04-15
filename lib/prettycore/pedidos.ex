@@ -7,8 +7,8 @@ defmodule Prettycore.Pedidos do
   alias Prettycore.PsqlRepo, as: Repo
   alias Prettycore.Pedidos.{Pedido, PedidoItem}
 
-  @doc "Lista pedidos del usuario (cliente ve los suyos; admin/sysadmin ve todos)."
-  def list_pedidos(user_id, role) when role in ["admin", "sysadmin"] do
+  @doc "Lista pedidos del usuario (cliente ve los suyos; admin/oficina/sysadmin ve todos)."
+  def list_pedidos(user_id, role) when role in ["admin", "sysadmin", "oficina"] do
     Repo.all(
       from p in Pedido,
         order_by: [desc: p.inserted_at],
@@ -22,6 +22,17 @@ defmodule Prettycore.Pedidos do
         where: p.user_id == ^user_id,
         order_by: [desc: p.inserted_at],
         preload: :items
+    )
+  end
+
+  @estados_activos ["pendiente", "procesando"]
+
+  @doc "Devuelve true si el producto tiene pedidos en estado pendiente o procesando."
+  def producto_en_pedido_activo?(producto_codigo) do
+    Repo.exists?(
+      from i in PedidoItem,
+        join: p in Pedido, on: p.id == i.pedido_id,
+        where: i.producto_codigo == ^producto_codigo and p.estado in ^@estados_activos
     )
   end
 

@@ -9,9 +9,23 @@ defmodule Prettycore.Categorias do
     "Licores", "Limpieza"
   ]
 
+  @protegidas ["Inicio"]
+
   def list_categorias do
     cats = Repo.all(from c in Categoria, order_by: [asc: c.orden, asc: c.nombre])
-    if Enum.empty?(cats), do: seed_defaults(), else: cats
+    cats = if Enum.empty?(cats), do: seed_defaults(), else: cats
+    ensure_inicio(cats)
+  end
+
+  defp ensure_inicio(cats) do
+    if Enum.any?(cats, &(&1.nombre == "Inicio")) do
+      cats
+    else
+      %Categoria{}
+      |> Categoria.changeset(%{nombre: "Inicio", orden: 0})
+      |> Repo.insert(on_conflict: :nothing)
+      Repo.all(from c in Categoria, order_by: [asc: c.orden, asc: c.nombre])
+    end
   end
 
   def seed_defaults do
@@ -34,7 +48,13 @@ defmodule Prettycore.Categorias do
     cat |> Categoria.changeset(attrs) |> Repo.update()
   end
 
-  def delete_categoria(%Categoria{} = cat), do: Repo.delete(cat)
+  def delete_categoria(%Categoria{} = cat) do
+    if cat.nombre in @protegidas do
+      {:error, :protegida}
+    else
+      Repo.delete(cat)
+    end
+  end
 
   @doc "Obtiene una categoría con sus productos precargados."
   def get_categoria_con_productos(id) do

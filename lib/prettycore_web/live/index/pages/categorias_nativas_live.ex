@@ -191,8 +191,8 @@ defmodule PrettycoreWeb.CategoriasNativasLive do
             + Nueva Categoría
           </button>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden overflow-x-auto">
+          <table class="w-full text-sm min-w-[380px]">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nombre</th>
@@ -234,8 +234,8 @@ defmodule PrettycoreWeb.CategoriasNativasLive do
             + Nueva Super Categoría
           </button>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden overflow-x-auto">
+          <table class="w-full text-sm min-w-[380px]">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nombre</th>

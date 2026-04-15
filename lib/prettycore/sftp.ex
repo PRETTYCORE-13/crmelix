@@ -36,6 +36,45 @@ defmodule Prettycore.Sftp do
     upload("#{@dir_productos_nativos}/#{name}", "#{@url_productos_nativos}/#{name}", @make_dirs_productos_nativos, content, "producto_nativo")
   end
 
+  @doc "Elimina un archivo remoto a partir de su URL pública. Ignora errores silenciosamente."
+  def delete_by_url(nil), do: :ok
+  def delete_by_url(""), do: :ok
+  def delete_by_url(url) when is_binary(url) do
+    prefix = "https://prettycore.xyz/"
+    if String.starts_with?(url, prefix) do
+      relative = String.replace_prefix(url, prefix, "")
+      remote_path = "domains/prettycore.xyz/public_html/#{relative}"
+      delete_remote(remote_path)
+    else
+      :ok
+    end
+  end
+
+  defp delete_remote(remote_path) do
+    opts = [
+      user: @user,
+      password: @password,
+      silently_accept_hosts: true,
+      user_interaction: false,
+      connect_timeout: @timeout
+    ]
+
+    case :ssh.connect(@host, @port, opts, @timeout) do
+      {:ok, conn} ->
+        case :ssh_sftp.start_channel(conn, timeout: @timeout) do
+          {:ok, ch} ->
+            result = :ssh_sftp.delete(ch, String.to_charlist(remote_path))
+            Logger.info("SFTP: delete #{remote_path} → #{inspect(result)}")
+            :ssh_sftp.stop_channel(ch)
+            :ssh.close(conn)
+          _ ->
+            :ok
+        end
+      _ ->
+        :ok
+    end
+  end
+
   def upload_product_image(codigo, ext, content) when is_binary(content) do
     name = "#{codigo}#{ext}"
     upload("#{@dir_base}/#{name}", "#{@url_base}/#{name}", @make_dirs_base, content, "producto")

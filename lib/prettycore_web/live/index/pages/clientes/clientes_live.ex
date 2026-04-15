@@ -576,10 +576,8 @@ end
 
   ## Helper para obtener la inicial del cliente
   defp get_initial(razon_social) when is_binary(razon_social) do
-    razon_social
-    |> String.trim()
-    |> String.first()
-    |> String.upcase()
+    trimmed = String.trim(razon_social)
+    (String.first(trimmed) || "?") |> String.upcase()
   end
   defp get_initial(_), do: "?"
 

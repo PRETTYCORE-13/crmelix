@@ -207,7 +207,7 @@ defmodule PrettycoreWeb.SysAdmin.SesionesLive do
                 <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none select-none">
                   <!-- Avatar -->
                   <div class="w-9 h-9 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    <%= session.username |> String.first() |> String.upcase() %>
+                    <%= (String.first(session.username || "?") || "?") |> String.upcase() %>
                   </div>
                   <!-- Nombre + email -->
                   <div class="flex-1 min-w-0">
@@ -298,7 +298,7 @@ defmodule PrettycoreWeb.SysAdmin.SesionesLive do
                       <td class="px-5 py-4">
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            <%= session.username |> String.first() |> String.upcase() %>
+                            <%= (String.first(session.username || "?") || "?") |> String.upcase() %>
                           </div>
                           <div>
                             <p class="font-semibold text-gray-900"><%= session.username %></p>
