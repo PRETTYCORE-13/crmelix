@@ -17,3 +17,4 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateListasPrecios do
     create index(:listas_precios, [:producto_codigo])
   end
 end
+

@@ -11,31 +11,52 @@ defmodule Prettycore.SysAdmin do
   @default_instancia "https://s2.ecore.ninja:1522/SP/EN_RESTHELPER"
   @default_token "IFcRzSfaBG6ycnpWzThyfEdKHglK14tlZylvRhOhlQ1fDHobmveKk6JowcU/BhCquBlqQv7zkrLIUYvFZmQZqHdqNiLptzCBf5wT826XpY4="
 
+  @cache_key :sysadmin_config_cache
+
   def get_config do
-    case PsqlRepo.get(Config, @singleton_id) do
-      nil ->
-        %Config{
-          id: @singleton_id,
-          usuario: "",
-          instancia: @default_instancia,
-          token: @default_token,
-          url: "",
-          foto: ""
-        }
+    case :persistent_term.get(@cache_key, nil) do
+      nil -> load_and_cache()
       config -> config
     end
   end
 
+  def invalidate_cache do
+    :persistent_term.erase(@cache_key)
+  rescue
+    _ -> :ok
+  end
+
   def save_config(attrs) do
-    case PsqlRepo.get(Config, @singleton_id) do
-      nil ->
-        %Config{id: @singleton_id}
-        |> Config.changeset(attrs)
-        |> PsqlRepo.insert()
-      config ->
-        config
-        |> Config.changeset(attrs)
-        |> PsqlRepo.update()
-    end
+    result =
+      case PsqlRepo.get(Config, @singleton_id) do
+        nil ->
+          %Config{id: @singleton_id}
+          |> Config.changeset(attrs)
+          |> PsqlRepo.insert()
+        config ->
+          config
+          |> Config.changeset(attrs)
+          |> PsqlRepo.update()
+      end
+    invalidate_cache()
+    result
+  end
+
+  defp load_and_cache do
+    config =
+      case PsqlRepo.get(Config, @singleton_id) do
+        nil ->
+          %Config{
+            id: @singleton_id,
+            usuario: "",
+            instancia: @default_instancia,
+            token: @default_token,
+            url: "",
+            foto: ""
+          }
+        c -> c
+      end
+    :persistent_term.put(@cache_key, config)
+    config
   end
 end

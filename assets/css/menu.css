@@ -263,6 +263,26 @@
   flex-shrink: 0;
 }
 
+.pc-submenu-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: #7c3aed;
+}
+.pc-submenu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.pc-submenu-item-active .pc-submenu-icon {
+  color: #6d28d9;
+}
+.pc-submenu-item:hover .pc-submenu-icon {
+  color: #5b21b6;
+}
+
 .pc-submenu-item:hover {
   background: #f3f4f6;
   color: #111827;

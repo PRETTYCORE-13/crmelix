@@ -30,38 +30,9 @@ defmodule PrettycoreWeb.ListasPreciosLive do
     }
   end
 
-  # ── Navegación ────────────────────────────────────────────────────────────────
-
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar"    -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "inicio"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "listas_precios"             -> {:noreply, socket}
-      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                            -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "listas_precios")
   end
 
   # ── Seleccionar lista activa ──────────────────────────────────────────────────
@@ -98,31 +69,19 @@ defmodule PrettycoreWeb.ListasPreciosLive do
     {:noreply, assign(socket, search: q)}
   end
 
-  # ── Edición de precio en la celda ─────────────────────────────────────────────
+  # ── Edición de precio en la celda (auto-save al blur) ────────────────────────
 
   @impl true
   def handle_event("edit_precio", %{"codigo" => codigo, "value" => value}, socket) do
-    edits = Map.put(socket.assigns.edits, codigo, value)
-    {:noreply, assign(socket, edits: edits, saved: false)}
-  end
-
-  # ── Guardar todos los precios editados ────────────────────────────────────────
-
-  @impl true
-  def handle_event("guardar", _params, socket) do
     numero = socket.assigns.numero_activo
-    edits  = socket.assigns.edits
-
-    precios_list =
-      Enum.map(edits, fn {cod, precio} -> %{"producto_codigo" => cod, "precio" => precio} end)
-
-    case ListasPrecios.guardar_lista(numero, precios_list) do
+    case ListasPrecios.guardar_lista(numero, [%{"producto_codigo" => codigo, "precio" => value}]) do
       {:ok, _} ->
-        precios_map = ListasPrecios.get_precios_map(numero)
-        numeros     = ListasPrecios.numeros_disponibles()
-        {:noreply, socket |> assign(precios_map: precios_map, numeros: numeros, edits: %{}, saved: true) |> put_flash(:info, "Lista de precios guardada correctamente")}
+        precios_map = Map.put(socket.assigns.precios_map, codigo, parse_precio_float(value))
+        edits = Map.delete(socket.assigns.edits, codigo)
+        {:noreply, assign(socket, precios_map: precios_map, edits: edits, saved: true)}
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Error al guardar precios")}
+        edits = Map.put(socket.assigns.edits, codigo, value)
+        {:noreply, assign(socket, edits: edits, saved: false)}
     end
   end
 
@@ -149,19 +108,12 @@ defmodule PrettycoreWeb.ListasPreciosLive do
           <h1 class="text-lg font-bold text-gray-900">Listas de Precios</h1>
           <p class="text-xs text-gray-500">Precios por lista para clientes Prettycore</p>
         </div>
-        <button
-          phx-click="guardar"
-          disabled={map_size(@edits) == 0}
-          class={"flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-colors #{if @saved, do: "bg-green-500 text-white", else: if map_size(@edits) == 0, do: "bg-gray-100 text-gray-400 cursor-not-allowed", else: "bg-gray-900 hover:bg-gray-700 text-white"}"}
-        >
-          <%= if @saved do %>
+        <%= if @saved do %>
+          <span class="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             Guardado
-          <% else %>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-            Guardar <%= if map_size(@edits) > 0, do: "(#{map_size(@edits)})", else: "" %>
-          <% end %>
-        </button>
+          </span>
+        <% end %>
       </div>
 
       <!-- Selector de lista + crear nueva -->
@@ -186,13 +138,6 @@ defmodule PrettycoreWeb.ListasPreciosLive do
         </form>
       </div>
 
-      <!-- Info de cambios pendientes -->
-      <%= if map_size(@edits) > 0 do %>
-        <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center gap-2">
-          <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-          <span class="text-xs font-semibold text-amber-700"><%= map_size(@edits) %> precio(s) modificado(s) sin guardar</span>
-        </div>
-      <% end %>
 
       <!-- Buscador -->
       <div class="relative w-full sm:max-w-sm">
@@ -304,4 +249,14 @@ defmodule PrettycoreWeb.ListasPreciosLive do
     </div>
     """
   end
+
+  defp parse_precio_float(v) when is_binary(v) do
+    case Float.parse(v) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+  defp parse_precio_float(v) when is_float(v), do: v
+  defp parse_precio_float(v) when is_integer(v), do: v * 1.0
+  defp parse_precio_float(_), do: 0.0
 end

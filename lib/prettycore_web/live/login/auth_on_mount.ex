@@ -19,7 +19,7 @@ defmodule PrettycoreWeb.AuthOnMount do
 
       # El email en URL no coincide → lo mandamos a SU ruta correcta
       not is_nil(email_from_url) and email_from_url != email_from_session ->
-        correct_path = "/admin/platform/#{email_from_session}"
+        correct_path = "/admin/tienda"
         {:halt, redirect(socket, to: correct_path)}
 
       true ->
@@ -28,17 +28,18 @@ defmodule PrettycoreWeb.AuthOnMount do
         user_name    = session["user_name"]
         modo_nativo  = SysAdmin.get_config().modo_nativo == true
 
-        {user_role, user_permissions, lista_precios, sucursal_numero} =
+        {user_role, user_permissions, lista_precios, gamas, sucursal_numero} =
           if session_role == "cliente_nativo" do
             cliente = ClientesNativos.get(user_id)
-            lp  = (cliente && cliente.lista_precios)  || 1
+            lp  = (cliente && cliente.lista_precios) || 1
+            gs  = if cliente, do: ClientesNativos.get_gamas(user_id), else: []
             suc = (cliente && cliente.sucursal_numero)
-            {"cliente_nativo", ["inicio", "tienda", "pedidos"], lp, suc}
+            {"cliente_nativo", ["tienda", "pedidos"], lp, gs, suc}
           else
             user = Auth.get_user(user_id)
             role  = (user && user.role) || "user"
-            perms = (user && user.permissions) || ["inicio"]
-            {role, perms, nil, nil}
+            perms = (user && user.permissions) || ["tienda"]
+            {role, perms, nil, [], nil}
           end
 
         {:cont,
@@ -51,6 +52,7 @@ defmodule PrettycoreWeb.AuthOnMount do
          |> assign(:user_role, user_role)
          |> assign(:user_permissions, user_permissions)
          |> assign(:lista_precios, lista_precios)
+         |> assign(:gamas, gamas)
          |> assign(:sucursal_numero, sucursal_numero)
          |> assign(:modo_nativo, modo_nativo)}
     end

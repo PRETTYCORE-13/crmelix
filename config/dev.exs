@@ -11,7 +11,7 @@ config :prettycore, Prettycore.PsqlRepo,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   # Render cierra conexiones inactivas ~10min. Reducir pool y mantener vivas con pings.
-  pool_size: 5,
+  pool_size: 15,
   idle_interval: 10_000,     # ping cada 10s para evitar que Render cierre la conexión
   queue_target: 5_000,       # esperar hasta 5s si el pool está ocupado
   connect_timeout: 30_000,   # 30s para establecer conexión (DNS de Render puede tardar)

@@ -73,7 +73,10 @@
       "Bash(python /tmp/extract_inputs.py)",
       "Bash(grep -rn \"phx-value-.*{.*\\\\..*}\" /d/prettycore/lib/prettycore_web/live/index/pages --include=\"*.ex\")",
       "Bash(grep -rn \"def render\" /d/prettycore/lib/prettycore_web/live/index/pages/*.ex)",
-      "Bash(mix ecto.migrations --repo Prettycore.PsqlRepo)"
+      "Bash(mix ecto.migrations --repo Prettycore.PsqlRepo)",
+      "Bash(sed -i 's|\"listas_precios\"    -> {:noreply, push_navigate\\(socket, to: ~p\"/admin/listas-precios\"\\)}|\"listas_precios\"    -> {:noreply, push_navigate\\(socket, to: ~p\"/admin/listas-precios\"\\)}\\\\n      \"gamas\"             -> {:noreply, push_navigate\\(socket, to: ~p\"/admin/gamas\"\\)}|' lib/prettycore_web/live/index/pages/tienda_live.ex)",
+      "Bash(sed -i 's|      \"usuarios\" ->\\\\n        {:noreply, socket}|      \"gamas\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/gamas\"\\)}\\\\n      \"usuarios\" ->\\\\n        {:noreply, socket}|' lib/prettycore_web/live/users/users_create_live.ex)",
+      "Bash(perl -i -0pe 's|\\(      \"clientes\" ->\\\\n        \\\\{:noreply, push_navigate\\\\\\(socket, to: ~p\"/admin/clientes\"\\\\\\)\\\\}\\\\n\\\\n      _ ->\\)|$1|; s|\\(      \"clientes\" ->\\\\n        \\\\{:noreply, push_navigate\\\\\\(socket, to: ~p\"/admin/clientes\"\\\\\\)\\\\}\\\\n\\\\n      _ ->\\)|      \"clientes\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/clientes\"\\)}\\\\n\\\\n      \"gamas\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/gamas\"\\)}\\\\n\\\\n      _ ->|' lib/prettycore_web/live/index/pages/clientes/edit/cliente_form_edit_live.ex lib/prettycore_web/live/index/pages/clientes/new/cliente_form_new_live.ex)"
     ],
     "deny": [],
     "ask": []

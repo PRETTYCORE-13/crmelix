@@ -63,6 +63,7 @@ defmodule PrettycoreWeb.Router do
       live "/productos-nativos", ProductosNativosLive
       live "/clientes-nativos", ClientesNativosLive
       live "/listas-precios", ListasPreciosLive
+      live "/gamas", GamasLive
       live "/sucursales", SucursalesLive
       live "/stock", StockLive
       live "/categorias-nativas", CategoriasNativasLive
@@ -99,6 +100,7 @@ defmodule PrettycoreWeb.Router do
     pipe_through :browser
 
     get "/clientes/export/excel", ClientesExcelController, :download
+    get "/productos-nativos/plantilla", ProductosNativosTemplateController, :download
   end
 
   ## Herramientas sysadmin (descargas, no LiveView)

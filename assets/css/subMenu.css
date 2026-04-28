@@ -277,7 +277,27 @@
   color: #f9fafb;
 }
 
-/* Cuando el sidebar está CERRADO, no se muestra el submenú */
+/* Cuando el sidebar está CERRADO: mostrar solo iconos centrados */
 .pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-submenu {
+  padding-left: 0;
+  align-items: center;
+  gap: 2px;
+}
+.pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-submenu-item {
+  justify-content: center;
+  padding: 7px;
+  width: 48px;
+  border-radius: 10px;
+}
+.pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-submenu-dot {
+  display: none;
+}
+.pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-submenu-icon {
+  display: flex;
+}
+.pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-submenu-chevron {
+  display: none;
+}
+.pc-platform-sidebar:not(.pc-platform-sidebar-open) .pc-subsubmenu {
   display: none;
 }

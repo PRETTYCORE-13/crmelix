@@ -4,15 +4,19 @@ defmodule Prettycore.Secciones do
   alias Prettycore.Secciones.Seccion
 
   @defaults [
-    %{nombre: "Carrusel",                    tipo: "carrusel",   orden: 0, activo: true},
-    %{nombre: "Tienda",                      tipo: "productos",  orden: 1, activo: true},
-    %{nombre: "Productos Favoritos",         tipo: "favoritos",  orden: 2, activo: true},
-    %{nombre: "Publicidad",                  tipo: "publicidad", orden: 3, activo: true},
-    %{nombre: "Productos Destacados",        tipo: "destacados", orden: 4, activo: true},
-    %{nombre: "Envíos",                      tipo: "envios",     orden: 5, activo: true},
-    %{nombre: "Productos Top 10",            tipo: "top10",      orden: 6, activo: true},
-    %{nombre: "Top 10, Destacados y Favs",   tipo: "ofertas",    orden: 7, activo: true},
+    %{nombre: "Carrusel",          tipo: "carrusel",        orden: 0, activo: true},
+    %{nombre: "Tienda",            tipo: "productos",       orden: 1, activo: true},
+    %{nombre: "Publicidad",        tipo: "publicidad",      orden: 2, activo: true},
+    %{nombre: "Carrusel Ofertas",  tipo: "ofertas",         orden: 3, activo: true},
+    %{nombre: "Envíos",            tipo: "envios",          orden: 4, activo: true},
+    %{nombre: "Super Categorías",  tipo: "supercategorias", orden: 5, activo: true},
   ]
+
+  @valid_tipos Enum.map(@defaults, & &1.tipo)
+
+  def cleanup_obsolete do
+    Repo.delete_all(from s in Seccion, where: s.tipo not in ^@valid_tipos)
+  end
 
   def list_secciones do
     all = Repo.all(from s in Seccion, order_by: [asc: s.orden, asc: s.nombre])

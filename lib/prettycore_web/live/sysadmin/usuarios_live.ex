@@ -267,7 +267,6 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
               <% else %>
                 <div class="space-y-2">
                   <% all_perms = [
-                    {"inicio",          "Inicio",              :page},
                     {"clientes",        "Clientes",            :page},
                     {"tienda",          "Tienda",              :page},
                     {"administrar",     "Administrar Tienda",  :page},
@@ -277,7 +276,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                   ] %>
                   <%= for user <- @users do %>
                     <% expanded = @expanded_permissions_user_id == user.id %>
-                    <% user_perms = user.permissions || ["inicio"] %>
+                    <% user_perms = user.permissions || ["tienda"] %>
                     <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-600/40 bg-zinc-900", else: "border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700"}"}>
                       <div class="flex items-center justify-between p-4">
                         <div class="flex items-center space-x-4">

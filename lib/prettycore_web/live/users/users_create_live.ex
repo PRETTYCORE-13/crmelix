@@ -26,22 +26,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
 
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar" ->
-        {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "tienda" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "categorias" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "usuarios" ->
-        {:noreply, socket}
-      _ ->
-        {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "usuarios")
   end
 
   @impl true
@@ -543,8 +528,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             <% perms_list = cond do
                             is_sysadmin_role -> [{"categorias", "Categorías Tienda"}, {"editar_imagenes", "Imágenes Tienda"}]
                             user.role == "admin" -> []
-                            user.role == "oficina" -> [{"inicio", "Inicio"}, {"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Categorías"}, {"usuarios", "Usuarios"}]
-                            true -> [{"inicio", "Inicio"}, {"tienda", "Tienda"}]
+                            user.role == "oficina" -> [{"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Categorías"}, {"usuarios", "Usuarios"}]
+                            true -> [{"tienda", "Tienda"}]
                           end %>
                             <%= for {perm_id, perm_label} <- perms_list do %>
                               <% checked = is_sysadmin_role or perm_id in user_perms %>

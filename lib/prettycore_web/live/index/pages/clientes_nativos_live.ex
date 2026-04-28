@@ -4,6 +4,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
   alias Prettycore.ClientesNativos
   alias Prettycore.ClientesNativos.ClienteNativo
   alias Prettycore.ListasPrecios
+  alias Prettycore.Gamas
   alias Prettycore.Sucursales
   alias Prettycore.Emails.BienvenidaCliente
 
@@ -30,7 +31,9 @@ defmodule PrettycoreWeb.ClientesNativosLive do
      |> assign(:form_notas, "")
      |> assign(:form_activo, true)
      |> assign(:form_lista_precios, 1)
+     |> assign(:form_gamas, MapSet.new())
      |> assign(:listas_disponibles, ListasPrecios.numeros_disponibles())
+     |> assign(:gamas_disponibles, Gamas.list_gamas())
      |> assign(:sucursales_disponibles, Sucursales.list_activas())
      |> assign(:form_sucursal_numero, nil)
      |> assign(:form_error, nil)
@@ -44,38 +47,9 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     assign(socket, :clientes, clientes)
   end
 
-  # ── Navegación ───────────────────────────────────────────────────────────────
-
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar"    -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio"            -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "clientes_nativos"           -> {:noreply, socket}
-      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                            -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "clientes_nativos")
   end
 
   # ── Búsqueda ─────────────────────────────────────────────────────────────────
@@ -107,6 +81,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
      |> assign(:form_notas, "")
      |> assign(:form_activo, true)
      |> assign(:form_lista_precios, 1)
+     |> assign(:form_gamas, MapSet.new())
      |> assign(:form_sucursal_numero, nil)
      |> assign(:form_error, nil)
      |> assign(:cambiar_password, false)}
@@ -117,6 +92,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     case ClientesNativos.get(id) do
       nil -> {:noreply, socket}
       c ->
+        gamas_cliente = MapSet.new(ClientesNativos.get_gamas(c.id))
         {:noreply, socket
          |> assign(:modal, :editar)
          |> assign(:selected, c)
@@ -129,6 +105,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
          |> assign(:form_direccion, c.direccion || "")
          |> assign(:form_notas, c.notas || "")
          |> assign(:form_activo, c.activo)
+         |> assign(:form_gamas, gamas_cliente)
          |> assign(:form_lista_precios, c.lista_precios || 1)
          |> assign(:form_sucursal_numero, c.sucursal_numero)
          |> assign(:form_error, nil)
@@ -166,6 +143,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     activo          = socket.assigns.form_activo
     lista_precios   = parse_int(params["lista_precios"], socket.assigns.form_lista_precios)
     sucursal_numero = parse_int(params["sucursal_numero"], nil)
+    gamas_sel = parse_gamas(params["gamas"])
 
     result =
       case socket.assigns.modal do
@@ -184,10 +162,13 @@ defmodule PrettycoreWeb.ClientesNativosLive do
             "lista_precios"   => lista_precios,
             "sucursal_numero" => sucursal_numero
           })
-          if match?({:ok, _}, res) and email != "" do
-            BienvenidaCliente.send_credenciales(email, nombre, username, pw_generada)
+          case res do
+            {:ok, nuevo_cliente} ->
+              ClientesNativos.set_gamas(nuevo_cliente.id, gamas_sel)
+              if email != "", do: BienvenidaCliente.send_credenciales(email, nombre, username, pw_generada)
+              {:ok, nuevo_cliente}
+            err -> err
           end
-          res
 
         :editar ->
           c = socket.assigns.selected
@@ -205,6 +186,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
           case ClientesNativos.actualizar(c, base_attrs) do
             {:ok, updated} ->
+              ClientesNativos.set_gamas(updated.id, gamas_sel)
               if socket.assigns.cambiar_password and password != "" do
                 ClientesNativos.cambiar_password(updated, password)
               else
@@ -257,6 +239,17 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     1..12
     |> Enum.map(fn _ -> Enum.at(chars, :rand.uniform(len) - 1) end)
     |> List.to_string()
+  end
+
+  defp parse_gamas(nil), do: []
+  defp parse_gamas(list) when is_list(list) do
+    list |> Enum.map(&parse_int(&1, nil)) |> Enum.reject(&is_nil/1)
+  end
+  defp parse_gamas(v) when is_binary(v) do
+    case Integer.parse(v) do
+      {n, _} -> [n]
+      :error -> []
+    end
   end
 
   defp parse_int(nil, default), do: default
@@ -541,6 +534,30 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                     </select>
                   <% end %>
                   <p class="text-[10px] text-gray-400 mt-0.5">Asigna qué lista de precios verá este cliente</p>
+                </div>
+
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-semibold text-gray-700 mb-1">Gamas de productos</label>
+                  <%= if @gamas_disponibles == [] do %>
+                    <div class="w-full px-3 py-2 text-xs border border-dashed border-gray-200 rounded-xl text-gray-400 bg-gray-50">
+                      Sin gamas creadas aún
+                    </div>
+                  <% else %>
+                    <div class="grid grid-cols-2 gap-1.5 p-2 border border-gray-200 rounded-xl bg-gray-50/50">
+                      <%= for g <- @gamas_disponibles do %>
+                        <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-white transition-colors">
+                          <input type="checkbox" name="gamas[]" value={g.numero}
+                            checked={MapSet.member?(@form_gamas, g.numero)}
+                            class="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                          <span class="text-xs font-medium text-gray-700">
+                            <span class="text-gray-400 font-mono">G<%= g.numero %></span>
+                            <%= if g.nombre && g.nombre != "", do: " · #{g.nombre}", else: "" %>
+                          </span>
+                        </label>
+                      <% end %>
+                    </div>
+                  <% end %>
+                  <p class="text-[10px] text-gray-400 mt-0.5">El cliente verá solo productos de las gamas seleccionadas</p>
                 </div>
 
                 <!-- Sucursal -->

@@ -4,6 +4,7 @@ defmodule Prettycore.ClientesNativos do
   import Ecto.Query
   alias Prettycore.PsqlRepo
   alias Prettycore.ClientesNativos.ClienteNativo
+  alias Prettycore.ClientesNativos.ClienteNativoGama
 
   def list_todos do
     PsqlRepo.all(from c in ClienteNativo, order_by: [desc: c.inserted_at])
@@ -75,6 +76,25 @@ defmodule Prettycore.ClientesNativos do
     c
     |> Ecto.Changeset.change(activo: !c.activo)
     |> PsqlRepo.update()
+  end
+
+  @doc "Lista los números de gama asignados a un cliente."
+  def get_gamas(cliente_id) do
+    PsqlRepo.all(
+      from g in ClienteNativoGama,
+        where: g.cliente_nativo_id == ^cliente_id,
+        select: g.gama_numero,
+        order_by: g.gama_numero
+    )
+  end
+
+  @doc "Reemplaza las gamas asignadas al cliente (borra las anteriores e inserta las nuevas)."
+  def set_gamas(cliente_id, numeros) when is_list(numeros) do
+    PsqlRepo.delete_all(from g in ClienteNativoGama, where: g.cliente_nativo_id == ^cliente_id)
+    Enum.each(numeros, fn n ->
+      PsqlRepo.insert!(%ClienteNativoGama{cliente_nativo_id: cliente_id, gama_numero: n})
+    end)
+    :ok
   end
 
   @doc "Autentica un cliente nativo. Retorna {:ok, cliente} o {:error, :invalid_credentials}."

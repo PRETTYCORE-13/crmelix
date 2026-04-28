@@ -14,8 +14,9 @@ defmodule Prettycore.ClientesNativos.ClienteNativo do
     field :rfc,           :string
     field :direccion,     :string
     field :notas,         :string
-    field :activo,         :boolean, default: true
-    field :lista_precios,  :integer, default: 1
+    field :activo,          :boolean, default: true
+    field :lista_precios,   :integer, default: 1
+    field :gama,            :integer, default: 1
     field :sucursal_numero, :integer
 
     timestamps(type: :utc_datetime)
@@ -23,7 +24,7 @@ defmodule Prettycore.ClientesNativos.ClienteNativo do
 
   def changeset(cliente, attrs) do
     cliente
-    |> cast(attrs, [:nombre, :username, :email, :password, :telefono, :rfc, :direccion, :notas, :activo, :lista_precios, :sucursal_numero])
+    |> cast(attrs, [:nombre, :username, :email, :password, :telefono, :rfc, :direccion, :notas, :activo, :lista_precios, :gama, :sucursal_numero])
     |> validate_required([:nombre, :username, :password, :email, :telefono, :direccion, :sucursal_numero])
     |> validate_length(:username, min: 3, max: 50)
     |> validate_length(:password, min: 6, max: 72)
@@ -37,7 +38,7 @@ defmodule Prettycore.ClientesNativos.ClienteNativo do
 
   def update_changeset(cliente, attrs) do
     cliente
-    |> cast(attrs, [:nombre, :email, :telefono, :rfc, :direccion, :notas, :activo, :lista_precios, :sucursal_numero])
+    |> cast(attrs, [:nombre, :email, :telefono, :rfc, :direccion, :notas, :activo, :lista_precios, :gama, :sucursal_numero])
     |> validate_required([:nombre])
     |> validate_length(:nombre, min: 2, max: 255)
     |> unique_constraint(:email)

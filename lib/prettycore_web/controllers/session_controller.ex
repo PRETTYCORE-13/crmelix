@@ -32,11 +32,10 @@ defmodule PrettycoreWeb.SessionController do
           # En modo nativo no se obtiene token Frog ni se precargan catálogos
           frog_token = if modo_nativo, do: nil, else: get_frog_token(user_struct)
 
-          # Destino: nativos y modo_nativo van directo a platform, el resto a loading
           dest =
             cond do
               role == "cliente_nativo" -> ~p"/admin/tienda"
-              modo_nativo              -> ~p"/admin/platform"
+              modo_nativo              -> ~p"/admin/tienda"
               true                     -> ~p"/admin/loading"
             end
 

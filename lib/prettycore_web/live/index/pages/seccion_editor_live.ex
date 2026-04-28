@@ -66,40 +66,30 @@ defmodule PrettycoreWeb.SeccionEditorLive do
     seccion = Secciones.get_seccion_by_tipo(tipo)
     config  = (seccion && seccion.config) || %{}
 
-    productos =
-      if tipo in ["top10", "favoritos", "destacados"],
-        do: ProductosNativos.list_todos(),
-        else: []
-
-    {promo_secciones, promo_configs, slides_list} =
-      if tipo in ["destacados", "ofertas"] do
-        secs =
-          ~w(top10 favoritos destacados)
-          |> Enum.map(&Secciones.get_seccion_by_tipo/1)
-          |> Enum.reject(&is_nil/1)
-          |> Enum.sort_by(& &1.orden)
-        configs = Map.new(secs, fn s -> {s.tipo, s.config || %{}} end)
-
+    {promo_configs, slides_list} =
+      if tipo == "ofertas" do
+        p_configs = %{
+          "top10"      => config["top10"]      || %{},
+          "favoritos"  => config["favoritos"]  || %{},
+          "destacados" => config["destacados"] || %{}
+        }
         slides =
           case config["slides_orden"] do
             list when is_list(list) and list != [] -> list
             _ ->
-              # Fallback: secciones en orden DB + imágenes del formato viejo al final
-              promo_slides = Enum.map(secs, &%{"kind" => "seccion", "tipo" => &1.tipo})
-              img_slides   = Enum.map(config["imagen_slides"] || [], &Map.put(&1, "kind", "imagen"))
-              promo_slides ++ img_slides
+              ~w(top10 favoritos destacados)
+              |> Enum.map(&%{"kind" => "seccion", "tipo" => &1})
           end
-
-        {secs, configs, slides}
+        {p_configs, slides}
       else
-        {[], %{}, []}
+        {%{}, []}
       end
 
     {:noreply, assign(socket,
       seccion: seccion,
       config: config,
-      productos: productos,
-      promo_secciones: promo_secciones,
+      productos: [],
+      promo_secciones: [],
       promo_configs: promo_configs,
       slides_list: slides_list
     )}
@@ -107,34 +97,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar"             -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "inicio"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                            -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket)
   end
 
   # ── Productos section: toggle individual product ──────────────────────
@@ -146,24 +109,13 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
   @impl true
   def handle_event("toggle_producto", %{"codigo" => codigo}, socket) do
-    if socket.assigns.tipo == "destacados" do
-      # Operar sobre promo_configs[promo_tab]
-      tab    = socket.assigns.promo_tab
-      cfg    = Map.get(socket.assigns.promo_configs, tab, %{})
-      codigos = get_codigos(cfg)
-      codigos = if codigo in codigos, do: List.delete(codigos, codigo), else: codigos ++ [codigo]
-      cfg    = Map.put(cfg, "codigos", codigos)
-      promo_configs = Map.put(socket.assigns.promo_configs, tab, cfg)
-      # Si es la tab de destacados, sincronizar @config (que también guarda imagen_slides)
-      config = if tab == "destacados",
-        do: Map.merge(socket.assigns.config, %{"codigos" => codigos}),
-        else: socket.assigns.config
-      {:noreply, assign(socket, promo_configs: promo_configs, config: config, saved: false)}
-    else
-      codigos = get_codigos(socket.assigns.config)
-      codigos = if codigo in codigos, do: List.delete(codigos, codigo), else: codigos ++ [codigo]
-      {:noreply, assign(socket, config: Map.put(socket.assigns.config, "codigos", codigos), saved: false)}
-    end
+    tab    = socket.assigns.promo_tab
+    cfg    = Map.get(socket.assigns.promo_configs, tab, %{})
+    codigos = get_codigos(cfg)
+    codigos = if codigo in codigos, do: List.delete(codigos, codigo), else: codigos ++ [codigo]
+    cfg    = Map.put(cfg, "codigos", codigos)
+    promo_configs = Map.put(socket.assigns.promo_configs, tab, cfg)
+    {:noreply, socket |> assign(promo_configs: promo_configs) |> autosave_ofertas()}
   end
 
   @impl true
@@ -175,32 +127,50 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
   @impl true
   def handle_event("update_pub", %{"field" => field, "value" => value}, socket) do
-    config = Map.put(socket.assigns.config, field, value)
-    {:noreply, assign(socket, config: config, saved: false)}
+    if socket.assigns.tipo == "ofertas" do
+      tab = socket.assigns.promo_tab
+      cfg = Map.get(socket.assigns.promo_configs, tab, %{}) |> Map.put(field, value)
+      socket = assign(socket, promo_configs: Map.put(socket.assigns.promo_configs, tab, cfg))
+      {:noreply, autosave_ofertas(socket)}
+    else
+      {:noreply, socket |> assign(config: Map.put(socket.assigns.config, field, value)) |> autosave()}
+    end
   end
 
   @impl true
   def handle_event("sec_color", %{"color" => color}, socket) do
-    config = Map.put(socket.assigns.config, "color", color)
-    {:noreply, assign(socket, config: config, saved: false)}
+    if socket.assigns.tipo == "ofertas" do
+      tab = socket.assigns.promo_tab
+      cfg = Map.get(socket.assigns.promo_configs, tab, %{}) |> Map.put("color", color)
+      socket = assign(socket, promo_configs: Map.put(socket.assigns.promo_configs, tab, cfg))
+      {:noreply, autosave_ofertas(socket)}
+    else
+      {:noreply, socket |> assign(config: Map.put(socket.assigns.config, "color", color)) |> autosave()}
+    end
   end
 
   @impl true
   def handle_event("sec_color_custom", %{"color" => color}, socket) do
-    config = Map.put(socket.assigns.config, "color", color)
-    {:noreply, assign(socket, config: config, saved: false)}
+    if socket.assigns.tipo == "ofertas" do
+      tab = socket.assigns.promo_tab
+      cfg = Map.get(socket.assigns.promo_configs, tab, %{}) |> Map.put("color", color)
+      socket = assign(socket, promo_configs: Map.put(socket.assigns.promo_configs, tab, cfg))
+      {:noreply, autosave_ofertas(socket)}
+    else
+      {:noreply, socket |> assign(config: Map.put(socket.assigns.config, "color", color)) |> autosave()}
+    end
   end
 
   @impl true
   def handle_event("pub_preset", %{"c1" => c1, "c2" => c2}, socket) do
     config = socket.assigns.config |> Map.put("color1", c1) |> Map.put("color2", c2)
-    {:noreply, assign(socket, config: config, saved: false)}
+    {:noreply, socket |> assign(config: config) |> autosave()}
   end
 
   @impl true
   def handle_event("pub_colors", %{"color1" => c1, "color2" => c2}, socket) do
     config = socket.assigns.config |> Map.put("color1", c1) |> Map.put("color2", c2)
-    {:noreply, assign(socket, config: config, saved: false)}
+    {:noreply, socket |> assign(config: config) |> autosave()}
   end
 
   # ── Envios section ────────────────────────────────────────────────────
@@ -211,7 +181,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
     cards = get_cards(socket.assigns.config)
     card  = cards |> Enum.at(idx) |> Map.put(field, value)
     cards = List.replace_at(cards, idx, card)
-    {:noreply, assign(socket, config: Map.put(socket.assigns.config, "cards", cards), saved: false)}
+    {:noreply, socket |> assign(config: Map.put(socket.assigns.config, "cards", cards)) |> autosave()}
   end
 
   # ── Carrusel de Ofertas: imagen slides ───────────────────────────────
@@ -330,7 +300,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
     if idx > 0 do
       item = Enum.at(list, idx)
       list = list |> List.delete_at(idx) |> List.insert_at(idx - 1, item)
-      {:noreply, assign(socket, slides_list: list, saved: false)}
+      {:noreply, socket |> assign(slides_list: list) |> autosave_ofertas()}
     else
       {:noreply, socket}
     end
@@ -343,7 +313,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
     if idx < length(list) - 1 do
       item = Enum.at(list, idx)
       list = list |> List.delete_at(idx) |> List.insert_at(idx + 1, item)
-      {:noreply, assign(socket, slides_list: list, saved: false)}
+      {:noreply, socket |> assign(slides_list: list) |> autosave_ofertas()}
     else
       {:noreply, socket}
     end
@@ -360,28 +330,10 @@ defmodule PrettycoreWeb.SeccionEditorLive do
   @impl true
   def handle_event("guardar", _params, socket) do
     if socket.assigns.seccion do
-      # Si es el editor del Carrusel de Ofertas (tipo "ofertas" o "destacados" legacy)
-      if socket.assigns.tipo in ["destacados", "ofertas"] do
-        # Extraer el orden de secciones promo del slides_list para reordenar en DB
-        promo_tipos = ~w(top10 favoritos destacados)
-        promo_ids =
-          socket.assigns.slides_list
-          |> Enum.filter(&(&1["kind"] == "seccion" and &1["tipo"] in promo_tipos))
-          |> Enum.map(fn s ->
-            sec = Enum.find(socket.assigns.promo_secciones, &(&1.tipo == s["tipo"]))
-            sec && sec.id
-          end)
-          |> Enum.reject(&is_nil/1)
-        if promo_ids != [], do: Secciones.reorder(promo_ids)
-        # Guardar configs de top10 y favoritos
-        Enum.each(["top10", "favoritos"], fn t ->
-          sec = Secciones.get_seccion_by_tipo(t)
-          cfg = Map.get(socket.assigns.promo_configs, t, %{})
-          if sec, do: Secciones.update_config(sec, cfg)
-        end)
-      end
-      # Guardar slides_orden en el config de esta sección
-      config_to_save = Map.put(socket.assigns.config, "slides_orden", socket.assigns.slides_list)
+      config_to_save =
+        socket.assigns.config
+        |> Map.put("slides_orden", socket.assigns.slides_list)
+        |> Map.merge(socket.assigns.promo_configs)
       case Secciones.update_config(socket.assigns.seccion, config_to_save) do
         {:ok, sec} ->
           {:noreply, socket |> assign(seccion: sec, guardando: false, saved: true) |> put_flash(:info, "Sección guardada correctamente")}
@@ -406,22 +358,14 @@ defmodule PrettycoreWeb.SeccionEditorLive do
           <h1 class="text-2xl font-bold text-gray-900"><%= section_title(@tipo) %></h1>
           <p class="text-sm text-gray-500 mt-0.5">Edita el contenido de esta sección</p>
         </div>
-        <button
-          phx-click="guardar"
-          class={"inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all #{if @saved, do: "bg-green-500 text-white", else: "bg-purple-600 text-white hover:bg-purple-500"}"}
-        >
-          <%= if @saved do %>
+        <%= if @saved do %>
+          <span class="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
             </svg>
             Guardado
-          <% else %>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-            </svg>
-            Guardar cambios
-          <% end %>
-        </button>
+          </span>
+        <% end %>
       </header>
 
       <%= if @seccion == nil do %>
@@ -545,7 +489,8 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
         <!-- ── CARRUSEL DE OFERTAS (Top 10, Destacados y Favs) ── -->
         <%= if @tipo == "ofertas" do %>
-          <div class="space-y-6 max-w-2xl">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl">
 
             <!-- 1. Imágenes del carrusel -->
             <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -642,15 +587,20 @@ defmodule PrettycoreWeb.SeccionEditorLive do
                       </div>
                     <% else %>
                       <%
-                        ps = Enum.find(@promo_secciones, &(&1.tipo == slide["tipo"])) || %{config: %{}, nombre: slide["tipo"], tipo: slide["tipo"]}
-                        ps_cfg   = (is_map(ps) and Map.has_key?(ps, :config) and ps.config) || %{}
+                        ps_cfg   = Map.get(@promo_configs, slide["tipo"], %{})
                         ps_color = ps_cfg["color"] || case slide["tipo"] do
                           "top10"      -> "#c0392b"
                           "favoritos"  -> "#1a5276"
                           "destacados" -> "#1e8449"
                           _            -> "#6c3483"
                         end
-                        ps_nombre = ps_cfg["titulo"] || (is_map(ps) and Map.has_key?(ps, :nombre) and ps.nombre) || slide["tipo"]
+                        ps_nombre = ps_cfg["titulo"] || case slide["tipo"] do
+                          "top10"      -> "Productos Top 10"
+                          "favoritos"  -> "Productos Favoritos"
+                          "destacados" -> "Productos Destacados"
+                          t            -> t
+                        end
+
                       %>
                       <div class="w-4 h-8 rounded-lg flex-shrink-0" style={"background:#{ps_color};"}></div>
                       <span class="w-5 text-center text-xs font-bold text-gray-400"><%= idx + 1 %></span>
@@ -690,34 +640,39 @@ defmodule PrettycoreWeb.SeccionEditorLive do
           </div>
         <% end %>
 
-        <!-- ── SECCIONES DE PRODUCTOS individuales (top10 / favoritos / destacados) ── -->
-        <%= if @tipo in ["top10", "favoritos", "destacados"] do %>
+        <!-- ── COLOR Y TÍTULO POR SECCIÓN DE OFERTAS ── -->
+        <%= if @tipo == "ofertas" do %>
           <%
-            codigos = get_codigos(@config)
-            sec_color = @config["color"] || case @tipo do
+            tab_tipos = [{"top10", "Top 10"}, {"favoritos", "Favoritos"}, {"destacados", "Destacados"}]
+            tab_cfg   = Map.get(@promo_configs, @promo_tab, %{})
+            tab_color = tab_cfg["color"] || case @promo_tab do
               "top10"      -> "#c0392b"
               "favoritos"  -> "#1a5276"
               "destacados" -> "#1e8449"
               _            -> "#6c3483"
             end
-            sec_titulo = @config["titulo"] || @seccion.nombre
-            filtered =
-              if @search != "",
-                do:
-                  (words = @search |> String.downcase() |> String.split(" ", trim: true)
-                   Enum.filter(@productos, fn p ->
-                     desc  = String.downcase(p.descripcion || "")
-                     cod   = String.downcase(p.codigo || "")
-                     Enum.all?(words, fn w ->
-                       String.contains?(desc, w) or String.contains?(cod, w)
-                     end)
-                   end)),
-                else: @productos
+            tab_titulo = tab_cfg["titulo"] || case @promo_tab do
+              "top10"      -> "Top 10"
+              "favoritos"  -> "Favoritos"
+              "destacados" -> "Destacados"
+              t            -> t
+            end
           %>
-          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5 max-w-lg space-y-4">
+          <p class="text-xs text-gray-400 mb-4">Los productos se seleccionan automáticamente (4 aleatorios por sección según la gama del cliente).</p>
+          <!-- Tabs -->
+          <div class="flex gap-2 mb-4 mt-2">
+            <%= for {t, label} <- tab_tipos do %>
+              <button type="button" phx-click="set_promo_tab" phx-value-tipo={t}
+                class={"px-4 py-1.5 rounded-full text-sm font-semibold transition-all #{if @promo_tab == t, do: "bg-purple-600 text-white shadow", else: "bg-white border border-gray-200 text-gray-600 hover:border-purple-400"}"}>
+                <%= label %>
+              </button>
+            <% end %>
+          </div>
+          <!-- Config color/título del tab activo -->
+          <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 max-w-lg space-y-4">
             <div>
-              <label class="block text-xs font-semibold text-gray-600 mb-1">Título de la sección</label>
-              <input type="text" value={sec_titulo}
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Título</label>
+              <input type="text" value={tab_titulo}
                 phx-blur="update_pub" phx-value-field="titulo"
                 maxlength="100"
                 class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none" />
@@ -727,59 +682,16 @@ defmodule PrettycoreWeb.SeccionEditorLive do
               <div class="flex flex-wrap gap-2 mb-3">
                 <%= for %{label: label, c1: pc1, c2: _} <- @pub_presets do %>
                   <button type="button" phx-click="sec_color" phx-value-color={pc1} title={label}
-                    style={"width:32px;height:32px;border-radius:50%;background:#{pc1};outline:#{if sec_color == pc1, do: "3px solid #1f2937", else: "2px solid transparent"};outline-offset:2px;"} />
+                    style={"width:32px;height:32px;border-radius:50%;background:#{pc1};outline:#{if tab_color == pc1, do: "3px solid #1f2937", else: "2px solid transparent"};outline-offset:2px;"} />
                 <% end %>
               </div>
               <form phx-change="sec_color_custom" class="flex items-center gap-3">
-                <input type="color" name="color" value={sec_color}
+                <input type="color" name="color" value={tab_color}
                   class="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white" />
-                <div class="flex-1 h-10 rounded-xl shadow-inner" style={"background:#{sec_color};"}></div>
-                <span class="text-xs font-mono text-gray-400"><%= sec_color %></span>
+                <div class="flex-1 h-10 rounded-xl shadow-inner" style={"background:#{tab_color};"}></div>
+                <span class="text-xs font-mono text-gray-400"><%= tab_color %></span>
               </form>
             </div>
-          </div>
-          <div class="mb-4 flex items-center gap-3 max-w-xl">
-            <div class="flex-1 relative">
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-              </div>
-              <input type="text" phx-keyup="search" name="q" value={@search}
-                placeholder="Buscar producto..."
-                class="block w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none shadow-sm" />
-            </div>
-            <span class="text-sm text-gray-500 font-medium flex-shrink-0"><%= length(codigos) %> seleccionados</span>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-[70vh] overflow-y-auto pr-1">
-            <%= for prod <- filtered do %>
-              <% seleccionado = prod.codigo in codigos %>
-              <button type="button" phx-click="toggle_producto" phx-value-codigo={prod.codigo}
-                class={"relative bg-white rounded-xl overflow-hidden border-2 transition-all #{if seleccionado, do: "border-purple-500 shadow-md", else: "border-gray-100 hover:border-gray-300"}"}>
-                <div class="aspect-square bg-gray-50 overflow-hidden">
-                  <%= if prod.imagen_url && prod.imagen_url != "" do %>
-                    <img src={prod.imagen_url} alt={prod.descripcion} class="w-full h-full object-cover" />
-                  <% else %>
-                    <div class="w-full h-full flex items-center justify-center">
-                      <svg class="w-8 h-8 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                    </div>
-                  <% end %>
-                </div>
-                <div class="p-2 text-left">
-                  <p class="text-[10px] font-semibold text-gray-800 line-clamp-2 leading-tight"><%= prod.descripcion %></p>
-                  <p class="text-[9px] text-gray-400 font-mono mt-0.5"><%= prod.codigo %></p>
-                </div>
-                <%= if seleccionado do %>
-                  <div class="absolute top-1.5 right-1.5 w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
-                    <svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                    </svg>
-                  </div>
-                <% end %>
-              </button>
-            <% end %>
           </div>
         <% end %>
 
@@ -791,9 +703,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
 
   # ── Helpers ───────────────────────────────────────────────────────────
 
-  defp section_title("top10"),      do: "Productos Top 10"
-  defp section_title("favoritos"),  do: "Productos Favoritos"
-  defp section_title("destacados"), do: "Carrusel de Ofertas"
+  defp section_title("ofertas"),    do: "Carrusel de Ofertas"
   defp section_title("publicidad"), do: "Publicidad"
   defp section_title("envios"),     do: "Envíos"
   defp section_title(t),            do: t
@@ -805,6 +715,32 @@ defmodule PrettycoreWeb.SeccionEditorLive do
   defp error_to_string(:not_accepted),     do: "Tipo de archivo no permitido (usa JPG, PNG, GIF o WebP)"
   defp error_to_string(:too_many_files),   do: "Solo se permite 1 imagen a la vez"
   defp error_to_string(_),                 do: "Error al subir el archivo"
+
+  defp autosave_ofertas(socket) do
+    if socket.assigns.seccion do
+      config_to_save =
+        socket.assigns.config
+        |> Map.put("slides_orden", socket.assigns.slides_list)
+        |> Map.merge(socket.assigns.promo_configs)
+      case Secciones.update_config(socket.assigns.seccion, config_to_save) do
+        {:ok, sec} -> assign(socket, seccion: sec, saved: true)
+        _          -> assign(socket, saved: false)
+      end
+    else
+      socket
+    end
+  end
+
+  defp autosave(socket) do
+    if socket.assigns.seccion do
+      case Secciones.update_config(socket.assigns.seccion, socket.assigns.config) do
+        {:ok, sec} -> assign(socket, seccion: sec, saved: true)
+        _          -> assign(socket, saved: false)
+      end
+    else
+      socket
+    end
+  end
 
   defp get_cards(%{"cards" => c}) when is_list(c) and length(c) == 4, do: c
   defp get_cards(_), do: @default_cards

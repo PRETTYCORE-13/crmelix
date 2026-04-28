@@ -1059,19 +1059,7 @@ defmodule PrettycoreWeb.ClienteFormEditLive do
 
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar" ->
-        {:noreply, Phoenix.Component.update(socket, :sidebar_open, &(not &1))}
-
-      "inicio" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-
-      "clientes" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-
-      _ ->
-        {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket)
   end
 
   defp validate_and_extract(changeset) do

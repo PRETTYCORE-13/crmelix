@@ -77,35 +77,9 @@ defmodule PrettycoreWeb.WorkOrderLive do
 
   # ------------------------------------------------------------------
   # 🎯 MODELO 2: NAV CENTRALIZADA
-  # ------------------------------------------------------------------
-  @impl true
+  # ------------------------------------------------------------------  @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar" ->
-        {:noreply, update(socket, :sidebar_open, &(not &1))}
-
-      "inicio" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-
-      "programacion" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/programacion")}
-
-      "programacion_sql" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/programacion/sql")}
-
-      "workorder" ->
-        # ya estás aquí
-        {:noreply, socket}
-
-      "clientes" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-
-    #  "config" ->
-    #    {:noreply, push_navigate(socket, to: ~p"/admin/configuracion")}
-
-      _ ->
-        {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket)
   end
 
   # ------------------------------------------------------------------

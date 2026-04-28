@@ -37,10 +37,17 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_error, nil)
      |> assign(:upload_error, nil)
      |> assign(:uploading, false)
+     |> assign(:import_modal, false)
+     |> assign(:import_result, nil)
+     |> assign(:imagen_modo, "archivo")
      |> allow_upload(:imagen,
          accept: ~w(.jpg .jpeg .png .webp .gif),
          max_entries: 1,
          max_file_size: 10_000_000)
+     |> allow_upload(:csv_importar,
+         accept: ~w(.csv .xlsx),
+         max_entries: 1,
+         max_file_size: 5_000_000)
      |> load_productos()}
   end
 
@@ -50,38 +57,9 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     assign(socket, :productos, productos)
   end
 
-  # ── Navegación ───────────────────────────────────────────────────────────────
-
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar"             -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"            -> {:noreply, socket}
-      "productos_nativos"          -> {:noreply, socket}
-      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                            -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "productos_nativos")
   end
 
   # ── Búsqueda ─────────────────────────────────────────────────────────────────
@@ -89,6 +67,220 @@ defmodule PrettycoreWeb.ProductosNativosLive do
   @impl true
   def handle_event("search", %{"q" => q}, socket) do
     {:noreply, socket |> assign(:search, q) |> load_productos()}
+  end
+
+  # ── Importación masiva ────────────────────────────────────────────────────────
+
+  @impl true
+  def handle_event("abrir_importar", _, socket) do
+    {:noreply, assign(socket, import_modal: true, import_result: nil)}
+  end
+
+  @impl true
+  def handle_event("cerrar_importar", _, socket) do
+    {:noreply, assign(socket, import_modal: false, import_result: nil)}
+  end
+
+  @impl true
+  def handle_event("importar_csv", _params, socket) do
+    results =
+      consume_uploaded_entries(socket, :csv_importar, fn %{path: tmp_path}, entry ->
+        ext = entry.client_name |> Path.extname() |> String.downcase()
+        filas =
+          case ext do
+            ".xlsx" -> tmp_path |> File.read!() |> leer_xlsx()
+            _       -> tmp_path |> File.read!() |> leer_csv()
+          end
+        procesar_filas(filas)
+      end)
+
+    case results do
+      [result] ->
+        socket = if result.nuevos + result.actualizados > 0, do: load_productos(socket), else: socket
+        {:noreply, assign(socket, import_result: result)}
+      _ ->
+        {:noreply, put_flash(socket, :error, "No se recibió ningún archivo")}
+    end
+  end
+
+  # ── Lectores de archivo ───────────────────────────────────────────────────────
+
+  defp leer_csv(content) do
+    sep = if String.contains?(content, ";"), do: ";", else: ","
+
+    content
+    |> String.replace("\r\n", "\n")
+    |> String.replace("\r", "\n")
+    |> String.split("\n", trim: true)
+    |> then(fn [_header | rows] -> rows end)
+    |> Enum.map(fn line ->
+      line
+      |> String.split(sep)
+      |> Enum.map(&String.trim/1)
+      |> Enum.map(&String.trim(&1, "\""))
+    end)
+  end
+
+  defp leer_xlsx(binary) do
+    with {:ok, files} <- :zip.unzip(binary, [:memory]) do
+      map = Map.new(files, fn {name, data} -> {List.to_string(name), data} end)
+      shared = map |> Map.get("xl/sharedStrings.xml", "") |> xlsx_shared_strings()
+      rows   = map |> Map.get("xl/worksheets/sheet1.xml", "") |> xlsx_filas(shared)
+      case rows do
+        [_ | data] -> data
+        []         -> []
+      end
+    else
+      _ -> []
+    end
+  end
+
+  defp xlsx_shared_strings(""), do: []
+  defp xlsx_shared_strings(xml) do
+    Regex.scan(~r/<si>.*?<t[^>]*>(.*?)<\/t>.*?<\/si>/s, xml)
+    |> Enum.map(fn [_, t] -> xml_decode(t) end)
+  end
+
+  defp xlsx_filas("", _), do: []
+  defp xlsx_filas(xml, shared) do
+    Regex.scan(~r/<row\b[^>]*>(.*?)<\/row>/s, xml)
+    |> Enum.map(fn [_, row] -> xlsx_celda_row(row, shared) end)
+  end
+
+  defp xlsx_celda_row(row_xml, shared) do
+    cells =
+      Regex.scan(~r/<c\b([^>]*)>(.*?)<\/c>/s, row_xml)
+      |> Enum.flat_map(fn [_, attrs, content] ->
+        case Regex.run(~r/\br="([A-Z]+)\d+"/, attrs) do
+          [_, col_ref] ->
+            idx  = col_ref |> String.to_charlist() |> Enum.reduce(0, fn c, acc -> acc * 26 + (c - ?A + 1) end)
+            tipo = case Regex.run(~r/\bt="([^"]+)"/, attrs), do: ([_, t] -> t; nil -> "n")
+            val  = xlsx_valor(content, tipo, shared)
+            [{idx, val}]
+          nil -> []
+        end
+      end)
+      |> Map.new()
+
+    max_col = if map_size(cells) == 0, do: 0, else: cells |> Map.keys() |> Enum.max()
+    if max_col == 0, do: [], else: Enum.map(1..max_col, &Map.get(cells, &1, ""))
+  end
+
+  defp xlsx_valor(content, "s", shared) do
+    case Regex.run(~r/<v>(\d+)<\/v>/, content) do
+      [_, i] -> Enum.at(shared, String.to_integer(i), "")
+      nil    -> ""
+    end
+  end
+  defp xlsx_valor(content, "inlineStr", _) do
+    case Regex.run(~r/<t[^>]*>(.*?)<\/t>/s, content) do
+      [_, t] -> xml_decode(t)
+      nil    -> ""
+    end
+  end
+  defp xlsx_valor(content, _, _) do
+    case Regex.run(~r/<v>(.*?)<\/v>/, content) do
+      [_, v] -> v
+      nil    -> ""
+    end
+  end
+
+  defp xml_decode(t) do
+    t
+    |> String.replace("&amp;", "&")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&apos;", "'")
+  end
+
+  # ── Procesador de filas (común para CSV y XLSX) ───────────────────────────────
+
+  defp procesar_filas(filas) do
+    parsed =
+      filas
+      |> Enum.with_index(2)
+      |> Enum.map(fn {cols, row_num} -> validar_fila(cols, row_num) end)
+
+    errores_validacion = for {:error, msg} <- parsed, do: msg
+
+    if errores_validacion != [] do
+      %{nuevos: 0, actualizados: 0, errores: errores_validacion, bloqueado: true}
+    else
+      Enum.reduce(parsed, %{nuevos: 0, actualizados: 0, errores: [], bloqueado: false}, fn
+        {:ok, attrs}, acc ->
+          case ProductosNativos.upsert_desde_importacion(attrs) do
+            {:ok, :nuevo}       -> %{acc | nuevos: acc.nuevos + 1}
+            {:ok, :actualizado} -> %{acc | actualizados: acc.actualizados + 1}
+            {:error, msg}       -> %{acc | errores: acc.errores ++ ["#{attrs["codigo"]}: #{msg}"]}
+          end
+        {:skip, _}, acc -> acc
+      end)
+    end
+  end
+
+  defp validar_fila(cols, row_num) do
+    [codigo, precio_str | rest] = pad_list(cols, 10)
+
+    codigo = String.upcase(String.trim(codigo))
+
+    if codigo == "" or codigo == "CODIGO" do
+      {:skip, :header_or_empty}
+    else
+      [desc_larga, desc_corta, unidad, marca, categoria, super_cat, notas, imagen_url] =
+        pad_list(rest, 8)
+
+      precio =
+        precio_str
+        |> String.replace(",", ".")
+        |> Float.parse()
+        |> case do
+          {f, _} -> f
+          :error  -> nil
+        end
+
+      campos_vacios =
+        [
+          {"CODIGO", codigo},
+          {"PRECIO", if(is_nil(precio), do: "", else: "ok")},
+          {"DESCRIPCION_LARGA", desc_larga},
+          {"NOMBRE", desc_corta},
+          {"UNIDAD", unidad},
+          {"MARCA", marca},
+          {"CATEGORIA", categoria},
+          {"SUPER_CATEGORIA", super_cat}
+        ]
+        |> Enum.filter(fn {_, v} -> String.trim(v) == "" end)
+        |> Enum.map(fn {campo, _} -> campo end)
+
+      if campos_vacios != [] do
+        {:error, "Fila #{row_num} (#{codigo}): campos obligatorios vacíos → #{Enum.join(campos_vacios, ", ")}"}
+      else
+        attrs = %{
+          "codigo"          => codigo,
+          "descripcion"     => nilify_str(desc_larga) || codigo,
+          "desc_corta"      => nilify_str(desc_corta),
+          "precio_base"     => precio,
+          "unidad"          => nilify_str(unidad) || "PZA",
+          "marca"           => nilify_str(marca),
+          "categoria"       => nilify_str(categoria),
+          "super_categoria" => nilify_str(super_cat),
+          "notas"           => nilify_str(notas),
+          "imagen_url"      => nilify_str(imagen_url),
+          "activo"          => true
+        }
+        {:ok, attrs}
+      end
+    end
+  end
+
+  defp pad_list(list, n) do
+    list ++ List.duplicate("", max(0, n - length(list)))
+  end
+
+  defp nilify_str(s) do
+    t = String.trim(s)
+    if t == "", do: nil, else: t
   end
 
   # ── Modales ───────────────────────────────────────────────────────────────────
@@ -110,6 +302,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_categoria, "")
      |> assign(:form_super_categoria, "")
      |> assign(:form_imagen_url, "")
+     |> assign(:imagen_modo, "archivo")
      |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 in ["Todos", "Inicio"])))
      |> assign(:super_categorias_list, SuperCategorias.list_super_categorias() |> Enum.map(& &1.nombre))
      |> assign(:form_error, nil)
@@ -136,6 +329,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
          |> assign(:form_categoria, p.categoria || "")
          |> assign(:form_super_categoria, p.super_categoria || "")
          |> assign(:form_imagen_url, p.imagen_url || "")
+         |> assign(:imagen_modo, "archivo")
          |> assign(:categorias_list, Categorias.list_categorias() |> Enum.map(& &1.nombre) |> Enum.reject(&(&1 in ["Todos", "Inicio"])))
          |> assign(:super_categorias_list, SuperCategorias.list_super_categorias() |> Enum.map(& &1.nombre))
          |> assign(:form_error, nil)
@@ -163,16 +357,17 @@ defmodule PrettycoreWeb.ProductosNativosLive do
   def handle_event("guardar", params, socket) do
     codigo = String.trim(params["codigo"] || socket.assigns.form_codigo)
 
-    # Subir imagen si hay archivo seleccionado
+    # Subir imagen si hay archivo seleccionado, o usar URL manual
     imagen_url =
-      case socket.assigns.uploads.imagen.entries do
-        [entry | _] ->
-          # Eliminar imagen anterior del FTP si estamos editando
+      case {socket.assigns[:imagen_modo], socket.assigns.uploads.imagen.entries} do
+        {"url", _} ->
+          String.trim(params["imagen_url_manual"] || socket.assigns.form_imagen_url || "")
+
+        {_, [entry | _]} ->
           if socket.assigns.modal == :editar do
             old_url = socket.assigns.form_imagen_url
             if old_url && old_url != "", do: Sftp.delete_by_url(old_url)
           end
-
           results = consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, _e ->
             ext     = Path.extname(entry.client_name)
             content = File.read!(tmp_path)
@@ -182,7 +377,8 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             [url] when is_binary(url) -> url <> "?v=#{System.os_time(:second)}"
             _                        -> socket.assigns.form_imagen_url
           end
-        [] ->
+
+        {_, []} ->
           socket.assigns.form_imagen_url
       end
 
@@ -250,10 +446,25 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     end
   end
 
+  @impl true
+  def handle_event("validate_csv", _params, socket) do
+    {:noreply, socket}
+  end
+
   # ── Upload imagen ─────────────────────────────────────────────────────────────
 
   @impl true
-  def handle_event("validate_upload", _params, socket) do
+  def handle_event("cambiar_imagen_modo", %{"modo" => modo}, socket) do
+    {:noreply, assign(socket, imagen_modo: modo)}
+  end
+
+  @impl true
+  def handle_event("validate_upload", params, socket) do
+    socket =
+      case {socket.assigns[:imagen_modo], Map.get(params, "imagen_url_manual")} do
+        {"url", url} when is_binary(url) -> assign(socket, form_imagen_url: url)
+        _ -> socket
+      end
     {:noreply, socket}
   end
 
@@ -297,15 +508,26 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             Productos creados directamente en esta app — aparecen en la tienda junto con los de la API.
           </p>
         </div>
-        <button
-          phx-click="nuevo"
-          class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0"
-        >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Producto
-        </button>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button
+            phx-click="abrir_importar"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Importar
+          </button>
+          <button
+            phx-click="nuevo"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Producto
+          </button>
+        </div>
       </div>
 
       <!-- Buscador -->
@@ -428,6 +650,107 @@ defmodule PrettycoreWeb.ProductosNativosLive do
       <% end %>
     </div>
 
+    <!-- ═══════════════════ MODAL IMPORTAR CSV ═══════════════════ -->
+    <%= if @import_modal do %>
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="cerrar_importar"></div>
+        <div class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 class="text-base font-bold text-gray-900">Importar Productos</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Excel (.xlsx) o CSV</p>
+            </div>
+            <button phx-click="cerrar_importar" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="px-6 py-5 space-y-5">
+            <!-- Paso 1: descargar plantilla -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p class="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Paso 1 — Descargar plantilla</p>
+              <p class="text-xs text-blue-600 mb-3">Descarga la plantilla, rellénala en Excel y súbela directamente como .xlsx (o guárdala como CSV separado por punto y coma).</p>
+              <a href="/admin/productos-nativos/plantilla" target="_blank"
+                class="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Descargar plantilla .xlsx
+              </a>
+            </div>
+
+            <!-- Paso 2: subir CSV -->
+            <div>
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Paso 2 — Subir archivo Excel o CSV</p>
+              <form phx-submit="importar_csv" phx-change="validate_csv">
+                <div class="flex flex-col gap-3">
+                  <label class={["flex flex-col items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl py-6 cursor-pointer transition-colors",
+                    if(Enum.any?(@uploads.csv_importar.entries), do: "border-emerald-400 bg-emerald-50", else: "border-gray-300 bg-gray-50 hover:border-gray-400")]}>
+                    <svg class="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <%= if Enum.any?(@uploads.csv_importar.entries) do %>
+                      <span class="text-sm font-semibold text-emerald-700"><%= hd(@uploads.csv_importar.entries).client_name %></span>
+                    <% else %>
+                      <span class="text-sm text-gray-500">Haz clic o arrastra tu archivo <span class="font-semibold">.xlsx</span> o <span class="font-semibold">.csv</span></span>
+                    <% end %>
+                    <.live_file_input upload={@uploads.csv_importar} class="hidden" />
+                  </label>
+
+                  <%= if @import_result do %>
+                    <%= if @import_result[:bloqueado] do %>
+                      <div class="rounded-xl p-3 text-sm bg-red-50 border border-red-200">
+                        <p class="font-semibold text-red-700 flex items-center gap-1.5">
+                          <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                          </svg>
+                          No se pudo subir el documento — campos obligatorios incompletos
+                        </p>
+                        <ul class="mt-2 text-xs text-red-600 space-y-0.5 max-h-32 overflow-y-auto">
+                          <%= for e <- @import_result.errores do %>
+                            <li>• <%= e %></li>
+                          <% end %>
+                        </ul>
+                      </div>
+                    <% else %>
+                      <div class={"rounded-xl p-3 text-sm #{if @import_result.errores == [], do: "bg-green-50 border border-green-200", else: "bg-amber-50 border border-amber-200"}"}>
+                        <p class="font-semibold text-gray-800">
+                          ✓ <%= @import_result.nuevos %> creados · <%= @import_result.actualizados %> actualizados
+                          <%= if @import_result.errores != [], do: "· #{length(@import_result.errores)} errores" %>
+                        </p>
+                        <%= if @import_result.errores != [] do %>
+                          <ul class="mt-1 text-xs text-amber-700 space-y-0.5 max-h-24 overflow-y-auto">
+                            <%= for e <- Enum.take(@import_result.errores, 10) do %>
+                              <li>• <%= e %></li>
+                            <% end %>
+                          </ul>
+                        <% end %>
+                      </div>
+                    <% end %>
+                  <% end %>
+
+                  <button type="submit"
+                    disabled={Enum.empty?(@uploads.csv_importar.entries)}
+                    class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white disabled:text-gray-400 text-sm font-semibold rounded-xl transition-colors">
+                    Importar productos
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Referencia de columnas -->
+            <details class="text-xs text-gray-400">
+              <summary class="cursor-pointer hover:text-gray-600 font-medium">Ver columnas esperadas</summary>
+              <div class="mt-2 font-mono bg-gray-50 rounded-lg p-2 text-[11px] leading-5 space-y-0.5">
+                <p><span class="text-red-500">CODIGO*</span> · <span class="text-red-500">PRECIO*</span> · DESCRIPCION_LARGA</p>
+                <p>NOMBRE · UNIDAD · MARCA</p>
+                <p>CATEGORIA · SUPER_CATEGORIA · NOTAS · IMAGEN_URL</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
     <!-- ═══════════════════ MODAL CREAR / EDITAR ═══════════════════ -->
     <%= if @modal in [:nuevo, :editar] do %>
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -458,55 +781,96 @@ defmodule PrettycoreWeb.ProductosNativosLive do
 
             <!-- Imagen (siempre arriba) -->
             <div>
-              <div class="relative w-full h-44 rounded-2xl overflow-hidden">
-                <.live_file_input upload={@uploads.imagen}
-                  id="img-input-producto-nativo"
-                  phx-hook="ImageCompressor"
-                  class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-
-                <%= cond do %>
-                  <% @uploads.imagen.entries != [] -> %>
-                    <% entry = List.first(@uploads.imagen.entries) %>
-                    <!-- Estado: imagen seleccionada correctamente -->
-                    <div class="w-full h-full border-2 border-green-400 bg-green-50 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
-                      <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                        <svg class="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                        </svg>
-                      </div>
-                      <span class="text-xs font-semibold text-green-700">Imagen lista</span>
-                      <span class="text-[10px] text-green-500 px-4 truncate w-full text-center"><%= entry.client_name %></span>
-                      <%= if entry.progress > 0 and entry.progress < 100 do %>
-                        <div class="w-3/5 bg-green-200 rounded-full h-1.5 overflow-hidden">
-                          <div class="bg-green-500 rounded-full h-1.5 transition-all duration-300" style={"width: #{entry.progress}%"} />
-                        </div>
-                      <% end %>
-                    </div>
-
-                  <% @form_imagen_url && @form_imagen_url != "" -> %>
-                    <img src={@form_imagen_url} class="w-full h-full object-cover pointer-events-none" />
-                    <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
-                      <div class="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
-                        </svg>
-                      </div>
-                    </div>
-
-                  <% true -> %>
-                    <div class="w-full h-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
-                      <div class="relative">
-                        <svg class="w-12 h-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                        </svg>
-                        <div class="absolute -top-1 -right-1 w-6 h-6 bg-gray-900 rounded-full flex items-center justify-center">
-                          <span class="text-white text-sm font-bold leading-none">+</span>
-                        </div>
-                      </div>
-                      <span class="text-xs text-gray-400">Clic para agregar imagen</span>
-                    </div>
-                <% end %>
+              <!-- Tabs archivo / URL -->
+              <div class="flex gap-0.5 mb-2 bg-gray-100 rounded-lg p-0.5 w-fit">
+                <button type="button" phx-click="cambiar_imagen_modo" phx-value-modo="archivo"
+                  class={["text-xs font-medium px-3 py-1.5 rounded-md transition-colors",
+                           if(@imagen_modo == "archivo", do: "bg-white text-gray-800 shadow-sm", else: "text-gray-500 hover:text-gray-700")]}>
+                  Subir archivo
+                </button>
+                <button type="button" phx-click="cambiar_imagen_modo" phx-value-modo="url"
+                  class={["text-xs font-medium px-3 py-1.5 rounded-md transition-colors",
+                           if(@imagen_modo == "url", do: "bg-white text-gray-800 shadow-sm", else: "text-gray-500 hover:text-gray-700")]}>
+                  URL de imagen
+                </button>
               </div>
+
+              <%= if @imagen_modo == "archivo" do %>
+                <!-- Subir archivo -->
+                <div class="relative w-full h-44 rounded-2xl overflow-hidden">
+                  <.live_file_input upload={@uploads.imagen}
+                    id="img-input-producto-nativo"
+                    phx-hook="ImageCompressor"
+                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+
+                  <%= cond do %>
+                    <% @uploads.imagen.entries != [] -> %>
+                      <% entry = List.first(@uploads.imagen.entries) %>
+                      <div class="w-full h-full border-2 border-green-400 bg-green-50 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
+                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                          <svg class="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        </div>
+                        <span class="text-xs font-semibold text-green-700">Imagen lista</span>
+                        <span class="text-[10px] text-green-500 px-4 truncate w-full text-center"><%= entry.client_name %></span>
+                        <%= if entry.progress > 0 and entry.progress < 100 do %>
+                          <div class="w-3/5 bg-green-200 rounded-full h-1.5 overflow-hidden">
+                            <div class="bg-green-500 rounded-full h-1.5 transition-all duration-300" style={"width: #{entry.progress}%"} />
+                          </div>
+                        <% end %>
+                      </div>
+
+                    <% @form_imagen_url && @form_imagen_url != "" -> %>
+                      <img src={@form_imagen_url} class="w-full h-full object-cover pointer-events-none" />
+                      <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-none">
+                        <div class="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center">
+                          <svg class="w-5 h-5 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                          </svg>
+                        </div>
+                      </div>
+
+                    <% true -> %>
+                      <div class="w-full h-full border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
+                        <div class="relative">
+                          <svg class="w-12 h-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                          </svg>
+                          <div class="absolute -top-1 -right-1 w-6 h-6 bg-gray-900 rounded-full flex items-center justify-center">
+                            <span class="text-white text-sm font-bold leading-none">+</span>
+                          </div>
+                        </div>
+                        <span class="text-xs text-gray-400">Clic para agregar imagen</span>
+                      </div>
+                  <% end %>
+                </div>
+              <% else %>
+                <!-- URL de imagen -->
+                <div class="space-y-2">
+                  <input
+                    type="text"
+                    name="imagen_url_manual"
+                    value={@form_imagen_url}
+                    placeholder="https://ejemplo.com/imagen.jpg"
+                    phx-debounce="400"
+                    class="w-full text-sm rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent"
+                  />
+                  <%= if @form_imagen_url && @form_imagen_url != "" do %>
+                    <div class="relative w-full h-44 rounded-2xl overflow-hidden border border-gray-200">
+                      <img src={@form_imagen_url} class="w-full h-full object-cover" />
+                    </div>
+                  <% else %>
+                    <div class="w-full h-44 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-1.5 text-gray-400">
+                      <svg class="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                      </svg>
+                      <span class="text-xs">Pega la URL arriba para ver la vista previa</span>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+
               <p class="text-[11px] text-gray-400 mt-1.5">Tamaño recomendado: 500 × 500 px</p>
               <%= if @upload_error do %>
                 <p class="text-xs text-red-500 mt-1"><%= @upload_error %></p>
@@ -544,24 +908,27 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             </div>
 
             <div>
-              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Descripción *
-              </label>
-              <input
-                type="text"
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Descripción Larga *
+                </label>
+                <span id="desc_larga_count" class="text-xs text-gray-400"><%= String.length(@form_descripcion) %>/200</span>
+              </div>
+              <textarea
                 name="descripcion"
-                value={@form_descripcion}
-                placeholder="Nombre completo del producto"
+                rows="2"
                 required
                 maxlength="200"
-                class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+                placeholder="Nombre / descripción completa del producto"
+                oninput="document.getElementById('desc_larga_count').textContent = this.value.length + '/200'"
+                class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
+              ><%= @form_descripcion %></textarea>
             </div>
 
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Descripción Corta
+                  Nombre del Producto
                 </label>
                 <span id="desc_corta_count" class="text-xs text-gray-400"><%= String.length(@form_desc_corta) %>/40</span>
               </div>
@@ -569,7 +936,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                 type="text"
                 name="desc_corta"
                 value={@form_desc_corta}
-                placeholder="Subtítulo breve (opcional)"
+                placeholder="Nombre del producto"
                 maxlength="40"
                 oninput="document.getElementById('desc_corta_count').textContent = this.value.length + '/40'"
                 class="w-full text-sm rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900"

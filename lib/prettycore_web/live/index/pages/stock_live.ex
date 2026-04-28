@@ -31,38 +31,9 @@ defmodule PrettycoreWeb.StockLive do
      |> assign(:search, "")}
   end
 
-  # ── Navegación ───────────────────────────────────────────────────────────────
-
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar"             -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"                   -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"              -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "tienda"                     -> {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-      "pedidos"                    -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias"           -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"                  -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"                   -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "stock"                      -> {:noreply, socket}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      _                            -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "stock")
   end
 
   # ── Selección de sucursal ─────────────────────────────────────────────────────
@@ -79,27 +50,19 @@ defmodule PrettycoreWeb.StockLive do
      |> assign(:saved, false)}
   end
 
-  # ── Edición de cantidad ───────────────────────────────────────────────────────
+  # ── Edición de cantidad (auto-save al blur) ───────────────────────────────────
 
   @impl true
-  def handle_event("editar_cantidad", %{"codigo" => codigo, "valor" => valor}, socket) do
-    edits = Map.put(socket.assigns.edits, codigo, valor)
-    {:noreply, assign(socket, :edits, edits)}
-  end
-
-  # ── Guardar ───────────────────────────────────────────────────────────────────
-
-  @impl true
-  def handle_event("guardar_stock", _, socket) do
-    %{sucursal_activa: sucursal, edits: edits} = socket.assigns
-
-    if sucursal do
-      StockSucursal.guardar_stock(sucursal.numero, edits)
-      stock_map = StockSucursal.get_stock_map(sucursal.numero)
-      {:noreply, socket
-       |> assign(:stock_map, stock_map)
-       |> assign(:edits, %{})
-       |> assign(:saved, true)}
+  def handle_event("guardar_cantidad", %{"codigo" => codigo, "value" => valor}, socket) do
+    if socket.assigns.sucursal_activa do
+      numero = socket.assigns.sucursal_activa.numero
+      cantidad = case Integer.parse(to_string(valor)) do
+        {n, _} when n >= 0 -> n
+        _ -> 0
+      end
+      StockSucursal.upsert_stock(codigo, numero, cantidad)
+      stock_map = Map.put(socket.assigns.stock_map, codigo, cantidad)
+      {:noreply, assign(socket, stock_map: stock_map, saved: true)}
     else
       {:noreply, socket}
     end
@@ -202,16 +165,14 @@ defmodule PrettycoreWeb.StockLive do
                     <td class="px-4 py-3 font-mono text-xs text-gray-500"><%= p.codigo %></td>
                     <td class="px-4 py-3 text-gray-900"><%= p.descripcion %></td>
                     <td class="px-4 py-3 text-center">
-                      <form phx-change="editar_cantidad">
-                        <input type="hidden" name="codigo" value={p.codigo} />
-                        <input
-                          type="number"
-                          min="0"
-                          value={cantidad_actual(@stock_map, @edits, p.codigo)}
-                          name="valor"
-                          class="w-24 text-center text-sm rounded-lg border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                        />
-                      </form>
+                      <input
+                        type="number"
+                        min="0"
+                        value={cantidad_actual(@stock_map, @edits, p.codigo)}
+                        phx-blur="guardar_cantidad"
+                        phx-value-codigo={p.codigo}
+                        class="w-24 text-center text-sm rounded-lg border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                      />
                     </td>
                   </tr>
                 <% end %>
@@ -226,14 +187,14 @@ defmodule PrettycoreWeb.StockLive do
             </table>
           </div>
 
-          <div class="mt-4 flex justify-end">
-            <button
-              phx-click="guardar_stock"
-              class="px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition"
-            >
-              Guardar Stock
-            </button>
-          </div>
+          <%= if @saved do %>
+            <div class="mt-4 flex justify-end">
+              <span class="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                Guardado automáticamente
+              </span>
+            </div>
+          <% end %>
         <% end %>
       <% end %>
     </div>

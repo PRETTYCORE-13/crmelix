@@ -40,6 +40,17 @@ defmodule Prettycore.StockSucursal do
     end
   end
 
+  @doc "Decrementa el stock de un producto en una sucursal, nunca baja de 0."
+  def decrement_stock(producto_codigo, sucursal_numero, cantidad) do
+    PsqlRepo.update_all(
+      from(s in StockItem,
+        where: s.producto_codigo == ^producto_codigo and s.sucursal_numero == ^sucursal_numero,
+        update: [set: [cantidad: fragment("GREATEST(0, cantidad - ?)", ^cantidad)]]
+      ),
+      []
+    )
+  end
+
   @doc "Guarda múltiples entradas de stock: recibe %{producto_codigo => cantidad_string}."
   def guardar_stock(sucursal_numero, edits) do
     Enum.each(edits, fn {codigo, cant_str} ->

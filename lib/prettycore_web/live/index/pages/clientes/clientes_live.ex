@@ -497,71 +497,9 @@ end
      |> assign(:stats_loading, false)}
   end
 
-  ## Navegación centralizada con CASE (modelo recomendado)
+  @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    email = socket.assigns.current_user_email
-
-    case id do
-      "toggle_sidebar" ->
-        {:noreply, update(socket, :sidebar_open, &(not &1))}
-
-      "inicio" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-
-      "programacion" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/programacion")}
-
-      "programacion_sql" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/programacion/sql")}
-
-      "workorder" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/workorder")}
-
-      "clientes" ->
-        {:noreply, update(socket, :show_clientes_children, &(not &1))}
-
-      "clientes_frog" ->
-        {:noreply, socket}
-
-      "tienda" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/tienda")}
-
-      "pedidos" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-
-      "categorias" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-
-      "super_categorias" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-
-      "carrusel" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-
-      "secciones" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-
-      "usuarios" ->
-        {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "listas_precios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"            -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "productos_nativos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "clientes_nativos"           -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "stock"                      -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"                 -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas"         -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      "seccion_top10"              -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos"          -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"            -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"         -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"             -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-
-      _ ->
-        {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "clientes_frog")
   end
 
   ## Helper para verificar si todas las columnas están seleccionadas

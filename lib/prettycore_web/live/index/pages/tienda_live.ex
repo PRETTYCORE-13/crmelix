@@ -7,9 +7,11 @@ defmodule PrettycoreWeb.Tienda do
   alias Prettycore.Categorias
   alias Prettycore.Carrusel
   alias Prettycore.Secciones
+  alias Prettycore.SuperCategorias
   alias Prettycore.Pedidos
   alias Prettycore.Auth
   alias Prettycore.StockSucursal
+  alias Prettycore.Gamas
 
   @impl true
   def mount(_params, _session, socket) do
@@ -18,7 +20,7 @@ defmodule PrettycoreWeb.Tienda do
     socket =
       socket
       |> assign(:current_page, "tienda")
-      |> assign(:sidebar_open, true)
+      |> assign(:sidebar_open, false)
       |> assign(:show_programacion_children, false)
       |> assign(:show_clientes_children, false)
       |> assign(:show_prettycore_children, false)
@@ -34,12 +36,16 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:cat_nombre, "Todos")
       |> assign(:carrusel, [])
       |> assign(:secciones_tienda, [])
+      |> assign(:super_categorias_tienda, [])
       |> assign(:precios, %{})
       |> assign(:precios_nativos, %{})
       |> assign(:stock_map, %{})
+      |> assign(:todos_nativos, [])
+      |> assign(:ofertas_top10, [])
+      |> assign(:ofertas_favoritos, [])
+      |> assign(:ofertas_destacados, [])
     if connected?(socket) do
       send(self(), :load_productos)
-      send(self(), :load_categorias)
       send(self(), :load_carrusel)
       send(self(), :load_secciones)
       if role not in ["sysadmin", "admin", "oficina"] do
@@ -57,24 +63,6 @@ defmodule PrettycoreWeb.Tienda do
   # ── Info handlers ──
 
   @impl true
-  def handle_info(:load_categorias, socket) do
-    todas = Categorias.list_categorias()
-    # Categorías que tienen al menos un producto nativo activo (una sola consulta)
-    cats_usadas =
-      ProductosNativos.list_activos()
-      |> Enum.map(& &1.categoria)
-      |> MapSet.new()
-
-    cats_con_productos =
-      Enum.filter(todas, fn cat ->
-        String.downcase(cat.nombre) in ["todos", "inicio"] or
-        MapSet.member?(cats_usadas, cat.nombre)
-      end)
-
-    {:noreply, assign(socket, categorias: cats_con_productos)}
-  end
-
-  @impl true
   def handle_info(:load_carrusel, socket) do
     {:noreply, assign(socket, carrusel: Carrusel.list_activas())}
   end
@@ -88,31 +76,69 @@ defmodule PrettycoreWeb.Tienda do
   def handle_info(:load_productos, socket) do
     lista        = socket.assigns[:lista_precios]   || 1
     sucursal_num = socket.assigns[:sucursal_numero]
+    gamas_cliente = socket.assigns[:gamas] || []
+    role          = socket.assigns[:user_role]
+
     raw_nativos  = ProductosNativos.list_activos()
-    nativos      = Enum.map(raw_nativos, &ProductosNativos.to_tienda_map/1)
+    todos_nativos = Enum.map(raw_nativos, &ProductosNativos.to_tienda_map/1)
+
+    # Filtrar por gamas asignadas al cliente (solo para clientes_nativo con gamas configuradas)
+    todos_nativos =
+      if role == "cliente_nativo" and gamas_cliente != [] do
+        codigos = Gamas.codigos_set_para_gamas(gamas_cliente)
+        Enum.filter(todos_nativos, fn p -> MapSet.member?(codigos, p.codigo) end)
+      else
+        todos_nativos
+      end
+
     precios_lista = ListasPrecios.get_precios_map(lista)
     stock_map    = if sucursal_num do
-      StockSucursal.get_stock_map(sucursal_num)
+      suc_stock = StockSucursal.get_stock_map(sucursal_num)
+      # Productos sin entrada en la sucursal = 0 (agotado)
+      Map.new(todos_nativos, fn p -> {p.codigo, Map.get(suc_stock, p.codigo, 0)} end)
     else
-      # Sin sucursal: solo incluir productos con stock explícitamente registrado (no nil)
       raw_nativos
       |> Enum.filter(fn p -> not is_nil(p.stock) end)
       |> Map.new(fn p -> {p.codigo, p.stock} end)
     end
-    precios_nativos = Enum.reduce(nativos, %{}, fn p, acc ->
+    precios_nativos = Enum.reduce(todos_nativos, %{}, fn p, acc ->
       Map.put(acc, p.codigo, Map.get(precios_lista, p.codigo, p[:precio_base] || 0.0))
     end)
-    # Aplicar filtro de categoría actual (si el usuario vuelve mientras tenía una categoría activa)
+    # Categorías y super categorías derivadas de los productos ya filtrados (sin consulta extra)
+    todas_cats = Categorias.list_categorias()
+    cats_usadas = todos_nativos |> Enum.map(& &1.categoria) |> MapSet.new()
+    categorias =
+      Enum.filter(todas_cats, fn cat ->
+        String.downcase(cat.nombre) in ["todos", "inicio"] or
+        MapSet.member?(cats_usadas, cat.nombre)
+      end)
+
+    super_cats_usadas = todos_nativos |> Enum.map(& &1.super_categoria) |> Enum.reject(&is_nil/1) |> MapSet.new()
+    super_categorias_tienda =
+      SuperCategorias.list_super_categorias()
+      |> Enum.filter(fn sc -> MapSet.member?(super_cats_usadas, sc.nombre) end)
+
+    # 4 productos aleatorios por sección de ofertas (del pool ya filtrado por gama)
+    ofertas_top10      = Enum.take(Enum.shuffle(todos_nativos), 4)
+    ofertas_favoritos  = Enum.take(Enum.shuffle(todos_nativos), 4)
+    ofertas_destacados = Enum.take(Enum.shuffle(todos_nativos), 4)
+
     cat = socket.assigns.cat_nombre
     productos = if cat in [nil, "", "Todos", "INICIO"] do
-      nativos
+      todos_nativos
     else
-      Enum.filter(nativos, fn p -> p.categoria == cat end)
+      Enum.filter(todos_nativos, fn p -> p.categoria == cat end)
     end
     {:noreply, assign(socket,
+      todos_nativos: todos_nativos,
       productos: productos,
       precios_nativos: precios_nativos,
       stock_map: stock_map,
+      categorias: categorias,
+      super_categorias_tienda: super_categorias_tienda,
+      ofertas_top10: ofertas_top10,
+      ofertas_favoritos: ofertas_favoritos,
+      ofertas_destacados: ofertas_destacados,
       loading: false
     )}
   end
@@ -187,22 +213,32 @@ defmodule PrettycoreWeb.Tienda do
   @impl true
   def handle_event("add_to_cart", %{"codigo" => codigo}, socket) do
     stock_val = Map.get(socket.assigns.stock_map, codigo)
-    if stock_val != nil and stock_val == 0 do
-      {:noreply, put_flash(socket, :error, "Producto agotado")}
-    else
-    case Carritos.add_item(socket.assigns.current_user_id, codigo) do
-      {:ok, _} ->
-        %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
-        producto = Enum.find(socket.assigns.productos, &(&1.codigo == codigo))
-        nombre   = (producto && producto.descripcion) || "Producto"
-        {:noreply,
-         socket
-         |> assign(cart_items: items, cart_total_items: total)
-         |> put_flash(:info, "✓ #{nombre} agregado al carrito")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Error al agregar al carrito")}
+    cart_qty  = case Enum.find(socket.assigns.cart_items, &(&1.producto_codigo == codigo)) do
+      nil  -> 0
+      item -> item.cantidad
     end
+
+    cond do
+      stock_val != nil and stock_val == 0 ->
+        {:noreply, put_flash(socket, :error, "Producto agotado")}
+
+      stock_val != nil and cart_qty >= stock_val ->
+        {:noreply, put_flash(socket, :error, "Stock máximo alcanzado (#{stock_val} disponibles)")}
+
+      true ->
+        case Carritos.add_item(socket.assigns.current_user_id, codigo) do
+          {:ok, _} ->
+            %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
+            producto = Enum.find(socket.assigns.productos, &(&1.codigo == codigo))
+            nombre   = (producto && producto.descripcion) || "Producto"
+            {:noreply,
+             socket
+             |> assign(cart_items: items, cart_total_items: total)
+             |> put_flash(:info, "✓ #{nombre} agregado al carrito")}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Error al agregar al carrito")}
+        end
     end
   end
 
@@ -218,9 +254,15 @@ defmodule PrettycoreWeb.Tienda do
     cantidad_str = Map.get(params, "cantidad") || Map.get(params, "value", "0")
     case Integer.parse(cantidad_str) do
       {cantidad, _} when cantidad > 0 ->
-        Carritos.update_cantidad(item_id, cantidad)
-        %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
-        {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+        item      = Enum.find(socket.assigns.cart_items, &(to_string(&1.id) == item_id))
+        stock_val = item && Map.get(socket.assigns.stock_map, item.producto_codigo)
+        if stock_val != nil and cantidad > stock_val do
+          {:noreply, put_flash(socket, :error, "Stock insuficiente (#{stock_val} disponibles)")}
+        else
+          Carritos.update_cantidad(item_id, cantidad)
+          %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
+          {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+        end
       _ ->
         {:noreply, socket}
     end
@@ -252,10 +294,20 @@ defmodule PrettycoreWeb.Tienda do
            dir
          ) do
       {:ok, _pedido} ->
+        sucursal_num = socket.assigns[:sucursal_numero]
+        if sucursal_num do
+          stock_map = socket.assigns.stock_map
+          Enum.each(socket.assigns.cart_items, fn item ->
+            if Map.has_key?(stock_map, item.producto_codigo) do
+              StockSucursal.decrement_stock(item.producto_codigo, sucursal_num, item.cantidad)
+            end
+          end)
+        end
+        new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
         Carritos.vaciar_carrito(socket.assigns.current_user_id)
         {:noreply,
          socket
-         |> assign(cart_items: [], cart_total_items: 0, cart_open: false)
+         |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map)
          |> put_flash(:info, "¡Pedido realizado con éxito!")}
 
       {:error, _} ->
@@ -265,34 +317,7 @@ defmodule PrettycoreWeb.Tienda do
 
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
-    case id do
-      "toggle_sidebar" -> {:noreply, update(socket, :sidebar_open, &(not &1))}
-      "inicio"         -> {:noreply, push_navigate(socket, to: ~p"/admin/platform")}
-      "clientes"          -> {:noreply, update(socket, :show_clientes_children, &(not &1))}
-      "clientes_frog"      -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes")}
-      "toggle_prettycore_children" -> {:noreply, update(socket, :show_prettycore_children, &(not &1))}
-      "clientes_nativos"  -> {:noreply, push_navigate(socket, to: ~p"/admin/clientes-nativos")}
-      "listas_precios"    -> {:noreply, push_navigate(socket, to: ~p"/admin/listas-precios")}
-      "lista_productos"   -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "tienda"            -> {:noreply, socket}
-      "pedidos"        -> {:noreply, push_navigate(socket, to: ~p"/admin/pedidos")}
-      "categorias"       -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias")}
-      "super_categorias" -> {:noreply, push_navigate(socket, to: ~p"/admin/super-categorias")}
-      "carrusel"         -> {:noreply, push_navigate(socket, to: ~p"/admin/carrusel")}
-      "secciones"         -> {:noreply, push_navigate(socket, to: ~p"/admin/secciones")}
-      "usuarios"          -> {:noreply, push_navigate(socket, to: ~p"/admin/usuarios")}
-      "seccion_top10"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/top10")}
-      "seccion_favoritos" -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/favoritos")}
-      "seccion_destacados"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/destacados")}
-      "seccion_ofertas"   -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/ofertas")}
-      "seccion_publicidad"-> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/publicidad")}
-      "seccion_envios"     -> {:noreply, push_navigate(socket, to: ~p"/admin/seccion/envios")}
-      "productos_nativos"  -> {:noreply, push_navigate(socket, to: ~p"/admin/productos-nativos")}
-      "stock"              -> {:noreply, push_navigate(socket, to: ~p"/admin/stock")}
-      "sucursales"         -> {:noreply, push_navigate(socket, to: ~p"/admin/sucursales")}
-      "categorias_nativas" -> {:noreply, push_navigate(socket, to: ~p"/admin/categorias-nativas")}
-      _                    -> {:noreply, socket}
-    end
+    PrettycoreWeb.AdminNav.handle_nav(id, socket, "tienda")
   end
 
   # ── Render: SysAdmin (sin layout admin, con sidebar sysadmin) ──
@@ -431,8 +456,6 @@ defmodule PrettycoreWeb.Tienda do
           <% end %>
           <!-- CONTENIDO: todas las secciones -->
           <%
-            tipos_promo_global = ["top10", "favoritos", "destacados"]
-            primer_promo_id = secs |> Enum.find(&(&1.tipo in tipos_promo_global)) |> then(fn s -> s && s.id end)
             secs_with_prev =
               secs
               |> Enum.with_index()
@@ -524,71 +547,72 @@ defmodule PrettycoreWeb.Tienda do
                     <% else %>
                       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3">
                         <%= for producto <- @productos do %>
+                          <% stock_val = Map.get(@stock_map, producto.codigo) %>
+                          <% agotado   = stock_val != nil and stock_val == 0 %>
+                          <% precio_val = Map.get(@precios, producto.codigo) || Map.get(@precios_nativos, producto.codigo) %>
                           <div class="bg-white rounded-xl overflow-hidden hover:shadow-lg transition-all duration-200 flex flex-col group">
-                            <div class="relative w-full aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
-                              <%= if producto.imagen_url && producto.imagen_url != "" do %>
-                                <img src={"#{producto.imagen_url}?t=#{DateTime.to_unix(producto.updated_at)}"} alt={producto.descripcion} class="w-full h-full object-cover" />
-                              <% else %>
-                                <svg class="w-10 h-10 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              <% end %>
-                              <span class={"absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold #{if producto.activo, do: "bg-green-500/90 text-white", else: "bg-black/40 text-white"}"}>
-                                <%= if producto.activo, do: "Activo", else: "Inactivo" %>
-                              </span>
-                            </div>
-                            <div class="p-2.5 flex flex-col flex-1">
-                              <h3 class="text-xs font-semibold text-gray-900 leading-tight line-clamp-2 mb-1"><%= producto.descripcion %></h3>
-                              <div class="mt-auto pt-2 border-t border-gray-100 space-y-0.5 text-[11px]">
-                                <div class="flex justify-between text-gray-400">
-                                  <span>Cód.</span><span class="font-mono font-medium text-gray-600"><%= producto.codigo %></span>
-                                </div>
-                                <div class="flex justify-between text-gray-400">
-                                  <span>Mín.</span><span class="font-medium text-gray-600"><%= producto.pzas_min_vta %> pza</span>
-                                </div>
-                                <% precio_val = Map.get(@precios, producto.codigo) || Map.get(@precios_nativos, producto.codigo) || Map.get(@precios, "0") %>
-                                <%= if precio_val do %>
-                                  <div class="flex justify-between items-center pt-0.5">
-                                    <span class="text-gray-400">Precio</span>
-                                    <span class="font-bold text-green-600 text-xs">$<%= :erlang.float_to_binary(precio_val / 1, decimals: 2) %></span>
-                                  </div>
+                            <!-- Área clickeable → abre detalle completo -->
+                            <button phx-click="ver_detalle" phx-value-codigo={producto.codigo}
+                              class="flex flex-col text-left w-full focus:outline-none active:scale-[0.98] transition-transform">
+                              <div class="relative w-full aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+                                <%= if producto.imagen_url && producto.imagen_url != "" do %>
+                                  <img src={"#{producto.imagen_url}?t=#{DateTime.to_unix(producto.updated_at)}"} alt={producto.descripcion} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                                <% else %>
+                                  <svg class="w-10 h-10 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
                                 <% end %>
-                                <% stock_val = Map.get(@stock_map, producto.codigo) %>
-                                <div class="flex justify-between items-center pt-0.5">
-                                  <span class="text-gray-400">Stock</span>
-                                  <%= cond do %>
-                                    <% stock_val == nil -> %>
-                                      <span class="font-semibold text-xs text-gray-400">—</span>
-                                    <% stock_val == 0 -> %>
-                                      <span class="font-semibold text-xs text-red-500">Agotado</span>
-                                    <% true -> %>
-                                      <span class="font-semibold text-xs text-blue-600"><%= stock_val %> pza<%= if stock_val != 1, do: "s" %></span>
+                                <span class={"absolute top-2 left-2 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold #{if producto.activo, do: "bg-green-500/90 text-white", else: "bg-black/40 text-white"}"}>
+                                  <%= if producto.activo, do: "Activo", else: "Inactivo" %>
+                                </span>
+                              </div>
+                              <div class="px-2.5 pt-2.5 flex flex-col flex-1">
+                                <h3 class="text-xs font-semibold text-gray-900 leading-tight line-clamp-2 mb-1"><%= producto.descripcion %></h3>
+                                <div class="mt-auto pt-2 border-t border-gray-100 space-y-0.5 text-[11px]">
+                                  <div class="flex justify-between text-gray-400">
+                                    <span>Cód.</span><span class="font-mono font-medium text-gray-600"><%= producto.codigo %></span>
+                                  </div>
+                                  <div class="flex justify-between text-gray-400">
+                                    <span>Mín.</span><span class="font-medium text-gray-600"><%= producto.pzas_min_vta %> pza</span>
+                                  </div>
+                                  <%= if precio_val do %>
+                                    <div class="flex justify-between items-center pt-0.5">
+                                      <span class="text-gray-400">Precio</span>
+                                      <span class="font-bold text-green-600 text-xs">$<%= :erlang.float_to_binary(precio_val / 1, decimals: 2) %></span>
+                                    </div>
                                   <% end %>
+                                  <div class="flex justify-between items-center pt-0.5">
+                                    <span class="text-gray-400">Stock</span>
+                                    <%= cond do %>
+                                      <% stock_val == nil -> %>
+                                        <span class="font-semibold text-xs text-gray-400">—</span>
+                                      <% stock_val == 0 -> %>
+                                        <span class="font-semibold text-xs text-red-500">Agotado</span>
+                                      <% true -> %>
+                                        <span class="font-semibold text-xs text-blue-600"><%= stock_val %> pza<%= if stock_val != 1, do: "s" %></span>
+                                    <% end %>
+                                  </div>
                                 </div>
                               </div>
-                              <% agotado = Map.get(@stock_map, producto.codigo) == 0 %>
+                            </button>
+                            <!-- Botón de acción separado -->
+                            <div class="px-2.5 pb-2.5 pt-2">
                               <%= if agotado do %>
-                                <div class="mt-2">
-                                  <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 border border-red-200 text-red-500 text-[10px] font-semibold rounded-full">
-                                    Agotado
-                                  </span>
-                                </div>
+                                <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-red-50 border border-red-200 text-red-500 text-[10px] font-semibold rounded-full">
+                                  Agotado
+                                </span>
                               <% else %>
                                 <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
-                                  <div class="mt-2">
-                                    <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
-                                      class="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-gray-900 hover:bg-blue-500 text-white text-[11px] font-medium rounded-full transition-colors">
-                                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                      Agregar
-                                    </button>
-                                  </div>
+                                  <button phx-click="add_to_cart" phx-value-codigo={producto.codigo}
+                                    class="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-gray-900 hover:bg-purple-600 text-white text-[11px] font-medium rounded-full transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                    Agregar
+                                  </button>
                                 <% end %>
                                 <%= if @user_role in ["admin", "oficina"] do %>
-                                  <div class="mt-2">
-                                    <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[10px] font-medium rounded-full">
-                                      Solo inspección
-                                    </span>
-                                  </div>
+                                  <span class="w-full flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[10px] font-medium rounded-full">
+                                    Solo inspección
+                                  </span>
                                 <% end %>
                               <% end %>
                             </div>
@@ -599,47 +623,26 @@ defmodule PrettycoreWeb.Tienda do
               </div>
             <% end %>
 
-            <!-- ══ SECCIONES PROMO: carrusel snap (top10/favoritos/destacados) ══ -->
-            <%
-              tipos_promo = tipos_promo_global
-              es_primer_promo = sec.tipo in tipos_promo and sec.id == primer_promo_id
-            %>
-            <%= if es_primer_promo do %>
+            <!-- ══ SECCIÓN: CARRUSEL DE OFERTAS ══ -->
+            <%= if sec.tipo == "ofertas" do %>
               <%
-                # Recolectar TODAS las secciones promo activas, sin importar posición
-                secs_promo_grupo = Enum.filter(secs, &(&1.tipo in tipos_promo))
-                margin_top = if prev_tipo == "carrusel", do: "margin-top:-16px;", else: ""
-                # Leer slides_orden unificado del config de la sección "ofertas"
-                ofertas_sec = Enum.find(secs, &(&1.tipo == "ofertas"))
-                ofertas_cfg = (ofertas_sec && ofertas_sec.config) || %{}
-                destacados_cfg = (Enum.find(secs_promo_grupo, &(&1.tipo == "destacados")) || %{config: %{}}).config || %{}
+                ofertas_cfg  = sec.config || %{}
                 slides_orden =
                   case ofertas_cfg["slides_orden"] do
                     list when is_list(list) and list != [] -> list
                     _ ->
-                      case destacados_cfg["slides_orden"] do
-                        list when is_list(list) and list != [] -> list
-                        _ ->
-                          # Fallback: secciones en orden + imágenes viejas al final
-                          Enum.map(secs_promo_grupo, &%{"kind" => "seccion", "tipo" => &1.tipo}) ++
-                          Enum.map(destacados_cfg["imagen_slides"] || [], &Map.put(&1, "kind", "imagen"))
-                      end
+                      ~w(top10 favoritos destacados)
+                      |> Enum.map(&%{"kind" => "seccion", "tipo" => &1})
                   end
+                slides_count  = length(slides_orden)
+                margin_top    = if prev_tipo == "carrusel", do: "margin-top:-16px;", else: ""
+                desktop_carousel = slides_count > 3
+                track_overflow   = if desktop_carousel, do: "sm:overflow-x-hidden", else: "sm:overflow-x-visible"
+                card_desktop     = if desktop_carousel, do: "sm:w-80", else: "sm:flex-1"
+                controls_hide    = if desktop_carousel, do: "", else: "sm:hidden"
               %>
-              <% slides_count = length(slides_orden) %>
               <div style={"padding:8px;#{margin_top}position:relative;z-index:20;"}>
-                <%
-                  # En PC: ≤3 slides → fila fija (sin carrusel). ≥4 → carrusel con tarjetas de ancho fijo.
-                  # En móvil: siempre carrusel, 1 tarjeta por vez (w-full).
-                  # El ancho de la tarjeta en desktop para el modo carrusel es 240px (~w-60).
-                  # Con sm:overflow-x-visible + sm:flex-1 las ≤3 tarjetas llenan el espacio y son visibles todas.
-                  desktop_carousel = slides_count > 3
-                  track_overflow = if desktop_carousel, do: "sm:overflow-x-hidden", else: "sm:overflow-x-visible"
-                  card_desktop   = if desktop_carousel, do: "sm:w-80", else: "sm:flex-1"
-                  controls_hide  = if desktop_carousel, do: "", else: "sm:hidden"
-                %>
                 <div class="relative">
-                  <!-- Track con hook -->
                   <div id="promo-carrusel"
                     phx-hook="PromoCarrusel"
                     class={"flex overflow-x-hidden snap-x snap-mandatory sm:gap-3 #{track_overflow}"}
@@ -653,18 +656,21 @@ defmodule PrettycoreWeb.Tienda do
                         </div>
                       <% else %>
                         <%
-                          slide_sec = Enum.find(secs_promo_grupo, &(&1.tipo == slide["tipo"]))
-                          s_cfg     = (slide_sec && slide_sec.config) || %{}
-                          s_color   = s_cfg["color"] || case slide["tipo"] do
+                          s_cfg    = ofertas_cfg[slide["tipo"]] || %{}
+                          s_color  = s_cfg["color"] || case slide["tipo"] do
                             "top10" -> "#c0392b"; "favoritos" -> "#1a5276"; "destacados" -> "#1e8449"; _ -> "#6c3483"
                           end
-                          s_titulo  = s_cfg["titulo"] || (slide_sec && slide_sec.nombre) || slide["tipo"]
-                          s_prods   = case s_cfg do
-                            %{"codigos" => c} when is_list(c) and c != [] -> Enum.filter(@productos, &(&1.codigo in c))
-                            _ -> []
-                          end |> Enum.take(4)
+                          s_titulo = s_cfg["titulo"] || case slide["tipo"] do
+                            "top10" -> "Top 10"; "favoritos" -> "Favoritos"; "destacados" -> "Destacados"; t -> t
+                          end
+                          s_prods = case slide["tipo"] do
+                            "top10"      -> @ofertas_top10
+                            "favoritos"  -> @ofertas_favoritos
+                            "destacados" -> @ofertas_destacados
+                            _            -> []
+                          end
                         %>
-                        <%= if slide_sec && s_prods != [] do %>
+                        <%= if s_prods != [] do %>
                           <div class={"flex-none snap-start w-full #{card_desktop} rounded-2xl overflow-hidden p-3 self-start"}
                             style={"background-color:#{s_color};"}>
                             <h3 class="text-white font-black text-lg leading-tight mb-2 px-1"><%= s_titulo %></h3>
@@ -691,13 +697,10 @@ defmodule PrettycoreWeb.Tienda do
                               <% end %>
                             </div>
                           </div>
-                        <% else %>
-                          <div class={"flex-none snap-start w-full #{card_desktop}"}></div>
                         <% end %>
                       <% end %>
                     <% end %>
                   </div>
-                  <!-- Botones prev / next (siempre en móvil, solo en PC si hay >3) -->
                   <%= if slides_count > 1 do %>
                     <button id="promo-prev"
                       class={"absolute left-1 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/50 text-white rounded-full w-7 h-7 flex items-center justify-center shadow transition #{controls_hide}"}>
@@ -711,7 +714,6 @@ defmodule PrettycoreWeb.Tienda do
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                       </svg>
                     </button>
-                    <!-- Dots -->
                     <div class={"flex justify-center gap-1.5 mt-2 #{controls_hide}"}>
                       <%= for {_, di} <- Enum.with_index(slides_orden) do %>
                         <div id={"promo-dot-#{di}"}
@@ -724,8 +726,30 @@ defmodule PrettycoreWeb.Tienda do
                 </div>
               </div>
             <% end %>
-            <!-- Saltar tipos promo que ya se renderizaron arriba -->
-            <%= if sec.tipo in tipos_promo and prev_tipo in tipos_promo do %>
+
+            <!-- ══ SECCIÓN: SUPER CATEGORÍAS ══ -->
+            <%= if sec.tipo == "supercategorias" and @super_categorias_tienda != [] do %>
+              <div style={"padding:12px 12px 8px;#{if prev_tipo == "carrusel", do: "margin-top:-20px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}background:#ffffff;position:relative;z-index:20;"}>
+                <p class="text-sm font-bold text-gray-900 mb-3"><%= sec.nombre %></p>
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                  <%= for sc <- @super_categorias_tienda do %>
+                    <div class="flex flex-col items-center gap-1.5">
+                      <div class="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100">
+                        <%= if sc.imagen_url && sc.imagen_url != "" do %>
+                          <img src={sc.imagen_url} alt={sc.nombre} class="w-full h-full object-cover" />
+                        <% else %>
+                          <div class="w-full h-full flex items-center justify-center bg-purple-50">
+                            <span class="text-xl font-black text-purple-300">
+                              <%= (String.first(sc.nombre || "?") || "?") |> String.upcase() %>
+                            </span>
+                          </div>
+                        <% end %>
+                      </div>
+                      <span class="text-[10px] font-medium text-gray-700 text-center leading-tight line-clamp-2 w-full"><%= sc.nombre %></span>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
             <% end %>
 
             <!-- ══ SECCIÓN: PUBLICIDAD ══ -->
@@ -915,141 +939,173 @@ defmodule PrettycoreWeb.Tienda do
       </div><!-- fin contenido -->
     </section>
 
-    <!-- MODAL DETALLE PRODUCTO -->
+    <!-- DETALLE PRODUCTO FULL SCREEN -->
     <%= if @producto_detalle do %>
       <%
-        pd = @producto_detalle
-        pd_precio = Map.get(@precios, pd.codigo) || Map.get(@precios_nativos, pd.codigo) || Map.get(@precios, "0")
-        pd_raw = pd.raw || %{}
+        pd        = @producto_detalle
+        pd_precio = Map.get(@precios, pd.codigo) || Map.get(@precios_nativos, pd.codigo)
+        pd_raw    = pd.raw || %{}
         pd_desc_larga = pd_raw["descripcionLarga"] || pd_raw["desc_larga"] || pd_raw["description"] || ""
-        pd_unidad = pd_raw["unidadMedida"] || pd_raw["unidad"] || ""
-        pd_peso = pd_raw["peso"] || ""
-        pd_volumen = pd_raw["volumen"] || ""
-        pd_categoria = pd_raw["categoria"] || pd_raw["linea"] || pd_raw["PRODUC_LINEA"] || pd_raw["sublinea"] || ""
+        pd_unidad     = pd_raw["unidadMedida"] || pd_raw["unidad"] || ""
+        pd_peso       = pd_raw["peso"] || ""
+        pd_volumen    = pd_raw["volumen"] || ""
+        pd_categoria  = pd.categoria || pd_raw["categoria"] || pd_raw["linea"] || ""
+        pd_stock      = Map.get(@stock_map, pd.codigo)
+        pd_agotado    = pd_stock != nil and pd_stock == 0
       %>
-      <div class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center">
-        <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="cerrar_detalle"></div>
-        <!-- Panel -->
-        <div class="relative w-full sm:max-w-md bg-white sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden" style="max-height:92vh;">
-          <!-- Header con imagen -->
-          <div class="relative bg-gray-50 flex items-center justify-center" style="min-height:220px;">
-            <%= if pd.imagen_url && pd.imagen_url != "" do %>
-              <img src={"#{pd.imagen_url}?t=#{DateTime.to_unix(pd.updated_at)}"} alt={pd.descripcion}
-                class="w-full object-contain p-4" style="max-height:220px;" />
-            <% else %>
-              <svg class="w-20 h-20 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
-            <% end %>
-            <!-- Botón cerrar -->
-            <button phx-click="cerrar_detalle"
-              class="absolute top-3 right-3 w-8 h-8 bg-white rounded-full shadow flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-            <!-- Badge activo -->
-            <span class={"absolute top-3 left-3 text-[10px] font-bold px-2 py-0.5 rounded-full #{if pd.activo, do: "bg-green-500 text-white", else: "bg-gray-400 text-white"}"}>
-              <%= if pd.activo, do: "Disponible", else: "No disponible" %>
-            </span>
-          </div>
+      <div class="fixed inset-0 z-[70] bg-white overflow-y-auto" style="overscroll-behavior:contain;">
 
-          <!-- Contenido scrolleable -->
-          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4" style="overscroll-behavior:contain;">
-            <!-- Nombre y marca -->
-            <div>
-              <h2 class="text-lg font-bold text-gray-900 leading-tight"><%= pd.descripcion %></h2>
-              <%= if pd.desc_corta && pd.desc_corta != "" do %>
-                <p class="text-sm text-gray-500 mt-0.5"><%= pd.desc_corta %></p>
-              <% end %>
-              <%= if pd.marca && pd.marca != "" do %>
-                <span class="inline-block mt-1.5 text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full"><%= pd.marca %></span>
-              <% end %>
+        <!-- Barra superior: volver -->
+        <div class="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-3 flex items-center gap-3">
+          <button phx-click="cerrar_detalle"
+            class="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <span class="text-gray-300">|</span>
+          <p class="text-xs text-gray-400 truncate"><%= pd_categoria %><%= if pd_categoria != "", do: " › " %><%= pd.descripcion %></p>
+        </div>
+
+        <!-- Contenido principal: imagen + info -->
+        <div class="max-w-5xl mx-auto px-4 py-6 md:py-10">
+          <div class="flex flex-col md:flex-row gap-8 md:gap-12">
+
+            <!-- Columna imagen -->
+            <div class="md:w-2/5 flex-shrink-0">
+              <div class="relative bg-gray-50 rounded-2xl overflow-hidden aspect-square flex items-center justify-center border border-gray-100">
+                <%= if pd.imagen_url && pd.imagen_url != "" do %>
+                  <img src={"#{pd.imagen_url}?t=#{DateTime.to_unix(pd.updated_at)}"} alt={pd.descripcion}
+                    class="w-full h-full object-contain p-6" />
+                <% else %>
+                  <svg class="w-24 h-24 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                <% end %>
+                <!-- Badge disponible/agotado -->
+                <%
+                  badge_color = if pd_agotado, do: "bg-red-500 text-white", else: if(pd.activo, do: "bg-green-500 text-white", else: "bg-gray-400 text-white")
+                  badge_label = if pd_agotado, do: "Agotado", else: if(pd.activo, do: "Disponible", else: "No disponible")
+                %>
+                <span class={"absolute top-3 left-3 text-[10px] font-bold px-2.5 py-1 rounded-full #{badge_color}"}>
+                  <%= badge_label %>
+                </span>
+              </div>
             </div>
 
-            <!-- Precio -->
-            <%= if pd_precio do %>
-              <div class="flex items-baseline gap-2">
-                <span class="text-3xl font-black text-green-600">$<%= :erlang.float_to_binary(pd_precio / 1, decimals: 2) %></span>
-                <%= if pd.iva && pd.iva > 0 do %>
-                  <span class="text-xs text-gray-400">+ IVA <%= pd.iva %>%</span>
+            <!-- Columna info -->
+            <div class="md:w-3/5 flex flex-col gap-5">
+
+              <!-- Nombre + marca -->
+              <div>
+                <%= if pd.marca && pd.marca != "" do %>
+                  <p class="text-xs font-semibold text-purple-600 uppercase tracking-widest mb-1"><%= pd.marca %></p>
+                <% end %>
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-900 leading-tight"><%= pd.descripcion %></h1>
+                <%= if pd.desc_corta && pd.desc_corta != "" do %>
+                  <p class="text-sm text-gray-500 mt-1"><%= pd.desc_corta %></p>
                 <% end %>
               </div>
-            <% end %>
 
-            <!-- Especificaciones clave -->
-            <div class="grid grid-cols-2 gap-2">
-              <div class="bg-gray-50 rounded-xl p-3">
-                <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Código</p>
-                <p class="text-sm font-bold font-mono text-gray-800"><%= pd.codigo %></p>
+              <!-- Precio -->
+              <div class="py-4 border-t border-b border-gray-100">
+                <%= if pd_precio do %>
+                  <p class="text-4xl font-black text-green-600">$<%= :erlang.float_to_binary(pd_precio / 1, decimals: 2) %></p>
+                  <%= if pd.iva && pd.iva > 0 do %>
+                    <p class="text-xs text-gray-400 mt-0.5">+ IVA <%= pd.iva %>%</p>
+                  <% end %>
+                <% else %>
+                  <p class="text-sm text-gray-400 italic">Precio no disponible</p>
+                <% end %>
               </div>
-              <div class="bg-gray-50 rounded-xl p-3">
-                <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Mín. compra</p>
-                <p class="text-sm font-bold text-gray-800"><%= pd.pzas_min_vta %> pza<%= if pd.pzas_min_vta != 1, do: "s" %></p>
+
+              <!-- Especificaciones -->
+              <div class="space-y-2">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Especificaciones</h3>
+                <table class="w-full text-sm">
+                  <tbody class="divide-y divide-gray-50">
+                    <tr class="flex justify-between py-2">
+                      <td class="text-gray-500">Código</td>
+                      <td class="font-mono font-semibold text-gray-800"><%= pd.codigo %></td>
+                    </tr>
+                    <tr class="flex justify-between py-2">
+                      <td class="text-gray-500">Mínimo de compra</td>
+                      <td class="font-semibold text-gray-800"><%= pd.pzas_min_vta %> pza<%= if pd.pzas_min_vta != 1, do: "s" %></td>
+                    </tr>
+                    <%
+                      stock_color = if pd_agotado, do: "text-red-500", else: if(pd_stock == nil, do: "text-gray-400", else: "text-blue-600")
+                      stock_label = if pd_agotado, do: "Agotado", else: if(pd_stock == nil, do: "—", else: "#{pd_stock} pza#{if pd_stock != 1, do: "s"}")
+                    %>
+                    <tr class="flex justify-between py-2">
+                      <td class="text-gray-500">Stock</td>
+                      <td class={"font-semibold #{stock_color}"}><%= stock_label %></td>
+                    </tr>
+                    <%= if pd_unidad != "" do %>
+                      <tr class="flex justify-between py-2">
+                        <td class="text-gray-500">Unidad</td>
+                        <td class="font-semibold text-gray-800"><%= pd_unidad %></td>
+                      </tr>
+                    <% end %>
+                    <%= if pd_peso != "" do %>
+                      <tr class="flex justify-between py-2">
+                        <td class="text-gray-500">Peso</td>
+                        <td class="font-semibold text-gray-800"><%= pd_peso %></td>
+                      </tr>
+                    <% end %>
+                    <%= if pd_volumen != "" do %>
+                      <tr class="flex justify-between py-2">
+                        <td class="text-gray-500">Volumen</td>
+                        <td class="font-semibold text-gray-800"><%= pd_volumen %></td>
+                      </tr>
+                    <% end %>
+                    <%= if pd_categoria != "" do %>
+                      <tr class="flex justify-between py-2">
+                        <td class="text-gray-500">Categoría</td>
+                        <td class="font-semibold text-gray-800"><%= pd_categoria %></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
               </div>
-              <%= if pd_unidad != "" do %>
-                <div class="bg-gray-50 rounded-xl p-3">
-                  <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Unidad</p>
-                  <p class="text-sm font-bold text-gray-800"><%= pd_unidad %></p>
+
+              <!-- Descripción larga -->
+              <%= if pd_desc_larga != "" do %>
+                <div class="pt-2 border-t border-gray-100">
+                  <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Descripción</h3>
+                  <p class="text-sm text-gray-600 leading-relaxed"><%= pd_desc_larga %></p>
                 </div>
               <% end %>
-              <%= if pd_peso != "" do %>
-                <div class="bg-gray-50 rounded-xl p-3">
-                  <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Peso</p>
-                  <p class="text-sm font-bold text-gray-800"><%= pd_peso %></p>
-                </div>
-              <% end %>
-              <%= if pd_volumen != "" do %>
-                <div class="bg-gray-50 rounded-xl p-3">
-                  <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Volumen</p>
-                  <p class="text-sm font-bold text-gray-800"><%= pd_volumen %></p>
-                </div>
-              <% end %>
-              <%= if pd_categoria != "" do %>
-                <div class="bg-gray-50 rounded-xl p-3 col-span-2">
-                  <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-0.5">Categoría</p>
-                  <p class="text-sm font-bold text-gray-800"><%= pd_categoria %></p>
-                </div>
-              <% end %>
+
+              <!-- Botón agregar -->
+              <div class="pt-2 mt-auto">
+                <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
+                  <%= if pd_agotado do %>
+                    <div class="w-full flex items-center justify-center gap-2 py-4 bg-red-50 border border-red-200 text-red-500 font-semibold rounded-2xl text-sm">
+                      Agotado
+                    </div>
+                  <% else %>
+                    <button phx-click="add_to_cart" phx-value-codigo={pd.codigo}
+                      class="w-full flex items-center justify-center gap-2 py-4 bg-gray-900 hover:bg-purple-600 text-white font-semibold rounded-2xl transition-colors text-sm shadow-lg">
+                      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                      </svg>
+                      Agregar al carrito
+                    </button>
+                  <% end %>
+                <% end %>
+                <%= if @user_role in ["admin", "oficina"] do %>
+                  <div class="w-full flex items-center justify-center gap-2 py-4 bg-amber-50 border border-amber-200 text-amber-600 font-medium rounded-2xl text-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                    </svg>
+                    Modo inspección
+                  </div>
+                <% end %>
+              </div>
+
             </div>
-
-            <!-- Descripción larga -->
-            <%= if pd_desc_larga != "" do %>
-              <div>
-                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descripción</p>
-                <p class="text-sm text-gray-600 leading-relaxed"><%= pd_desc_larga %></p>
-              </div>
-            <% end %>
-
           </div>
-
-          <!-- Footer fijo con botón agregar -->
-          <%= if @user_role not in ["sysadmin", "admin", "oficina"] do %>
-            <div class="border-t border-gray-100 px-5 py-4 bg-white">
-              <button
-                phx-click="add_to_cart"
-                phx-value-codigo={pd.codigo}
-                class="w-full flex items-center justify-center gap-2 py-3.5 bg-gray-900 hover:bg-purple-600 text-white font-semibold rounded-xl transition-colors text-sm shadow-md"
-              >
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
-                </svg>
-                Agregar al carrito
-              </button>
-            </div>
-          <% end %>
-          <%= if @user_role in ["admin", "oficina"] do %>
-            <div class="border-t border-gray-100 px-5 py-4 bg-white">
-              <div class="w-full flex items-center justify-center gap-2 py-3 bg-amber-50 border border-amber-200 text-amber-600 font-medium rounded-xl text-sm">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
-                Modo inspección
-              </div>
-            </div>
-          <% end %>
         </div>
       </div>
     <% end %>
@@ -1186,17 +1242,18 @@ defmodule PrettycoreWeb.Tienda do
     {:noreply, assign(socket, cat_idx: idx, cat_nombre: cat_nombre, search: "", productos: productos)}
   end
 
-  defp list_productos_by_categoria(_socket, cat_nombre) do
-    all = ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1)
+  defp list_productos_by_categoria(socket, cat_nombre) do
+    all = socket.assigns[:todos_nativos] || (ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1))
     es_todos = cat_nombre in [nil, ""] or String.downcase(cat_nombre) in ["todos", "inicio", "all"]
-    if es_todos do
-      all
-    else
-      Enum.filter(all, fn p -> p.categoria == cat_nombre end)
-    end
+    if es_todos, do: all, else: Enum.filter(all, fn p -> p.categoria == cat_nombre end)
   end
 
-  defp search_productos(_socket, q) do
-    ProductosNativos.search(q) |> Enum.map(&ProductosNativos.to_tienda_map/1)
+  defp search_productos(socket, q) do
+    all = socket.assigns[:todos_nativos] || (ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1))
+    q_down = String.downcase(q)
+    Enum.filter(all, fn p ->
+      String.contains?(String.downcase(p.descripcion || ""), q_down) or
+      String.contains?(String.downcase(p.codigo || ""), q_down)
+    end)
   end
 end

@@ -22,7 +22,7 @@ defmodule PrettycoreWeb.LoadingLive do
     {:noreply,
      socket
      |> assign(:loading, false)
-     |> push_navigate(to: ~p"/admin/platform")}
+     |> push_navigate(to: ~p"/admin/tienda")}
   end
 
   def render(assigns) do

@@ -3,7 +3,6 @@ defmodule PrettycoreWeb.MenuLayout do
   alias Phoenix.LiveView.JS
 
   @menu [
-    %{id: "inicio", label: "Inicio"},
   #  %{id: "programacion", label: "Programación"},
   #  %{id: "workorder", label: "Orden T"},
     %{id: "clientes", label: "Clientes"},
@@ -121,14 +120,17 @@ defmodule PrettycoreWeb.MenuLayout do
                       phx-click={@menu_event}
                       phx-value-id="clientes_frog"
                     >
+                      <span class="pc-submenu-icon">
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                      </span>
                       <span class="pc-submenu-dot" />
                       <span class="pc-nav-label">Clientes Frog</span>
                     </button>
                   </div>
                 <% end %>
                 <%= if item.id == "tienda" and @current_page in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
-                      "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_ofertas", "seccion_publicidad", "seccion_envios",
-                      "productos_nativos", "clientes_nativos", "listas_precios", "lista_productos",
+                      "seccion_ofertas", "seccion_publicidad", "seccion_envios",
+                      "productos_nativos", "clientes_nativos", "listas_precios", "gamas", "lista_productos",
                       "stock", "sucursales", "pedidos"] and
                     (can_see_categorias?(@user_role, @user_permissions) or
                      (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions)) or
@@ -143,6 +145,9 @@ defmodule PrettycoreWeb.MenuLayout do
                           phx-click={@menu_event}
                           phx-value-id="secciones"
                         >
+                          <span class="pc-submenu-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                          </span>
                           <span class="pc-submenu-dot" />
                           <span class="pc-nav-label">Administrar</span>
                         </button>
@@ -162,7 +167,7 @@ defmodule PrettycoreWeb.MenuLayout do
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                           </svg>
                         </button>
-                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_top10","seccion_favoritos","seccion_destacados","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
+                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
                           <div class="pl-3 pt-1 pb-1 space-y-0.5">
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
                             <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={@menu_event} phx-value-id="categorias">Categorías</button>
@@ -174,10 +179,7 @@ defmodule PrettycoreWeb.MenuLayout do
                             <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={@menu_event} phx-value-id="stock">Stock</button>
                             <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={@menu_event} phx-value-id="sucursales">Sucursales</button>
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Contenido</p>
-                            <button type="button" class={mobile_admin_item_class("seccion_top10", @current_page)} phx-click={@menu_event} phx-value-id="seccion_top10">Top 10</button>
-                            <button type="button" class={mobile_admin_item_class("seccion_favoritos", @current_page)} phx-click={@menu_event} phx-value-id="seccion_favoritos">Favoritos</button>
-                            <button type="button" class={mobile_admin_item_class("seccion_destacados", @current_page)} phx-click={@menu_event} phx-value-id="seccion_destacados">Destacados</button>
-                            <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={@menu_event} phx-value-id="seccion_ofertas">Top10, Dest. y Favs</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={@menu_event} phx-value-id="seccion_ofertas">Carrusel Ofertas</button>
                             <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={@menu_event} phx-value-id="seccion_publicidad">Publicidad</button>
                             <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={@menu_event} phx-value-id="seccion_envios">Envíos</button>
                           </div>
@@ -192,6 +194,9 @@ defmodule PrettycoreWeb.MenuLayout do
                         phx-click={@menu_event}
                         phx-value-id="pedidos"
                       >
+                        <span class="pc-submenu-icon">
+                          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        </span>
                         <span class="pc-submenu-dot" />
                         <span class="pc-nav-label">Pedidos</span>
                       </button>
@@ -205,15 +210,18 @@ defmodule PrettycoreWeb.MenuLayout do
                         phx-value-id="toggle_prettycore_children"
                       >
                         <span class="flex items-center gap-1.5">
+                          <span class="pc-submenu-icon">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                          </span>
                           <span class="pc-submenu-dot" />
                           <span class="pc-nav-label">Clientes</span>
                         </span>
-                        <svg class={"w-3 h-3 flex-shrink-0 transition-transform #{if @show_prettycore_children or @current_page in ["clientes_nativos","listas_precios","lista_productos"], do: "rotate-180", else: ""}"}
+                        <svg class={"pc-submenu-chevron w-3 h-3 flex-shrink-0 transition-transform #{if @show_prettycore_children or @current_page in ["clientes_nativos","listas_precios","gamas","lista_productos"], do: "rotate-180", else: ""}"}
                           fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                         </svg>
                       </button>
-                      <%= if @show_prettycore_children or @current_page in ["clientes_nativos", "listas_precios", "lista_productos"] do %>
+                      <%= if @show_prettycore_children or @current_page in ["clientes_nativos", "listas_precios", "gamas", "lista_productos"] do %>
                         <div class="pc-subsubmenu">
                           <button type="button"
                             class={subsubmenu_item_class("clientes_nativos", @current_page)}
@@ -226,6 +234,12 @@ defmodule PrettycoreWeb.MenuLayout do
                             phx-click={@menu_event} phx-value-id="listas_precios">
                             <span class="pc-subsubmenu-dot" />
                             <span class="pc-nav-label">Lista de Precios</span>
+                          </button>
+                          <button type="button"
+                            class={subsubmenu_item_class("gamas", @current_page)}
+                            phx-click={@menu_event} phx-value-id="gamas">
+                            <span class="pc-subsubmenu-dot" />
+                            <span class="pc-nav-label">Gama de Productos</span>
                           </button>
                         </div>
                       <% end %>
@@ -362,7 +376,7 @@ defmodule PrettycoreWeb.MenuLayout do
   end
 
   defp do_filter_menu(menu, _perms, "sysadmin"), do: menu
-  defp do_filter_menu(menu, nil, "user"), do: Enum.filter(menu, &(&1.id == "inicio"))
+  defp do_filter_menu(menu, nil, "user"), do: Enum.filter(menu, &(&1.id == "tienda"))
   defp do_filter_menu(menu, nil, _role), do: Enum.reject(menu, &Map.get(&1, :admin_only, false))
   defp do_filter_menu(menu, perms, _role) do
     menu
@@ -377,9 +391,8 @@ defmodule PrettycoreWeb.MenuLayout do
 
   defp menu_active?("tienda", current)
        when current in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
-                        "seccion_top10", "seccion_favoritos", "seccion_destacados", "seccion_ofertas",
-                        "seccion_publicidad", "seccion_envios", "productos_nativos",
-                        "clientes_nativos", "listas_precios", "lista_productos",
+                        "seccion_ofertas", "seccion_publicidad", "seccion_envios",
+                        "productos_nativos", "clientes_nativos", "listas_precios", "gamas", "lista_productos",
                         "stock", "sucursales", "pedidos"],
        do: true
 
@@ -459,12 +472,9 @@ defmodule PrettycoreWeb.MenuLayout do
       <div>
         <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 mb-1">Contenido</p>
         <div class="bg-white rounded-2xl overflow-hidden shadow-sm divide-y divide-gray-100">
-          <.sp_item img="/images/top10.png"      label="Top 10"     href="/admin/seccion/top10"      active={@current_page == "seccion_top10"} />
-          <.sp_item img="/images/favoritos.png"  label="Favoritos"  href="/admin/seccion/favoritos"  active={@current_page == "seccion_favoritos"} />
-          <.sp_item img="/images/destacados.png" label="Destacados" href="/admin/seccion/destacados" active={@current_page == "seccion_destacados"} />
-          <.sp_item img="/images/top10.png"      label="Top10, Dest. y Favs" href="/admin/seccion/ofertas" active={@current_page == "seccion_ofertas"} />
-          <.sp_item img="/images/publicidad.png" label="Publicidad"  href="/admin/seccion/publicidad" active={@current_page == "seccion_publicidad"} />
-          <.sp_item img="/images/envios.png"     label="Envíos"      href="/admin/seccion/envios"     active={@current_page == "seccion_envios"} />
+          <.sp_item img="/images/top10.png"      label="Carrusel Ofertas" href="/admin/seccion/ofertas"    active={@current_page == "seccion_ofertas"} />
+          <.sp_item img="/images/publicidad.png" label="Publicidad"       href="/admin/seccion/publicidad" active={@current_page == "seccion_publicidad"} />
+          <.sp_item img="/images/envios.png"     label="Envíos"           href="/admin/seccion/envios"     active={@current_page == "seccion_envios"} />
         </div>
       </div>
 

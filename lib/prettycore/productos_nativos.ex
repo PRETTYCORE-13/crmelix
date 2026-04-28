@@ -15,6 +15,15 @@ defmodule Prettycore.ProductosNativos do
     PsqlRepo.all(from p in ProductoNativo, order_by: [desc: p.inserted_at])
   end
 
+  @doc "Lista solo código, descripción e imagen (para selectores ligeros como Gamas)."
+  def list_para_gamas do
+    PsqlRepo.all(
+      from p in ProductoNativo,
+      order_by: p.descripcion,
+      select: %{codigo: p.codigo, descripcion: p.descripcion, imagen_url: p.imagen_url}
+    )
+  end
+
   @doc "Busca por descripción o código."
   def search(q) do
     words =
@@ -113,6 +122,29 @@ defmodule Prettycore.ProductosNativos do
   @doc "Elimina un producto nativo."
   def eliminar(%ProductoNativo{} = p), do: PsqlRepo.delete(p)
 
+  @doc "Crea o actualiza un producto desde importación masiva. Devuelve {:ok, :nuevo | :actualizado} o {:error, reason}."
+  def upsert_desde_importacion(attrs) do
+    codigo = attrs["codigo"]
+    case PsqlRepo.get(ProductoNativo, codigo) do
+      nil ->
+        case crear(attrs) do
+          {:ok, _} -> {:ok, :nuevo}
+          {:error, cs} -> {:error, format_changeset_error(cs)}
+        end
+      existing ->
+        case actualizar(existing, attrs) do
+          {:ok, _} -> {:ok, :actualizado}
+          {:error, cs} -> {:error, format_changeset_error(cs)}
+        end
+    end
+  end
+
+  defp format_changeset_error(changeset) do
+    changeset.errors
+    |> Enum.map(fn {k, {msg, _}} -> "#{k}: #{msg}" end)
+    |> Enum.join(", ")
+  end
+
   @doc "Devuelve %{codigo => precio_base} para los activos con precio > 0."
   def get_precios_map do
     PsqlRepo.all(
@@ -142,8 +174,9 @@ defmodule Prettycore.ProductosNativos do
       iva:          0.0,
       raw:          %{},
       nativo:       true,
-      categoria:    p.categoria,
-      precio_base:  p.precio_base || 0.0
+      categoria:       p.categoria,
+      super_categoria: p.super_categoria,
+      precio_base:     p.precio_base || 0.0
     }
   end
 end
