@@ -101,6 +101,7 @@ defmodule PrettycoreWeb.Router do
 
     get "/clientes/export/excel", ClientesExcelController, :download
     get "/productos-nativos/plantilla", ProductosNativosTemplateController, :download
+    get "/productos-nativos/exportar", ProductosNativosTemplateController, :exportar
   end
 
   ## Herramientas sysadmin (descargas, no LiveView)
