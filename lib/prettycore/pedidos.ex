@@ -27,6 +27,21 @@ defmodule Prettycore.Pedidos do
 
   @estados_activos ["pendiente", "procesando"]
 
+  @doc "Suma el total de pedidos a crédito activos (pendiente/procesando) de un usuario."
+  def credito_usado(user_id) do
+    result =
+      Repo.one(
+        from i in PedidoItem,
+          join: p in Pedido, on: p.id == i.pedido_id,
+          where:
+            p.user_id == ^user_id and
+            p.metodo_pago == "credito" and
+            p.estado in ^@estados_activos,
+          select: sum(i.precio_unitario * i.cantidad)
+      )
+    result || 0.0
+  end
+
   @doc "Devuelve true si el producto tiene pedidos en estado pendiente o procesando."
   def producto_en_pedido_activo?(producto_codigo) do
     Repo.exists?(
@@ -46,7 +61,7 @@ defmodule Prettycore.Pedidos do
   Recibe lista de items del carrito y mapa de precios.
   Devuelve {:ok, pedido} | {:error, changeset}.
   """
-  def crear_desde_carrito(user_id, cart_items, precios, cliente_codigo \\ nil, dir_codigo \\ nil) do
+  def crear_desde_carrito(user_id, cart_items, precios, cliente_codigo \\ nil, dir_codigo \\ nil, metodo_pago \\ "contado") do
     Repo.transaction(fn ->
       {:ok, pedido} =
         %Pedido{}
@@ -54,7 +69,8 @@ defmodule Prettycore.Pedidos do
           user_id: user_id,
           cliente_codigo: cliente_codigo,
           dir_codigo: dir_codigo,
-          estado: "pendiente"
+          estado: "pendiente",
+          metodo_pago: metodo_pago
         })
         |> Repo.insert()
 

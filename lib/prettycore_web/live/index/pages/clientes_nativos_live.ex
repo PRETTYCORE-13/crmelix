@@ -6,6 +6,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
   alias Prettycore.ListasPrecios
   alias Prettycore.Gamas
   alias Prettycore.Sucursales
+  alias Prettycore.Pedidos
   alias Prettycore.Emails.BienvenidaCliente
 
   @impl true
@@ -32,6 +33,12 @@ defmodule PrettycoreWeb.ClientesNativosLive do
      |> assign(:form_activo, true)
      |> assign(:form_lista_precios, 1)
      |> assign(:form_gamas, MapSet.new())
+     |> assign(:form_tipo_cliente, "")
+     |> assign(:form_tipo_pago, "contado")
+     |> assign(:form_limite_credito, "")
+     |> assign(:form_dias_credito, "")
+     |> assign(:expanded_rows, MapSet.new())
+     |> assign(:credito_disponible_map, %{})
      |> assign(:listas_disponibles, ListasPrecios.numeros_disponibles())
      |> assign(:gamas_disponibles, Gamas.list_gamas())
      |> assign(:sucursales_disponibles, Sucursales.list_activas())
@@ -50,6 +57,33 @@ defmodule PrettycoreWeb.ClientesNativosLive do
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
     PrettycoreWeb.AdminNav.handle_nav(id, socket, "clientes_nativos")
+  end
+
+  # ── Expand / collapse fila ───────────────────────────────────────────────────
+
+  @impl true
+  def handle_event("toggle_expand", %{"id" => id}, socket) do
+    expanded = socket.assigns.expanded_rows
+    if MapSet.member?(expanded, id) do
+      {:noreply, assign(socket,
+        expanded_rows: MapSet.delete(expanded, id),
+        credito_disponible_map: Map.delete(socket.assigns.credito_disponible_map, id)
+      )}
+    else
+      cliente = Enum.find(socket.assigns.clientes, &(&1.id == id))
+      disponible =
+        if cliente && cliente.tipo_pago == "credito" do
+          limite = cliente.limite_credito || Decimal.new(0)
+          usado  = Pedidos.credito_usado(id)
+          Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+        else
+          Decimal.new(0)
+        end
+      {:noreply, assign(socket,
+        expanded_rows: MapSet.put(expanded, id),
+        credito_disponible_map: Map.put(socket.assigns.credito_disponible_map, id, disponible)
+      )}
+    end
   end
 
   # ── Búsqueda ─────────────────────────────────────────────────────────────────
@@ -83,6 +117,10 @@ defmodule PrettycoreWeb.ClientesNativosLive do
      |> assign(:form_lista_precios, 1)
      |> assign(:form_gamas, MapSet.new())
      |> assign(:form_sucursal_numero, nil)
+     |> assign(:form_tipo_cliente, "")
+     |> assign(:form_tipo_pago, "contado")
+     |> assign(:form_limite_credito, "")
+     |> assign(:form_dias_credito, "")
      |> assign(:form_error, nil)
      |> assign(:cambiar_password, false)}
   end
@@ -108,6 +146,10 @@ defmodule PrettycoreWeb.ClientesNativosLive do
          |> assign(:form_gamas, gamas_cliente)
          |> assign(:form_lista_precios, c.lista_precios || 1)
          |> assign(:form_sucursal_numero, c.sucursal_numero)
+         |> assign(:form_tipo_cliente, c.tipo_cliente || "")
+         |> assign(:form_tipo_pago, c.tipo_pago || "contado")
+         |> assign(:form_limite_credito, if(c.limite_credito, do: Decimal.to_string(c.limite_credito), else: ""))
+         |> assign(:form_dias_credito, if(c.dias_credito, do: to_string(c.dias_credito), else: ""))
          |> assign(:form_error, nil)
          |> assign(:cambiar_password, false)}
     end
@@ -143,7 +185,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     activo          = socket.assigns.form_activo
     lista_precios   = parse_int(params["lista_precios"], socket.assigns.form_lista_precios)
     sucursal_numero = parse_int(params["sucursal_numero"], nil)
-    gamas_sel = parse_gamas(params["gamas"])
+    gamas_sel       = parse_gamas(params["gamas"])
+    tipo_cliente    = nilify_str(params["tipo_cliente"])
+    tipo_pago       = params["tipo_pago"] || "contado"
+    limite_credito  = parse_decimal(params["limite_credito"])
+    dias_credito    = parse_int(params["dias_credito"], 0)
 
     result =
       case socket.assigns.modal do
@@ -160,7 +206,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
             "notas"           => if(notas == "", do: nil, else: notas),
             "activo"          => activo,
             "lista_precios"   => lista_precios,
-            "sucursal_numero" => sucursal_numero
+            "sucursal_numero" => sucursal_numero,
+            "tipo_cliente"    => tipo_cliente,
+            "tipo_pago"       => tipo_pago,
+            "limite_credito"  => limite_credito,
+            "dias_credito"    => dias_credito
           })
           case res do
             {:ok, nuevo_cliente} ->
@@ -181,7 +231,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
             "notas"           => if(notas == "", do: nil, else: notas),
             "activo"          => activo,
             "lista_precios"   => lista_precios,
-            "sucursal_numero" => sucursal_numero
+            "sucursal_numero" => sucursal_numero,
+            "tipo_cliente"    => tipo_cliente,
+            "tipo_pago"       => tipo_pago,
+            "limite_credito"  => limite_credito,
+            "dias_credito"    => dias_credito
           }
 
           case ClientesNativos.actualizar(c, base_attrs) do
@@ -239,6 +293,40 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     1..12
     |> Enum.map(fn _ -> Enum.at(chars, :rand.uniform(len) - 1) end)
     |> List.to_string()
+  end
+
+  defp nilify_str(nil), do: nil
+  defp nilify_str(v) do
+    t = String.trim(v)
+    if t == "", do: nil, else: t
+  end
+
+  defp parse_decimal(nil), do: Decimal.new(0)
+  defp parse_decimal(""), do: Decimal.new(0)
+  defp parse_decimal(v) do
+    case Decimal.parse(String.replace(to_string(v), ",", ".")) do
+      {d, ""} -> d
+      {_, _}  -> Decimal.new(0)
+      :error  -> Decimal.new(0)
+    end
+  end
+
+  defp format_miles(decimal) do
+    str = Decimal.to_string(decimal)
+    [int_part | rest] = String.split(str, ".")
+    formatted = int_part
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.map(&Enum.join/1)
+      |> Enum.join(",")
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.join()
+    case rest do
+      [] -> formatted
+      [dec] -> "#{formatted}.#{dec}"
+    end
   end
 
   defp parse_gamas(nil), do: []
@@ -332,7 +420,11 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <%= for c <- @clientes do %>
-                    <tr class="hover:bg-gray-50/50 transition-colors">
+                    <% expanded = MapSet.member?(@expanded_rows, c.id) %>
+                    <tr
+                      phx-click="toggle_expand"
+                      phx-value-id={c.id}
+                      class={"cursor-pointer select-none transition-colors #{if expanded, do: "bg-indigo-50/30", else: "hover:bg-gray-50/70"}"}>
                       <td class="px-4 py-3">
                         <div class="flex items-center gap-3">
                           <div class="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -354,7 +446,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                           <div class="flex items-center gap-1">
                             <span><%= c.email %></span>
                             <button type="button" data-val={c.email}
-                              onclick="navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
+                              onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
                               class="text-gray-400 hover:text-indigo-600 transition-all" title="Copiar email">
                               <svg class="icon-copy w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                               <svg class="icon-check w-3.5 h-3.5 hidden text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -369,7 +461,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                           <div class="flex items-center gap-1">
                             <span><%= c.telefono %></span>
                             <button type="button" data-val={c.telefono}
-                              onclick="navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
+                              onclick="event.stopPropagation();navigator.clipboard.writeText(this.dataset.val);this.querySelector('.icon-copy').classList.add('hidden');this.querySelector('.icon-check').classList.remove('hidden');setTimeout(()=>{this.querySelector('.icon-copy').classList.remove('hidden');this.querySelector('.icon-check').classList.add('hidden')},1500)"
                               class="text-gray-400 hover:text-indigo-600 transition-all" title="Copiar teléfono">
                               <svg class="icon-copy w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                               <svg class="icon-check w-3.5 h-3.5 hidden text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -399,6 +491,9 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                       </td>
                       <td class="px-4 py-3">
                         <div class="flex items-center justify-end gap-2">
+                          <svg class={"w-4 h-4 text-gray-300 transition-transform #{if expanded, do: "rotate-180 text-indigo-400"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
                           <button phx-click="editar" phx-value-id={c.id}
                             class="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Editar">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -422,6 +517,59 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                         </div>
                       </td>
                     </tr>
+                    <%= if expanded do %>
+                      <tr class="bg-indigo-50/40 border-b border-indigo-100">
+                        <td colspan="8" class="px-6 py-4">
+                          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Tipo de pago</span>
+                              <span class={"text-xs font-semibold px-2 py-0.5 rounded-full w-fit #{if c.tipo_pago == "credito", do: "bg-blue-100 text-blue-700", else: "bg-amber-100 text-amber-700"}"}>
+                                <%= if c.tipo_pago == "credito", do: "Crédito", else: "Contado" %>
+                              </span>
+                            </div>
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Límite total</span>
+                              <span class="text-sm font-medium text-gray-800">
+                                <%= if c.tipo_pago == "credito" do %>
+                                  $<%= format_miles(c.limite_credito || Decimal.new(0)) %>
+                                <% else %>
+                                  <span class="text-gray-300 text-xs italic">N/A</span>
+                                <% end %>
+                              </span>
+                            </div>
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Límite disponible</span>
+                              <span class="text-sm font-medium text-gray-800">
+                                <%= if c.tipo_pago == "credito" do %>
+                                  <% disp = Map.get(@credito_disponible_map, c.id, Decimal.new(0)) %>
+                                  <span class={if Decimal.compare(disp, Decimal.new(0)) == :lt, do: "text-red-600", else: "text-green-700"}>
+                                    $<%= format_miles(disp) %>
+                                  </span>
+                                <% else %>
+                                  <span class="text-gray-300 text-xs italic">N/A</span>
+                                <% end %>
+                              </span>
+                            </div>
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Días de crédito</span>
+                              <span class="text-sm font-medium text-gray-800">
+                                <%= if c.tipo_pago == "credito" do %>
+                                  <%= c.dias_credito || 0 %> días
+                                <% else %>
+                                  <span class="text-gray-300 text-xs italic">N/A</span>
+                                <% end %>
+                              </span>
+                            </div>
+                          </div>
+                          <%= if c.notas && c.notas != "" do %>
+                            <div class="mt-3 pt-3 border-t border-indigo-100">
+                              <span class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Notas</span>
+                              <p class="text-xs text-gray-600 mt-0.5"><%= c.notas %></p>
+                            </div>
+                          <% end %>
+                        </td>
+                      </tr>
+                    <% end %>
                   <% end %>
                 </tbody>
               </table>
@@ -580,6 +728,48 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                   <p class="text-[10px] text-gray-400 mt-0.5">Sucursal a la que pertenece este cliente</p>
                 </div>
               </div>
+              <!-- Crédito / Tipo de cliente -->
+              <div class="border border-gray-100 rounded-xl p-3 space-y-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Información comercial</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Tipo de cliente</label>
+                    <input type="text" name="tipo_cliente" value={@form_tipo_cliente}
+                      maxlength="100"
+                      placeholder="Ej: Mayorista, Minorista…"
+                      class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Tipo de pago</label>
+                    <select name="tipo_pago"
+                      class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20 bg-white"
+                      id="sel_tipo_pago"
+                      onchange="document.getElementById('credito_fields').classList.toggle('hidden', this.value !== 'credito')">
+                      <option value="contado" selected={@form_tipo_pago != "credito"}>Contado</option>
+                      <option value="credito" selected={@form_tipo_pago == "credito"}>Crédito</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="credito_fields" class={if @form_tipo_pago == "credito", do: "", else: "hidden"}>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-700 mb-1">Límite de crédito ($)</label>
+                      <input type="number" name="limite_credito" value={@form_limite_credito}
+                        min="0" step="0.01"
+                        placeholder="0.00"
+                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-gray-700 mb-1">Días de crédito</label>
+                      <input type="number" name="dias_credito" value={@form_dias_credito}
+                        min="0" step="1"
+                        placeholder="0"
+                        class="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label class="block text-xs font-semibold text-gray-700 mb-1">Dirección *</label>
                 <input type="text" name="direccion" value={@form_direccion}

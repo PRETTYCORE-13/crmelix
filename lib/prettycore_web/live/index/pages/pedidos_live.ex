@@ -5,6 +5,7 @@ defmodule PrettycoreWeb.PedidosLive do
   alias Prettycore.Auth
   alias Prettycore.ClientesNativos
   alias Prettycore.Sucursales
+  alias Prettycore.Notificaciones
 
   @estados_color %{
     "pendiente"              => "bg-yellow-100 text-yellow-700",
@@ -136,8 +137,19 @@ defmodule PrettycoreWeb.PedidosLive do
 
   @impl true
   def handle_event("cambiar_estado", %{"id" => id, "estado" => estado}, socket) do
+    pedido = Pedidos.get_pedido(id)
     case Pedidos.cambiar_estado(id, estado) do
       {:ok, _} ->
+        if pedido do
+          {titulo, msg, tipo} = case estado do
+            "procesando" -> {"Pedido en proceso",    "Tu pedido está siendo preparado.",         "info"}
+            "enviado"    -> {"Pedido enviado",        "Tu pedido ha sido enviado.",               "success"}
+            "entregado"  -> {"Pedido entregado",      "Tu pedido fue entregado. ¡Gracias!",       "success"}
+            "cancelado"  -> {"Pedido cancelado",      "Tu pedido fue cancelado por el equipo.",   "warning"}
+            _            -> {"Pedido actualizado",    "El estado de tu pedido fue actualizado.",  "info"}
+          end
+          Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo})
+        end
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
       {:error, _} ->
@@ -149,6 +161,11 @@ defmodule PrettycoreWeb.PedidosLive do
   def handle_event("solicitar_cancelacion", %{"id" => id}, socket) do
     case Pedidos.solicitar_cancelacion(id) do
       {:ok, _} ->
+        Notificaciones.crear(socket.assigns.current_user_id, %{
+          titulo: "Cancelación solicitada",
+          mensaje: "Tu solicitud de cancelación fue registrada y está pendiente de aprobación.",
+          tipo: "warning"
+        })
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Solicitud de cancelación enviada. El equipo la revisará.")}
       {:error, :no_cancelable} ->
@@ -160,8 +177,16 @@ defmodule PrettycoreWeb.PedidosLive do
 
   @impl true
   def handle_event("cancelar", %{"id" => id}, socket) do
+    pedido = Pedidos.get_pedido(id)
     case Pedidos.cancelar(id) do
       {:ok, _} ->
+        if pedido do
+          Notificaciones.crear(pedido.user_id, %{
+            titulo: "Pedido cancelado",
+            mensaje: "Tu pedido fue cancelado.",
+            tipo: "warning"
+          })
+        end
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Pedido cancelado")}
       {:error, :no_cancelable} ->
@@ -343,13 +368,22 @@ defmodule PrettycoreWeb.PedidosLive do
                         <span class="hidden sm:inline">Visualizar</span>
                       </button>
                     </div>
-                    <!-- Fila 2: estado + controles (se envuelve en móvil) -->
+                    <!-- Fila 2: estado + método de pago + controles (se envuelve en móvil) -->
                     <div class="flex items-center gap-2 flex-wrap">
                       <span class={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold #{color}"}>
                         <%= case pedido.estado do
                           "cancelacion_solicitada" -> "Cancelación sol."
                           e -> String.capitalize(e)
                         end %>
+                      </span>
+                      <span class={"inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold #{if pedido.metodo_pago == "credito", do: "bg-blue-100 text-blue-700", else: "bg-amber-100 text-amber-700"}"}>
+                        <%= if pedido.metodo_pago == "credito" do %>
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                          Crédito
+                        <% else %>
+                          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                          Contado
+                        <% end %>
                       </span>
                       <!-- Admin: aprobar/declinar cancelación solicitada -->
                       <%= if @user_role in ["admin", "sysadmin", "oficina"] and pedido.estado == "cancelacion_solicitada" do %>

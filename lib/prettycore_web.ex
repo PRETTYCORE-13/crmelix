@@ -61,6 +61,8 @@ defmodule PrettycoreWeb do
       use Phoenix.LiveView,
         layout: {PrettycoreWeb.Layouts, :app}
 
+      on_mount {PrettycoreWeb.NotifOnMount, :default}
+
       unquote(html_helpers())
     end
   end

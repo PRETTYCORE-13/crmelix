@@ -23,6 +23,8 @@ defmodule PrettycoreWeb.MenuLayout do
   attr :user_role, :string, default: nil
   attr :user_permissions, :list, default: nil
   attr :modo_nativo, :boolean, default: false
+  attr :current_user_id, :any, default: nil
+  attr :notif_refresh, :integer, default: 0
   slot :inner_block, required: true
 
   def sidebar(assigns) do
@@ -46,6 +48,12 @@ defmodule PrettycoreWeb.MenuLayout do
           src="https://prettycore.xyz/IMAGENES/PRETTYCORE_NEGRO.png"
           alt="PRETTYCORE"
           class="pc-topbar-logo"
+        />
+        <.live_component
+          module={PrettycoreWeb.NotifBellComponent}
+          id="notif-bell"
+          user_id={@current_user_id}
+          refresh={@notif_refresh}
         />
       </div>
       <!-- Fila: Sidebar + Contenido -->

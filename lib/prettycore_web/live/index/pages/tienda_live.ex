@@ -9,9 +9,11 @@ defmodule PrettycoreWeb.Tienda do
   alias Prettycore.Secciones
   alias Prettycore.SuperCategorias
   alias Prettycore.Pedidos
+  alias Prettycore.Notificaciones
   alias Prettycore.Auth
   alias Prettycore.StockSucursal
   alias Prettycore.Gamas
+  alias Prettycore.ClientesNativos
 
   @impl true
   def mount(_params, _session, socket) do
@@ -44,12 +46,19 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:ofertas_top10, [])
       |> assign(:ofertas_favoritos, [])
       |> assign(:ofertas_destacados, [])
+      |> assign(:pago_modal, false)
+      |> assign(:metodo_pago_sel, "contado")
+      |> assign(:cliente_nativo_info, nil)
+      |> assign(:credito_disponible, Decimal.new(0))
     if connected?(socket) do
       send(self(), :load_productos)
       send(self(), :load_carrusel)
       send(self(), :load_secciones)
       if role not in ["sysadmin", "admin", "oficina"] do
         send(self(), :load_cart)
+      end
+      if role == "cliente_nativo" do
+        send(self(), :load_cliente_info)
       end
     end
 
@@ -147,6 +156,12 @@ defmodule PrettycoreWeb.Tienda do
   def handle_info(:load_cart, socket) do
     %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
     {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+  end
+
+  @impl true
+  def handle_info(:load_cliente_info, socket) do
+    info = ClientesNativos.get(socket.assigns.current_user_id)
+    {:noreply, assign(socket, :cliente_nativo_info, info)}
   end
 
 
@@ -281,37 +296,75 @@ defmodule PrettycoreWeb.Tienda do
 
   @impl true
   def handle_event("hacer_pedido", _, socket) do
-    user    = Auth.get_user(socket.assigns.current_user_id)
-    cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
-    dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
-    precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
+    info = socket.assigns.cliente_nativo_info
+    disponible =
+      if info && info.tipo_pago == "credito" do
+        limite = info.limite_credito || Decimal.new(0)
+        usado  = Pedidos.credito_usado(socket.assigns.current_user_id)
+        Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+      else
+        Decimal.new(0)
+      end
+    {:noreply, assign(socket, pago_modal: true, metodo_pago_sel: "contado", credito_disponible: disponible)}
+  end
 
-    case Pedidos.crear_desde_carrito(
-           socket.assigns.current_user_id,
-           socket.assigns.cart_items,
-           precios,
-           cliente,
-           dir
-         ) do
-      {:ok, _pedido} ->
-        sucursal_num = socket.assigns[:sucursal_numero]
-        if sucursal_num do
-          stock_map = socket.assigns.stock_map
-          Enum.each(socket.assigns.cart_items, fn item ->
-            if Map.has_key?(stock_map, item.producto_codigo) do
-              StockSucursal.decrement_stock(item.producto_codigo, sucursal_num, item.cantidad)
-            end
-          end)
-        end
-        new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
-        Carritos.vaciar_carrito(socket.assigns.current_user_id)
-        {:noreply,
-         socket
-         |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map)
-         |> put_flash(:info, "¡Pedido realizado con éxito!")}
+  @impl true
+  def handle_event("cerrar_pago_modal", _, socket) do
+    {:noreply, assign(socket, pago_modal: false)}
+  end
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+  @impl true
+  def handle_event("sel_metodo_pago", %{"metodo" => metodo}, socket) do
+    {:noreply, assign(socket, metodo_pago_sel: metodo)}
+  end
+
+  @impl true
+  def handle_event("confirmar_pedido", _, socket) do
+    metodo_pago = socket.assigns.metodo_pago_sel
+
+    with :ok <- validar_credito(socket, metodo_pago) do
+      user    = Auth.get_user(socket.assigns.current_user_id)
+      cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
+      dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
+      precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
+
+      case Pedidos.crear_desde_carrito(
+             socket.assigns.current_user_id,
+             socket.assigns.cart_items,
+             precios,
+             cliente,
+             dir,
+             metodo_pago
+           ) do
+        {:ok, _pedido} ->
+          sucursal_num = socket.assigns[:sucursal_numero]
+          if sucursal_num do
+            stock_map = socket.assigns.stock_map
+            Enum.each(socket.assigns.cart_items, fn item ->
+              if Map.has_key?(stock_map, item.producto_codigo) do
+                StockSucursal.decrement_stock(item.producto_codigo, sucursal_num, item.cantidad)
+              end
+            end)
+          end
+          new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
+          Carritos.vaciar_carrito(socket.assigns.current_user_id)
+          pago_label = if metodo_pago == "credito", do: "a crédito", else: "de contado"
+          Notificaciones.crear(socket.assigns.current_user_id, %{
+            titulo: "Pedido realizado",
+            mensaje: "Tu pedido #{pago_label} fue enviado para procesamiento.",
+            tipo: "success"
+          })
+          {:noreply,
+           socket
+           |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map, pago_modal: false)
+           |> put_flash(:info, "¡Pedido realizado con éxito!")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+      end
+    else
+      {:error, msg} ->
+        {:noreply, assign(socket, pago_modal: true) |> put_flash(:error, msg)}
     end
   end
 
@@ -915,7 +968,6 @@ defmodule PrettycoreWeb.Tienda do
                     <%= if @user_role not in ["admin", "oficina"] do %>
                       <button
                         phx-click="hacer_pedido"
-                        data-confirm="¿Confirmar pedido?"
                         class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold rounded-xl transition-colors"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1232,7 +1284,161 @@ defmodule PrettycoreWeb.Tienda do
       </div>
     <% end %>
 
+    <!-- ═══ MODAL TIPO DE PAGO ═══ -->
+    <%= if @pago_modal do %>
+      <%
+        info          = @cliente_nativo_info
+        tiene_credito = info != nil and info.tipo_pago == "credito"
+        total_pedido  = Enum.reduce(@cart_items, 0.0, fn item, acc ->
+          p = Map.get(@precios, item.producto_codigo) || Map.get(@precios_nativos, item.producto_codigo) || 0.0
+          acc + p * (item.cantidad || 1)
+        end)
+        disponible_dec = @credito_disponible
+        alcanza        = tiene_credito and Decimal.compare(Decimal.round(Decimal.from_float(total_pedido), 2), Decimal.round(disponible_dec, 2)) in [:lt, :eq]
+        puede_confirmar = @metodo_pago_sel == "contado" or (tiene_credito and alcanza)
+      %>
+      <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h2 class="text-base font-bold text-gray-900">Tipo de pago</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Selecciona cómo deseas pagar</p>
+            </div>
+            <button phx-click="cerrar_pago_modal" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="px-5 py-4 space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Contado -->
+              <button phx-click="sel_metodo_pago" phx-value-metodo="contado"
+                class={"p-4 rounded-xl border-2 text-left transition-all #{if @metodo_pago_sel == "contado", do: "border-amber-400 bg-amber-50", else: "border-gray-200 hover:border-gray-300 bg-white"}"}>
+                <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "contado", do: "bg-amber-400", else: "bg-gray-100"}"}>
+                  <svg class={"w-4 h-4 #{if @metodo_pago_sel == "contado", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                  </svg>
+                </div>
+                <p class="text-sm font-bold text-gray-800">Contado</p>
+                <p class="text-xs text-gray-400 mt-0.5">Pago inmediato</p>
+              </button>
+
+              <!-- Crédito -->
+              <button phx-click={if tiene_credito, do: "sel_metodo_pago", else: nil}
+                phx-value-metodo="credito"
+                class={"p-4 rounded-xl border-2 text-left transition-all #{cond do
+                  not tiene_credito -> "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                  @metodo_pago_sel == "credito" -> "border-blue-400 bg-blue-50"
+                  true -> "border-gray-200 hover:border-gray-300 bg-white"
+                end}"}>
+                <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "credito", do: "bg-blue-500", else: "bg-gray-100"}"}>
+                  <svg class={"w-4 h-4 #{if @metodo_pago_sel == "credito", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                  </svg>
+                </div>
+                <p class="text-sm font-bold text-gray-800">Crédito</p>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  <%= if tiene_credito, do: "#{info.dias_credito || 0} días", else: "No disponible" %>
+                </p>
+              </button>
+            </div>
+
+            <!-- Detalle de crédito -->
+            <%= if @metodo_pago_sel == "credito" and tiene_credito do %>
+              <div class={"rounded-xl p-3 border #{if alcanza, do: "bg-green-50 border-green-200", else: "bg-red-50 border-red-200"}"}>
+                <div class="flex items-center gap-2 mb-2">
+                  <%= if alcanza do %>
+                    <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <p class="text-xs font-semibold text-green-700">Crédito disponible</p>
+                  <% else %>
+                    <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    <p class="text-xs font-semibold text-red-700">Crédito insuficiente</p>
+                  <% end %>
+                </div>
+                <div class="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p class="text-gray-400">Disponible</p>
+                    <p class={"font-bold #{if Decimal.compare(disponible_dec, Decimal.new(0)) == :gt, do: "text-gray-700", else: "text-red-600"}"}>$<%= format_miles(disponible_dec) %></p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400">Este pedido</p>
+                    <p class={"font-bold #{if alcanza, do: "text-green-700", else: "text-red-600"}"}> $<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400">Plazo</p>
+                    <p class="font-bold text-gray-700"><%= info.dias_credito || 0 %> días</p>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+
+            <!-- Total y confirmar -->
+            <div class="bg-gray-50 rounded-xl px-4 py-3 flex justify-between items-center">
+              <span class="text-sm text-gray-500">Total</span>
+              <span class="text-lg font-bold text-gray-900">$<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></span>
+            </div>
+
+            <button phx-click="confirmar_pedido"
+              disabled={not puede_confirmar}
+              class={"w-full py-3 rounded-xl text-sm font-bold transition-colors #{if puede_confirmar, do: "bg-purple-600 hover:bg-purple-500 text-white", else: "bg-gray-200 text-gray-400 cursor-not-allowed"}"}>
+              <%= if @metodo_pago_sel == "credito" and tiene_credito and not alcanza do %>
+                Crédito insuficiente
+              <% else %>
+                Confirmar pedido
+              <% end %>
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
     """
+  end
+
+  defp validar_credito(socket, "credito") do
+    info = socket.assigns.cliente_nativo_info
+    cond do
+      is_nil(info) ->
+        {:error, "Este cliente no tiene crédito configurado"}
+      info.tipo_pago != "credito" ->
+        {:error, "Este cliente no tiene crédito habilitado"}
+      true ->
+        total      = calc_cart_total(socket.assigns.cart_items, socket.assigns.precios, socket.assigns.precios_nativos)
+        limite     = info.limite_credito || Decimal.new(0)
+        usado      = Pedidos.credito_usado(socket.assigns.current_user_id)
+        disponible = Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+        if Decimal.compare(Decimal.round(Decimal.from_float(total), 2), Decimal.round(disponible, 2)) in [:lt, :eq] do
+          :ok
+        else
+          {:error, "El total ($#{:erlang.float_to_binary(total / 1, decimals: 2)}) supera tu crédito disponible ($#{format_miles(disponible)})"}
+        end
+    end
+  end
+  defp validar_credito(_socket, _metodo), do: :ok
+
+  defp calc_cart_total(cart_items, precios, precios_nativos) do
+    Enum.reduce(cart_items, 0.0, fn item, acc ->
+      p = Map.get(precios, item.producto_codigo) || Map.get(precios_nativos, item.producto_codigo) || 0.0
+      acc + p * (item.cantidad || 1)
+    end)
+  end
+
+  defp format_miles(decimal) do
+    str = Decimal.to_string(decimal)
+    [int_part | rest] = String.split(str, ".")
+    formatted = int_part
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.map(&Enum.join/1)
+      |> Enum.join(",")
+      |> String.graphemes()
+      |> Enum.reverse()
+      |> Enum.join()
+    case rest do
+      [] -> formatted
+      [dec] -> "#{formatted}.#{dec}"
+    end
   end
 
   defp apply_categoria(socket, idx) do

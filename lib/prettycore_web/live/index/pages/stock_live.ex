@@ -149,9 +149,10 @@ defmodule PrettycoreWeb.StockLive do
 
           <!-- Tabla de productos con stock -->
           <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden overflow-x-auto">
-            <table class="w-full text-sm min-w-[500px]">
+            <table class="w-full text-sm min-w-[560px]">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th class="px-4 py-3 w-14"></th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Código</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Descripción</th>
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-32">
@@ -162,9 +163,24 @@ defmodule PrettycoreWeb.StockLive do
               <tbody class="divide-y divide-gray-100">
                 <%= for p <- productos_filtrados(@productos, @search) do %>
                   <tr class="hover:bg-gray-50 transition">
-                    <td class="px-4 py-3 font-mono text-xs text-gray-500"><%= p.codigo %></td>
-                    <td class="px-4 py-3 text-gray-900"><%= p.descripcion %></td>
-                    <td class="px-4 py-3 text-center">
+                    <td class="px-3 py-2 w-14">
+                      <%= if p.imagen_url && p.imagen_url != "" do %>
+                        <img
+                          src={p.imagen_url}
+                          alt={p.descripcion}
+                          class="w-10 h-10 object-contain rounded-lg bg-gray-50"
+                        />
+                      <% else %>
+                        <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <svg class="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3 20.25h18A.75.75 0 0021.75 19.5v-15A.75.75 0 0021 3.75H3A.75.75 0 002.25 4.5v15c0 .414.336.75.75.75z"/>
+                          </svg>
+                        </div>
+                      <% end %>
+                    </td>
+                    <td class="px-4 py-2 font-mono text-xs text-gray-500"><%= p.codigo %></td>
+                    <td class="px-4 py-2 text-gray-900"><%= p.descripcion %></td>
+                    <td class="px-4 py-2 text-center">
                       <input
                         type="number"
                         min="0"
@@ -178,7 +194,7 @@ defmodule PrettycoreWeb.StockLive do
                 <% end %>
                 <%= if productos_filtrados(@productos, @search) == [] do %>
                   <tr>
-                    <td colspan="3" class="px-4 py-8 text-center text-sm text-gray-400">
+                    <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-400">
                       No hay productos registrados.
                     </td>
                   </tr>

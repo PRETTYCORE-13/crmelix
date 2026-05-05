@@ -132,7 +132,8 @@ defmodule Prettycore.ProductosNativos do
           {:error, cs} -> {:error, format_changeset_error(cs)}
         end
       existing ->
-        case actualizar(existing, attrs) do
+        update_attrs = Map.delete(attrs, "codigo")
+        case actualizar(existing, update_attrs) do
           {:ok, _} -> {:ok, :actualizado}
           {:error, cs} -> {:error, format_changeset_error(cs)}
         end

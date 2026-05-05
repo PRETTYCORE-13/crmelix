@@ -86,17 +86,26 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     results =
       consume_uploaded_entries(socket, :csv_importar, fn %{path: tmp_path}, entry ->
         ext = entry.client_name |> Path.extname() |> String.downcase()
-        filas =
-          case ext do
-            ".xlsx" -> tmp_path |> File.read!() |> leer_xlsx()
-            _       -> tmp_path |> File.read!() |> leer_csv()
-          end
-        procesar_filas(filas)
+        case ext do
+          ".xlsx" ->
+            binary = File.read!(tmp_path)
+            sheets = leer_xlsx_sheets(binary)
+            %{
+              productos:  procesar_filas(Map.get(sheets, "productos", [])),
+              stock:      procesar_stock_filas(Map.get(sheets, "stock", [])),
+              precios:    procesar_precios_filas(Map.get(sheets, "precios", [])),
+              sucursales: nil
+            }
+          _ ->
+            filas = tmp_path |> File.read!() |> leer_csv()
+            %{productos: procesar_filas(filas), stock: nil, precios: nil, sucursales: nil}
+        end
       end)
 
     case results do
       [result] ->
-        socket = if result.nuevos + result.actualizados > 0, do: load_productos(socket), else: socket
+        hay_productos = result.productos.nuevos + result.productos.actualizados > 0
+        socket = if hay_productos, do: load_productos(socket), else: socket
         {:noreply, assign(socket, import_result: result)}
       _ ->
         {:noreply, put_flash(socket, :error, "No se recibió ningún archivo")}
@@ -121,17 +130,37 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     end)
   end
 
-  defp leer_xlsx(binary) do
-    with {:ok, files} <- :zip.unzip(binary, [:memory]) do
-      map = Map.new(files, fn {name, data} -> {List.to_string(name), data} end)
-      shared = map |> Map.get("xl/sharedStrings.xml", "") |> xlsx_shared_strings()
-      rows   = map |> Map.get("xl/worksheets/sheet1.xml", "") |> xlsx_filas(shared)
-      case rows do
-        [_ | data] -> data
-        []         -> []
-      end
-    else
-      _ -> []
+  # Sheet order: 1=Productos, 2=Stock, 3=Precios, 4=Sucursales
+  @xlsx_tipos ~w(productos stock precios)
+
+  defp leer_xlsx_sheets(binary) do
+    case :zip.unzip(binary, [:memory]) do
+      {:ok, files} ->
+        map = Map.new(files, fn {name, data} -> {List.to_string(name), data} end)
+        shared = map |> Map.get("xl/sharedStrings.xml", "") |> xlsx_shared_strings()
+
+        map
+        |> Map.keys()
+        |> Enum.filter(&Regex.match?(~r|xl/worksheets/sheet\d+\.xml$|, &1))
+        |> Enum.sort_by(fn path ->
+          case Regex.run(~r/sheet(\d+)\.xml$/, path) do
+            [_, n] -> String.to_integer(n)
+            _      -> 999
+          end
+        end)
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {path, i} ->
+          tipo = Enum.at(@xlsx_tipos, i)
+          if tipo do
+            rows = map |> Map.get(path, "") |> xlsx_filas(shared)
+            [{tipo, rows}]
+          else
+            []
+          end
+        end)
+        |> Map.new()
+
+      {:error, _} -> %{}
     end
   end
 
@@ -217,6 +246,81 @@ defmodule PrettycoreWeb.ProductosNativosLive do
         {:skip, _}, acc -> acc
       end)
     end
+  end
+
+  # Formato pivote: primera fila = encabezados con números de sucursal, resto = datos
+  defp procesar_stock_filas([]), do: %{procesados: 0, errores: [], bloqueado: false}
+  defp procesar_stock_filas([header | data_rows]) do
+    # Extrae números de sucursal de las columnas 3+ del encabezado
+    suc_nums =
+      header
+      |> Enum.drop(2)
+      |> Enum.flat_map(fn h ->
+        case Regex.run(~r/\d+/, to_string(h)) do
+          [n] -> [String.to_integer(n)]
+          nil -> []
+        end
+      end)
+
+    data_rows
+    |> Enum.with_index(2)
+    |> Enum.reduce(%{procesados: 0, errores: [], bloqueado: false}, fn {cols, _row_num}, acc ->
+      [codigo | rest] = pad_list(cols, 2 + length(suc_nums))
+      codigo = String.upcase(String.trim(to_string(codigo)))
+      if codigo == "" do
+        acc
+      else
+        cantidades = Enum.drop(rest, 1)  # saltar columna DESCRIPCION_LARGA
+        suc_nums
+        |> Enum.zip(cantidades)
+        |> Enum.reduce(acc, fn {suc_num, val}, inner ->
+          case Float.parse(String.trim(to_string(val))) do
+            {f, _} ->
+              Prettycore.StockSucursal.upsert_stock(codigo, suc_num, round(f))
+              %{inner | procesados: inner.procesados + 1}
+            :error -> inner
+          end
+        end)
+      end
+    end)
+  end
+
+  # Formato pivote: primera fila = encabezados con números de lista, resto = datos
+  defp procesar_precios_filas([]), do: %{procesados: 0, errores: [], bloqueado: false}
+  defp procesar_precios_filas([header | data_rows]) do
+    # Extrae números de lista de las columnas 3+ del encabezado
+    lista_nums =
+      header
+      |> Enum.drop(2)
+      |> Enum.flat_map(fn h ->
+        case Regex.run(~r/\d+/, to_string(h)) do
+          [n] -> [String.to_integer(n)]
+          nil -> []
+        end
+      end)
+
+    data_rows
+    |> Enum.with_index(2)
+    |> Enum.reduce(%{procesados: 0, errores: [], bloqueado: false}, fn {cols, _row_num}, acc ->
+      [codigo | rest] = pad_list(cols, 2 + length(lista_nums))
+      codigo = String.upcase(String.trim(to_string(codigo)))
+      if codigo == "" do
+        acc
+      else
+        precios = Enum.drop(rest, 1)  # saltar columna DESCRIPCION_LARGA
+        lista_nums
+        |> Enum.zip(precios)
+        |> Enum.reduce(acc, fn {lista_num, val}, inner ->
+          str = val |> to_string() |> String.trim() |> String.replace(",", ".")
+          case Float.parse(str) do
+            {f, _} ->
+              Prettycore.ListasPrecios.upsert_precio(lista_num, codigo, f)
+              %{inner | procesados: inner.procesados + 1}
+            :error -> inner
+          end
+        end)
+      end
+    end)
   end
 
   defp validar_fila(cols, row_num) do
@@ -706,32 +810,61 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   </label>
 
                   <%= if @import_result do %>
-                    <%= if @import_result[:bloqueado] do %>
+                    <% prod = @import_result.productos %>
+                    <%= if prod[:bloqueado] do %>
                       <div class="rounded-xl p-3 text-sm bg-red-50 border border-red-200">
                         <p class="font-semibold text-red-700 flex items-center gap-1.5">
                           <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                           </svg>
-                          No se pudo subir el documento — campos obligatorios incompletos
+                          Productos — campos obligatorios incompletos
                         </p>
-                        <ul class="mt-2 text-xs text-red-600 space-y-0.5 max-h-32 overflow-y-auto">
-                          <%= for e <- @import_result.errores do %>
-                            <li>• <%= e %></li>
-                          <% end %>
+                        <ul class="mt-2 text-xs text-red-600 space-y-0.5 max-h-28 overflow-y-auto">
+                          <%= for e <- prod.errores do %><li>• <%= e %></li><% end %>
                         </ul>
                       </div>
                     <% else %>
-                      <div class={"rounded-xl p-3 text-sm #{if @import_result.errores == [], do: "bg-green-50 border border-green-200", else: "bg-amber-50 border border-amber-200"}"}>
-                        <p class="font-semibold text-gray-800">
-                          ✓ <%= @import_result.nuevos %> creados · <%= @import_result.actualizados %> actualizados
-                          <%= if @import_result.errores != [], do: "· #{length(@import_result.errores)} errores" %>
-                        </p>
-                        <%= if @import_result.errores != [] do %>
-                          <ul class="mt-1 text-xs text-amber-700 space-y-0.5 max-h-24 overflow-y-auto">
-                            <%= for e <- Enum.take(@import_result.errores, 10) do %>
-                              <li>• <%= e %></li>
-                            <% end %>
-                          </ul>
+                      <div class="rounded-xl border divide-y text-sm overflow-hidden">
+                        <!-- Productos -->
+                        <div class={"px-3 py-2 flex items-center justify-between " <> if prod.errores == [], do: "bg-green-50", else: "bg-amber-50"}>
+                          <span class="font-semibold text-gray-700">📦 Productos</span>
+                          <span class="text-xs text-gray-500">
+                            <%= prod.nuevos %> nuevos · <%= prod.actualizados %> actualizados
+                            <%= if prod.errores != [], do: " · #{length(prod.errores)} errores" %>
+                          </span>
+                        </div>
+                        <!-- Stock -->
+                        <%= if @import_result.stock do %>
+                          <% stk = @import_result.stock %>
+                          <div class={"px-3 py-2 flex items-center justify-between " <> if stk.errores == [], do: "bg-green-50", else: "bg-amber-50"}>
+                            <span class="font-semibold text-gray-700">📊 Stock</span>
+                            <span class="text-xs text-gray-500">
+                              <%= stk.procesados %> registros
+                              <%= if stk.errores != [], do: " · #{length(stk.errores)} errores" %>
+                            </span>
+                          </div>
+                        <% end %>
+                        <!-- Precios -->
+                        <%= if @import_result.precios do %>
+                          <% pre = @import_result.precios %>
+                          <div class={"px-3 py-2 flex items-center justify-between " <> if pre.errores == [], do: "bg-green-50", else: "bg-amber-50"}>
+                            <span class="font-semibold text-gray-700">💰 Precios</span>
+                            <span class="text-xs text-gray-500">
+                              <%= pre.procesados %> registros
+                              <%= if pre.errores != [], do: " · #{length(pre.errores)} errores" %>
+                            </span>
+                          </div>
+                        <% end %>
+                        <!-- Sucursales -->
+                        <%= if @import_result.sucursales do %>
+                          <% suc = @import_result.sucursales %>
+                          <div class={"px-3 py-2 flex items-center justify-between " <> if suc.errores == [], do: "bg-green-50", else: "bg-amber-50"}>
+                            <span class="font-semibold text-gray-700">🏪 Sucursales</span>
+                            <span class="text-xs text-gray-500">
+                              <%= suc.procesados %> registros
+                              <%= if suc.errores != [], do: " · #{length(suc.errores)} errores" %>
+                            </span>
+                          </div>
                         <% end %>
                       </div>
                     <% end %>
@@ -740,7 +873,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   <button type="submit"
                     disabled={Enum.empty?(@uploads.csv_importar.entries)}
                     class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white disabled:text-gray-400 text-sm font-semibold rounded-xl transition-colors">
-                    Importar productos
+                    Importar
                   </button>
                 </div>
               </form>

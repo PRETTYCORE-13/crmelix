@@ -10,6 +10,8 @@
   user_role={@user_role}
   user_permissions={@user_permissions}
   modo_nativo={@modo_nativo}
+  current_user_id={assigns[:current_user_id]}
+  notif_refresh={assigns[:notif_refresh] || 0}
 >
   <.flash_group flash={@flash} /> {@inner_content}
 </.sidebar>
