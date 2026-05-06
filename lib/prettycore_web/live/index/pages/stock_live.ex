@@ -87,10 +87,11 @@ defmodule PrettycoreWeb.StockLive do
 
   defp productos_filtrados(productos, ""), do: productos
   defp productos_filtrados(productos, q) do
-    q = String.downcase(q)
+    words = q |> String.downcase() |> String.split(~r/\s+/, trim: true)
     Enum.filter(productos, fn p ->
-      String.contains?(String.downcase(p.descripcion), q) or
-      String.contains?(String.downcase(p.codigo), q)
+      desc = String.downcase(p.descripcion || "")
+      cod  = String.downcase(p.codigo || "")
+      Enum.all?(words, fn w -> String.contains?(desc, w) or String.contains?(cod, w) end)
     end)
   end
 

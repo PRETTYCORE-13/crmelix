@@ -495,7 +495,7 @@ defmodule PrettycoreWeb.SeccionEditorLive do
             <!-- 1. Imágenes del carrusel -->
             <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
               <h2 class="font-bold text-gray-900 mb-0.5">Imágenes del carrusel</h2>
-              <p class="text-xs text-gray-400 mb-4">Sube tu imagen al FTP y pega la URL aquí. Aparecerán como slides antes de las secciones de productos.</p>
+              <p class="text-xs text-gray-400 mb-4">...</p>
 
               <!-- Agregar nueva imagen -->
               <form phx-submit="subir_imagen" phx-change="validate_upload_carrusel" class="border border-dashed border-gray-200 rounded-xl p-4 space-y-3">

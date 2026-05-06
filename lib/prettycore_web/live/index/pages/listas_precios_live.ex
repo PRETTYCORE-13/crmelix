@@ -24,9 +24,10 @@ defmodule PrettycoreWeb.ListasPreciosLive do
      |> assign(:precios_map, ListasPrecios.get_precios_map(numero_activo))
      |> assign(:search, "")
      |> assign(:nuevo_numero, "")
+     |> assign(:show_nueva_lista, false)
      |> assign(:guardando, false)
      |> assign(:saved, false)
-     |> assign(:edits, %{})        # %{producto_codigo => precio_string} pendientes de guardar
+     |> assign(:edits, %{})
     }
   end
 
@@ -47,11 +48,21 @@ defmodule PrettycoreWeb.ListasPreciosLive do
   # ── Crear nueva lista ─────────────────────────────────────────────────────────
 
   @impl true
+  def handle_event("mostrar_nueva_lista", _, socket) do
+    {:noreply, assign(socket, show_nueva_lista: true, nuevo_numero: "")}
+  end
+
+  @impl true
+  def handle_event("cancelar_nueva_lista", _, socket) do
+    {:noreply, assign(socket, show_nueva_lista: false, nuevo_numero: "")}
+  end
+
+  @impl true
   def handle_event("crear_lista", %{"numero" => n_str}, socket) do
     case Integer.parse(n_str) do
       {n, ""} when n > 0 ->
         numeros = (socket.assigns.numeros ++ [n]) |> Enum.uniq() |> Enum.sort()
-        {:noreply, assign(socket, numeros: numeros, numero_activo: n, precios_map: %{}, edits: %{}, nuevo_numero: "", saved: false)}
+        {:noreply, assign(socket, numeros: numeros, numero_activo: n, precios_map: %{}, edits: %{}, nuevo_numero: "", show_nueva_lista: false, saved: false)}
       _ ->
         {:noreply, socket}
     end
@@ -126,37 +137,49 @@ defmodule PrettycoreWeb.ListasPreciosLive do
           </button>
         <% end %>
         <!-- Nueva lista -->
-        <form phx-submit="crear_lista" class="flex items-center gap-1.5 ml-2">
-          <input type="number" name="numero" value={@nuevo_numero} min="1" max="9999"
-            placeholder="Nueva #"
-            phx-blur="set_nuevo_numero"
-            class="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
-          <button type="submit"
-            class="px-3 py-1.5 text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors text-gray-700">
+        <%= if @show_nueva_lista do %>
+          <form phx-submit="crear_lista" class="flex items-center gap-1.5 ml-2">
+            <input type="number" name="numero" value={@nuevo_numero} min="1" max="9999"
+              placeholder="Nº" autofocus
+              phx-blur="set_nuevo_numero"
+              class="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
+            <button type="submit"
+              class="px-3 py-1.5 text-sm font-semibold bg-gray-900 text-white rounded-lg transition-colors">
+              Crear
+            </button>
+            <button type="button" phx-click="cancelar_nueva_lista"
+              class="px-2 py-1.5 text-sm text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+              ✕
+            </button>
+          </form>
+        <% else %>
+          <button type="button" phx-click="mostrar_nueva_lista"
+            class="px-3 py-1.5 text-sm font-semibold bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors text-gray-700 ml-2">
             + Crear
           </button>
-        </form>
+        <% end %>
       </div>
 
 
       <!-- Buscador -->
-      <div class="relative w-full sm:max-w-sm">
+      <form phx-change="search" phx-submit="search" class="relative w-full sm:max-w-sm">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <input type="text" placeholder="Buscar producto..." value={@search}
-          phx-keyup="search" name="q" phx-debounce="200"
+          name="q" phx-debounce="200"
           class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/20" />
-      </div>
+      </form>
 
       <!-- Tabla de productos con precios -->
       <%
         filtered =
           if @search != "" do
-            s = String.downcase(@search)
+            words = @search |> String.downcase() |> String.split(~r/\s+/, trim: true)
             Enum.filter(@productos, fn p ->
-              String.contains?(String.downcase(p.descripcion || ""), s) or
-              String.contains?(String.downcase(p.codigo || ""), s)
+              desc = String.downcase(p.descripcion || "")
+              cod  = String.downcase(p.codigo || "")
+              Enum.all?(words, fn w -> String.contains?(desc, w) or String.contains?(cod, w) end)
             end)
           else
             @productos

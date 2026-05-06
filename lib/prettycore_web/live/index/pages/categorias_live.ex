@@ -42,6 +42,21 @@ defmodule PrettycoreWeb.CategoriasLive do
     {:noreply, assign(socket, categorias: Categorias.list_categorias())}
   end
 
+  def handle_info({:sftp_categoria_ok, cat_id, cat_nombre, url}, socket) do
+    case Enum.find(socket.assigns.categorias, &(&1.id == cat_id)) do
+      nil ->
+        {:noreply, assign(socket, uploading: false)}
+      cat ->
+        {:ok, _} = Categorias.update_categoria(cat, %{imagen_url: url})
+        cats = Categorias.list_categorias()
+        {:noreply, socket |> assign(categorias: cats, uploading: false) |> put_flash(:info, "✓ Imagen de \"#{cat_nombre}\" actualizada")}
+    end
+  end
+
+  def handle_info({:sftp_categoria_error, _reason}, socket) do
+    {:noreply, socket |> assign(uploading: false) |> put_flash(:error, "Error al subir la imagen. Inténtalo de nuevo.")}
+  end
+
   @impl true
   def handle_event("change_page", %{"id" => id}, socket) do
     PrettycoreWeb.AdminNav.handle_nav(id, socket, "categorias")
@@ -147,43 +162,27 @@ defmodule PrettycoreWeb.CategoriasLive do
     if entries == [] do
       {:noreply, assign(socket, upload_error: "Selecciona una imagen primero")}
     else
-      socket = assign(socket, uploading: true, upload_error: nil)
-
-      old_url = cat.imagen_url
-      if old_url && old_url != "" do
-        Sftp.delete_by_url(old_url)
-      end
-
-      results =
+      # Leer contenido aquí (consume_uploaded_entries sólo funciona en handle_event)
+      [{ext, content}] =
         consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, entry ->
-          ext = Path.extname(entry.client_name) |> String.downcase()
-          content = File.read!(tmp_path)
-          slug = "#{cat.nombre |> String.downcase() |> String.replace(~r/[^a-z0-9]/, "_")}_#{System.system_time(:second)}"
-          case Sftp.upload_categoria_image(slug, ext, content) do
-            {:ok, url}       -> {:ok, {:ok, url}}
-            {:error, reason} -> {:ok, {:error, reason}}
-          end
+          {:ok, {Path.extname(entry.client_name) |> String.downcase(), File.read!(tmp_path)}}
         end)
 
-      case results do
-        [{:ok, url}] ->
-          {:ok, updated} = Categorias.update_categoria(cat, %{imagen_url: url})
-          cats = Categorias.list_categorias()
-          {:noreply,
-           socket
-           |> assign(
-             categorias: cats,
-             selected: updated,
-             uploading: false,
-             upload_error: nil,
-             modal: nil
-           )
-           |> put_flash(:info, "✓ Imagen de \"#{cat.nombre}\" actualizada correctamente")}
-        [{:error, reason}] ->
-          {:noreply, assign(socket, uploading: false, upload_error: "Error SFTP: #{inspect(reason)}")}
-        _ ->
-          {:noreply, assign(socket, uploading: false, upload_error: "Error inesperado al subir imagen")}
-      end
+      slug = "#{String.downcase(cat.nombre) |> String.replace(~r/[^a-z0-9]/, "_")}_#{System.system_time(:second)}"
+      old_url = cat.imagen_url
+      cat_id = cat.id
+      cat_nombre = cat.nombre
+      lv = self()
+
+      Task.start(fn ->
+        if old_url && old_url != "", do: Sftp.delete_by_url(old_url)
+        case Sftp.upload_categoria_image(slug, ext, content) do
+          {:ok, url}  -> send(lv, {:sftp_categoria_ok, cat_id, cat_nombre, url})
+          {:error, r} -> send(lv, {:sftp_categoria_error, r})
+        end
+      end)
+
+      {:noreply, assign(socket, uploading: true, upload_error: nil, modal: nil)}
     end
   end
 

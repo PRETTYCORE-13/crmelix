@@ -2,7 +2,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
   use PrettycoreWeb, :live_view_admin
 
   alias Prettycore.ProductosNativos
-  alias Prettycore.ProductosNativos.ProductoNativo
+
   alias Prettycore.Sftp
   alias Prettycore.Categorias
   alias Prettycore.SuperCategorias
@@ -37,6 +37,8 @@ defmodule PrettycoreWeb.ProductosNativosLive do
      |> assign(:form_error, nil)
      |> assign(:upload_error, nil)
      |> assign(:uploading, false)
+     |> assign(:subiendo_imagen, false)
+     |> assign(:imagen_previews, %{})
      |> assign(:import_modal, false)
      |> assign(:import_result, nil)
      |> assign(:imagen_modo, "archivo")
@@ -86,7 +88,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     results =
       consume_uploaded_entries(socket, :csv_importar, fn %{path: tmp_path}, entry ->
         ext = entry.client_name |> Path.extname() |> String.downcase()
-        case ext do
+        result = case ext do
           ".xlsx" ->
             binary = File.read!(tmp_path)
             sheets = leer_xlsx_sheets(binary)
@@ -100,6 +102,7 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             filas = tmp_path |> File.read!() |> leer_csv()
             %{productos: procesar_filas(filas), stock: nil, precios: nil, sucursales: nil}
         end
+        {:ok, result}
       end)
 
     case results do
@@ -461,29 +464,24 @@ defmodule PrettycoreWeb.ProductosNativosLive do
   def handle_event("guardar", params, socket) do
     codigo = String.trim(params["codigo"] || socket.assigns.form_codigo)
 
-    # Subir imagen si hay archivo seleccionado, o usar URL manual
-    imagen_url =
+    # Leer archivo ahora (consume_uploaded_entries debe llamarse en handle_event)
+    # y decidir qué imagen URL guardar inmediatamente vs subir en background
+    {imagen_url, pending_upload} =
       case {socket.assigns[:imagen_modo], socket.assigns.uploads.imagen.entries} do
         {"url", _} ->
-          String.trim(params["imagen_url_manual"] || socket.assigns.form_imagen_url || "")
+          url = String.trim(params["imagen_url_manual"] || socket.assigns.form_imagen_url || "")
+          {url, nil}
 
-        {_, [entry | _]} ->
-          if socket.assigns.modal == :editar do
-            old_url = socket.assigns.form_imagen_url
-            if old_url && old_url != "", do: Sftp.delete_by_url(old_url)
-          end
-          results = consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, _e ->
-            ext     = Path.extname(entry.client_name)
-            content = File.read!(tmp_path)
-            Sftp.upload_producto_nativo_image(codigo, ext, content)
+        {_, [_entry | _]} ->
+          old_url = socket.assigns.form_imagen_url
+          [{ext, content}] = consume_uploaded_entries(socket, :imagen, fn %{path: tmp_path}, e ->
+            {:ok, {Path.extname(e.client_name), File.read!(tmp_path)}}
           end)
-          case results do
-            [url] when is_binary(url) -> url <> "?v=#{System.os_time(:second)}"
-            _                        -> socket.assigns.form_imagen_url
-          end
+          # Guarda con URL anterior por ahora; la nueva se aplica en handle_continue
+          {old_url, {codigo, ext, content, old_url}}
 
         {_, []} ->
-          socket.assigns.form_imagen_url
+          {socket.assigns.form_imagen_url, nil}
       end
 
     attrs = %{
@@ -508,8 +506,31 @@ defmodule PrettycoreWeb.ProductosNativosLive do
 
     case result do
       {:ok, _} ->
-        msg = if socket.assigns.modal == :nuevo, do: "Producto creado correctamente", else: "Producto actualizado correctamente"
-        {:noreply, socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_productos() |> put_flash(:info, msg)}
+        msg = if socket.assigns.modal == :nuevo, do: "Producto creado", else: "Producto actualizado"
+        sock = socket |> assign(:modal, nil) |> assign(:selected, nil) |> load_productos() |> put_flash(:info, msg)
+        if pending_upload do
+          {cod, ext, content, old_url} = pending_upload
+          mime = case String.downcase(ext) do
+            ".jpg"  -> "image/jpeg"
+            ".jpeg" -> "image/jpeg"
+            ".webp" -> "image/webp"
+            ".gif"  -> "image/gif"
+            _       -> "image/png"
+          end
+          data_url = "data:#{mime};base64,#{Base.encode64(content)}"
+          previews = Map.put(sock.assigns.imagen_previews, cod, data_url)
+          lv = self()
+          Task.start(fn ->
+            if old_url && old_url != "", do: Sftp.delete_by_url(old_url)
+            case Sftp.upload_producto_nativo_image(cod, ext, content) do
+              {:ok, url} -> send(lv, {:sftp_imagen_ok, cod, url <> "?v=#{System.os_time(:second)}"})
+              {:error, r} -> send(lv, {:sftp_imagen_error, r})
+            end
+          end)
+          {:noreply, sock |> assign(:imagen_previews, previews) |> assign(:subiendo_imagen, true)}
+        else
+          {:noreply, sock}
+        end
 
       {:error, changeset} ->
         error = changeset.errors
@@ -517,6 +538,17 @@ defmodule PrettycoreWeb.ProductosNativosLive do
           |> Enum.join(", ")
         {:noreply, assign(socket, :form_error, error)}
     end
+  end
+
+  @impl true
+  def handle_info({:sftp_imagen_ok, codigo, url}, socket) do
+    ProductosNativos.update_imagen(codigo, url)
+    previews = Map.delete(socket.assigns.imagen_previews, codigo)
+    {:noreply, socket |> assign(:subiendo_imagen, false) |> assign(:imagen_previews, previews) |> load_productos()}
+  end
+
+  def handle_info({:sftp_imagen_error, _reason}, socket) do
+    {:noreply, socket |> assign(:subiendo_imagen, false) |> put_flash(:error, "No se pudo subir la imagen (error SFTP). El producto fue guardado sin imagen.")}
   end
 
   # ── Eliminar ─────────────────────────────────────────────────────────────────
@@ -583,14 +615,6 @@ defmodule PrettycoreWeb.ProductosNativosLive do
     end
   end
 
-  defp parse_int(nil), do: nil
-  defp parse_int(""), do: nil
-  defp parse_int(v) do
-    case Integer.parse(to_string(v)) do
-      {i, _} -> i
-      :error  -> nil
-    end
-  end
 
   defp nilify(nil), do: nil
   defp nilify(""), do: nil
@@ -685,8 +709,9 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   <!-- Imagen -->
                   <td class="px-4 py-3">
                     <div class="w-10 h-10 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center">
-                      <%= if p.imagen_url && p.imagen_url != "" do %>
-                        <img src={p.imagen_url} class="w-full h-full object-cover" />
+                      <% img_src = Map.get(@imagen_previews, p.codigo) || p.imagen_url %>
+                      <%= if img_src && img_src != "" do %>
+                        <img src={img_src} class="w-full h-full object-cover" />
                       <% else %>
                         <svg class="w-5 h-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -948,19 +973,14 @@ defmodule PrettycoreWeb.ProductosNativosLive do
                   <%= cond do %>
                     <% @uploads.imagen.entries != [] -> %>
                       <% entry = List.first(@uploads.imagen.entries) %>
-                      <div class="w-full h-full border-2 border-green-400 bg-green-50 rounded-2xl flex flex-col items-center justify-center gap-2 pointer-events-none">
-                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                          <svg class="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <div class="w-full h-full rounded-2xl overflow-hidden relative pointer-events-none">
+                        <.live_img_preview entry={entry} class="w-full h-full object-cover" />
+                        <div class="absolute bottom-0 left-0 right-0 bg-black/40 px-3 py-1.5 flex items-center gap-2">
+                          <svg class="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                           </svg>
+                          <span class="text-[10px] text-white truncate"><%= entry.client_name %></span>
                         </div>
-                        <span class="text-xs font-semibold text-green-700">Imagen lista</span>
-                        <span class="text-[10px] text-green-500 px-4 truncate w-full text-center"><%= entry.client_name %></span>
-                        <%= if entry.progress > 0 and entry.progress < 100 do %>
-                          <div class="w-3/5 bg-green-200 rounded-full h-1.5 overflow-hidden">
-                            <div class="bg-green-500 rounded-full h-1.5 transition-all duration-300" style={"width: #{entry.progress}%"} />
-                          </div>
-                        <% end %>
                       </div>
 
                     <% @form_imagen_url && @form_imagen_url != "" -> %>
@@ -1177,7 +1197,8 @@ defmodule PrettycoreWeb.ProductosNativosLive do
               </button>
               <button
                 type="submit"
-                class="px-5 py-2 text-sm font-semibold text-white bg-gray-900 hover:bg-black rounded-xl transition-colors"
+                phx-disable-with="Guardando..."
+                class="px-5 py-2 text-sm font-semibold text-white bg-gray-900 hover:bg-black rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <%= if @modal == :nuevo, do: "Crear Producto", else: "Guardar Cambios" %>
               </button>

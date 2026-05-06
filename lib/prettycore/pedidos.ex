@@ -39,7 +39,7 @@ defmodule Prettycore.Pedidos do
             p.estado in ^@estados_activos,
           select: sum(i.precio_unitario * i.cantidad)
       )
-    result || 0.0
+    result || Decimal.new(0)
   end
 
   @doc "Devuelve true si el producto tiene pedidos en estado pendiente o procesando."

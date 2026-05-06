@@ -301,7 +301,7 @@ defmodule PrettycoreWeb.Tienda do
       if info && info.tipo_pago == "credito" do
         limite = info.limite_credito || Decimal.new(0)
         usado  = Pedidos.credito_usado(socket.assigns.current_user_id)
-        Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+        Decimal.sub(limite, Decimal.round(usado, 2))
       else
         Decimal.new(0)
       end
@@ -1406,7 +1406,7 @@ defmodule PrettycoreWeb.Tienda do
         total      = calc_cart_total(socket.assigns.cart_items, socket.assigns.precios, socket.assigns.precios_nativos)
         limite     = info.limite_credito || Decimal.new(0)
         usado      = Pedidos.credito_usado(socket.assigns.current_user_id)
-        disponible = Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+        disponible = Decimal.sub(limite, Decimal.round(usado, 2))
         if Decimal.compare(Decimal.round(Decimal.from_float(total), 2), Decimal.round(disponible, 2)) in [:lt, :eq] do
           :ok
         else

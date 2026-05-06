@@ -8,7 +8,7 @@ defmodule Prettycore.Sftp do
   @host ~c"88.223.85.55"
   @port 65002
   @user ~c"u588009084"
-  @password ~c"Poder316."
+  @password ~c"PRETTYCORe13."
   @timeout 20_000
   @retries 2
 
@@ -45,8 +45,9 @@ defmodule Prettycore.Sftp do
   def delete_by_url(""), do: :ok
   def delete_by_url(url) when is_binary(url) do
     prefix = "https://prettycore.xyz/"
-    if String.starts_with?(url, prefix) do
-      relative = String.replace_prefix(url, prefix, "")
+    clean_url = url |> String.split("?") |> List.first()
+    if String.starts_with?(clean_url, prefix) do
+      relative = String.replace_prefix(clean_url, prefix, "")
       remote_path = "domains/prettycore.xyz/public_html/#{relative}"
       delete_remote(remote_path)
     else
@@ -60,6 +61,7 @@ defmodule Prettycore.Sftp do
       password: @password,
       silently_accept_hosts: true,
       user_interaction: false,
+      auth_methods: ~c"password",
       connect_timeout: @timeout
     ]
 
@@ -104,6 +106,40 @@ defmodule Prettycore.Sftp do
     upload("#{@dir_supercats}/#{name}", "#{@url_supercats}/#{name}", @make_dirs_supercats, content, "super_categoría")
   end
 
+  @doc "Prueba la conexión SFTP. Llama desde iex: Prettycore.Sftp.test_conexion()"
+  def test_conexion do
+    opts = [
+      user: @user,
+      password: @password,
+      silently_accept_hosts: true,
+      user_interaction: false,
+      auth_methods: ~c"password",
+      connect_timeout: 10_000
+    ]
+    IO.puts("Conectando a #{@host}:#{@port} como #{@user}...")
+    case :ssh.connect(@host, @port, opts, 10_000) do
+      {:ok, conn} ->
+        IO.puts("✓ SSH conectado")
+        case :ssh_sftp.start_channel(conn, timeout: 10_000) do
+          {:ok, ch} ->
+            IO.puts("✓ Canal SFTP abierto")
+            case :ssh_sftp.list_dir(ch, ~c".", timeout: 10_000) do
+              {:ok, entries} ->
+                IO.puts("✓ Directorio raíz accesible, #{length(entries)} entradas")
+              {:error, r} ->
+                IO.puts("✗ list_dir falló: #{inspect(r)}")
+            end
+            :ssh_sftp.stop_channel(ch)
+            :ssh.close(conn)
+          {:error, r} ->
+            IO.puts("✗ Canal SFTP falló: #{inspect(r)}")
+            :ssh.close(conn)
+        end
+      {:error, reason} ->
+        IO.puts("✗ Conexión SSH falló: #{inspect(reason)}")
+    end
+  end
+
   # ── Privado ────────────────────────────────────────────────────────
 
   defp upload(remote_path, url, dirs, content, label, attempt \\ 1) do
@@ -114,13 +150,12 @@ defmodule Prettycore.Sftp do
       password: @password,
       silently_accept_hosts: true,
       user_interaction: false,
+      auth_methods: ~c"password",
       connect_timeout: @timeout
     ]
 
     with {:ok, conn} <- :ssh.connect(@host, @port, opts, @timeout),
          {:ok, ch}   <- :ssh_sftp.start_channel(conn, timeout: @timeout) do
-      Enum.each(dirs, &:ssh_sftp.make_dir(ch, &1))
-
       result =
         case :ssh_sftp.write_file(ch, String.to_charlist(remote_path), content) do
           :ok ->

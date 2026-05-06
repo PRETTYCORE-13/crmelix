@@ -75,7 +75,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
         if cliente && cliente.tipo_pago == "credito" do
           limite = cliente.limite_credito || Decimal.new(0)
           usado  = Pedidos.credito_usado(id)
-          Decimal.sub(limite, Decimal.round(Decimal.from_float(usado), 2))
+          Decimal.sub(limite, Decimal.round(usado, 2))
         else
           Decimal.new(0)
         end

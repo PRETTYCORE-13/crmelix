@@ -78,7 +78,8 @@
       "Bash(sed -i 's|      \"usuarios\" ->\\\\n        {:noreply, socket}|      \"gamas\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/gamas\"\\)}\\\\n      \"usuarios\" ->\\\\n        {:noreply, socket}|' lib/prettycore_web/live/users/users_create_live.ex)",
       "Bash(perl -i -0pe 's|\\(      \"clientes\" ->\\\\n        \\\\{:noreply, push_navigate\\\\\\(socket, to: ~p\"/admin/clientes\"\\\\\\)\\\\}\\\\n\\\\n      _ ->\\)|$1|; s|\\(      \"clientes\" ->\\\\n        \\\\{:noreply, push_navigate\\\\\\(socket, to: ~p\"/admin/clientes\"\\\\\\)\\\\}\\\\n\\\\n      _ ->\\)|      \"clientes\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/clientes\"\\)}\\\\n\\\\n      \"gamas\" ->\\\\n        {:noreply, push_navigate\\(socket, to: ~p\"/admin/gamas\"\\)}\\\\n\\\\n      _ ->|' lib/prettycore_web/live/index/pages/clientes/edit/cliente_form_edit_live.ex lib/prettycore_web/live/index/pages/clientes/new/cliente_form_new_live.ex)",
       "Bash(grep -n \"def tienda_page\\\\|defp tienda_page\\\\|end$\" lib/prettycore_web/live/index/pages/tienda_live.ex)",
-      "Bash(grep -n '^\\\\s*\"\"\"\\\\s*$\\\\|^\\\\s*end\\\\s*$' lib/prettycore_web/live/index/pages/tienda_live.ex)"
+      "Bash(grep -n '^\\\\s*\"\"\"\\\\s*$\\\\|^\\\\s*end\\\\s*$' lib/prettycore_web/live/index/pages/tienda_live.ex)",
+      "WebFetch(domain:prettycore.xyz)"
     ],
     "deny": [],
     "ask": []
