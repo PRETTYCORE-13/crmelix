@@ -64,9 +64,14 @@ defmodule PrettycoreWeb.SessionController do
   end
 
   def delete(conn, _params) do
+    user_id       = get_session(conn, :user_id)
     session_token = get_session(conn, :session_token)
-    Task.start(fn -> Auth.close_user_session(session_token) end)
 
+    if user_id do
+      Phoenix.PubSub.broadcast(Prettycore.PubSub, "user_sessions:#{user_id}", {:logout, user_id})
+    end
+
+    Task.start(fn -> Auth.close_user_session(session_token) end)
     :persistent_term.erase(:cache_cte_clientes)
     conn
     |> configure_session(drop: true)

@@ -168,7 +168,7 @@ defmodule PrettycoreWeb.CategoriasLive do
           {:ok, {Path.extname(entry.client_name) |> String.downcase(), File.read!(tmp_path)}}
         end)
 
-      slug = "#{String.downcase(cat.nombre) |> String.replace(~r/[^a-z0-9]/, "_")}_#{System.system_time(:second)}"
+      slug = String.downcase(cat.nombre) |> String.replace(~r/[^a-z0-9]/, "_")
       old_url = cat.imagen_url
       cat_id = cat.id
       cat_nombre = cat.nombre

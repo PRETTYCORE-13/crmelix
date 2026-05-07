@@ -38,6 +38,7 @@ defmodule PrettycoreWeb.PedidosLive do
       |> assign(:detalle_imgs, %{})
 
     if connected?(socket) do
+      Phoenix.PubSub.subscribe(Prettycore.PubSub, "pedidos:updates")
       send(self(), {:load_pedidos, user_id, role})
     end
 
@@ -53,6 +54,11 @@ defmodule PrettycoreWeb.PedidosLive do
     pedidos = Pedidos.list_pedidos(user_id, role)
     clientes_map = build_clientes_map(pedidos)
     {:noreply, assign(socket, pedidos: pedidos, clientes_map: clientes_map, loading: false)}
+  end
+
+  def handle_info(:pedidos_updated, socket) do
+    pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
+    {:noreply, assign(socket, pedidos: pedidos)}
   end
 
   defp build_clientes_map(pedidos) do
@@ -150,6 +156,7 @@ defmodule PrettycoreWeb.PedidosLive do
           end
           Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo})
         end
+        Phoenix.PubSub.broadcast(Prettycore.PubSub, "pedidos:updates", :pedidos_updated)
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
       {:error, _} ->
@@ -180,6 +187,7 @@ defmodule PrettycoreWeb.PedidosLive do
     pedido = Pedidos.get_pedido(id)
     case Pedidos.cancelar(id) do
       {:ok, _} ->
+        Phoenix.PubSub.broadcast(Prettycore.PubSub, "pedidos:updates", :pedidos_updated)
         if pedido do
           Notificaciones.crear(pedido.user_id, %{
             titulo: "Pedido cancelado",

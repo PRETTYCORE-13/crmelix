@@ -320,51 +320,64 @@ defmodule PrettycoreWeb.Tienda do
 
   @impl true
   def handle_event("confirmar_pedido", _, socket) do
-    metodo_pago = socket.assigns.metodo_pago_sel
-
-    with :ok <- validar_credito(socket, metodo_pago) do
-      user    = Auth.get_user(socket.assigns.current_user_id)
-      cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
-      dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
-      precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
-
-      case Pedidos.crear_desde_carrito(
-             socket.assigns.current_user_id,
-             socket.assigns.cart_items,
-             precios,
-             cliente,
-             dir,
-             metodo_pago
-           ) do
-        {:ok, _pedido} ->
-          sucursal_num = socket.assigns[:sucursal_numero]
-          if sucursal_num do
-            stock_map = socket.assigns.stock_map
-            Enum.each(socket.assigns.cart_items, fn item ->
-              if Map.has_key?(stock_map, item.producto_codigo) do
-                StockSucursal.decrement_stock(item.producto_codigo, sucursal_num, item.cantidad)
-              end
-            end)
-          end
-          new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
-          Carritos.vaciar_carrito(socket.assigns.current_user_id)
-          pago_label = if metodo_pago == "credito", do: "a crédito", else: "de contado"
-          Notificaciones.crear(socket.assigns.current_user_id, %{
-            titulo: "Pedido realizado",
-            mensaje: "Tu pedido #{pago_label} fue enviado para procesamiento.",
-            tipo: "success"
-          })
-          {:noreply,
-           socket
-           |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map, pago_modal: false)
-           |> put_flash(:info, "¡Pedido realizado con éxito!")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
-      end
+    # Fix 7: carrito no puede estar vacío
+    if socket.assigns.cart_items == [] do
+      {:noreply, put_flash(socket, :error, "El carrito está vacío")}
     else
-      {:error, msg} ->
-        {:noreply, assign(socket, pago_modal: true) |> put_flash(:error, msg)}
+      metodo_pago  = socket.assigns.metodo_pago_sel
+      sucursal_num = socket.assigns[:sucursal_numero]
+
+      with :ok <- validar_credito(socket, metodo_pago) do
+        # Fix 8a: refrescar stock desde BD antes de confirmar
+        fresh_stock = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
+
+        sin_stock = Enum.find(socket.assigns.cart_items, fn item ->
+          sv = Map.get(fresh_stock, item.producto_codigo)
+          sv != nil and item.cantidad > sv
+        end)
+
+        if sin_stock do
+          nombre     = (sin_stock.producto && sin_stock.producto.descripcion) || sin_stock.producto_codigo
+          disponible = Map.get(fresh_stock, sin_stock.producto_codigo, 0)
+          {:noreply, socket |> assign(stock_map: fresh_stock) |> put_flash(:error, "Stock insuficiente para \"#{nombre}\" (disponible: #{disponible})")}
+        else
+          user    = Auth.get_user(socket.assigns.current_user_id)
+          cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
+          dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
+          precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
+
+          # Fix 8b: decremento de stock dentro de la transacción vía crear_desde_carrito
+          case Pedidos.crear_desde_carrito(
+                 socket.assigns.current_user_id,
+                 socket.assigns.cart_items,
+                 precios,
+                 cliente,
+                 dir,
+                 metodo_pago,
+                 sucursal_num
+               ) do
+            {:ok, _pedido} ->
+              new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: fresh_stock
+              Carritos.vaciar_carrito(socket.assigns.current_user_id)
+              pago_label = if metodo_pago == "credito", do: "a crédito", else: "de contado"
+              Notificaciones.crear(socket.assigns.current_user_id, %{
+                titulo: "Pedido realizado",
+                mensaje: "Tu pedido #{pago_label} fue enviado para procesamiento.",
+                tipo: "success"
+              })
+              {:noreply,
+               socket
+               |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map, pago_modal: false)
+               |> put_flash(:info, "¡Pedido realizado con éxito!")}
+
+            {:error, _} ->
+              {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+          end
+        end
+      else
+        {:error, msg} ->
+          {:noreply, assign(socket, pago_modal: true) |> put_flash(:error, msg)}
+      end
     end
   end
 

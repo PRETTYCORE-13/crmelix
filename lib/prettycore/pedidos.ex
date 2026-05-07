@@ -61,7 +61,7 @@ defmodule Prettycore.Pedidos do
   Recibe lista de items del carrito y mapa de precios.
   Devuelve {:ok, pedido} | {:error, changeset}.
   """
-  def crear_desde_carrito(user_id, cart_items, precios, cliente_codigo \\ nil, dir_codigo \\ nil, metodo_pago \\ "contado") do
+  def crear_desde_carrito(user_id, cart_items, precios, cliente_codigo \\ nil, dir_codigo \\ nil, metodo_pago \\ "contado", sucursal_num \\ nil) do
     Repo.transaction(fn ->
       {:ok, pedido} =
         %Pedido{}
@@ -88,6 +88,12 @@ defmodule Prettycore.Pedidos do
         })
         |> Repo.insert!()
       end)
+
+      if sucursal_num do
+        Enum.each(cart_items, fn item ->
+          Prettycore.StockSucursal.decrement_stock(item.producto_codigo, sucursal_num, item.cantidad)
+        end)
+      end
 
       Repo.preload(pedido, :items)
     end)
