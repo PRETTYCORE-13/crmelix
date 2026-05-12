@@ -5,11 +5,12 @@ defmodule Prettycore.Notificaciones.Notificacion do
   @primary_key {:id, :binary_id, autogenerate: true}
 
   schema "notificaciones" do
-    field :user_id, :binary_id
-    field :titulo,  :string
-    field :mensaje, :string
-    field :tipo,    :string, default: "info"
-    field :leida,   :boolean, default: false
+    field :user_id,   :binary_id
+    field :titulo,    :string
+    field :mensaje,   :string
+    field :tipo,      :string, default: "info"
+    field :leida,     :boolean, default: false
+    field :pedido_id, :binary_id
     timestamps(type: :utc_datetime)
   end
 
@@ -17,7 +18,7 @@ defmodule Prettycore.Notificaciones.Notificacion do
 
   def changeset(n, attrs) do
     n
-    |> cast(attrs, [:user_id, :titulo, :mensaje, :tipo, :leida])
+    |> cast(attrs, [:user_id, :titulo, :mensaje, :tipo, :leida, :pedido_id])
     |> validate_required([:user_id, :titulo])
     |> validate_inclusion(:tipo, @tipos)
   end

@@ -44,10 +44,25 @@ defmodule PrettycoreWeb.NotifBellComponent do
   end
 
   def handle_event("marcar_leida", %{"id" => id}, socket) do
+    notif = Enum.find(socket.assigns.notifications, &(&1.id == id))
     Notificaciones.marcar_leida(id)
     notifs = Notificaciones.list_recientes(socket.assigns.user_id)
     count  = Notificaciones.count_no_leidas(socket.assigns.user_id)
-    {:noreply, assign(socket, notifications: notifs, count: count)}
+    socket = assign(socket, notifications: notifs, count: count, open: false)
+    titulo = (notif && notif.titulo) || ""
+    pedido_url =
+      cond do
+        notif && notif.pedido_id ->
+          "/admin/pedidos?pedido_id=#{notif.pedido_id}"
+        String.contains?(titulo, "Pedido") or String.contains?(titulo, "Cancelaci") ->
+          "/admin/pedidos"
+        true ->
+          nil
+      end
+    case pedido_url do
+      nil -> {:noreply, socket}
+      url -> {:noreply, push_navigate(socket, to: url)}
+    end
   end
 
   def handle_event("marcar_todas", _, socket) do

@@ -246,6 +246,12 @@ defmodule PrettycoreWeb.ProductosNativosLive do
             {:ok, :actualizado} -> %{acc | actualizados: acc.actualizados + 1}
             {:error, msg}       -> %{acc | errores: acc.errores ++ ["#{attrs["codigo"]}: #{msg}"]}
           end
+        {:warning, msg, attrs}, acc ->
+          case ProductosNativos.upsert_desde_importacion(attrs) do
+            {:ok, :nuevo}       -> %{acc | nuevos: acc.nuevos + 1,       errores: acc.errores ++ ["⚠ #{msg}"]}
+            {:ok, :actualizado} -> %{acc | actualizados: acc.actualizados + 1, errores: acc.errores ++ ["⚠ #{msg}"]}
+            {:error, e}         -> %{acc | errores: acc.errores ++ ["#{attrs["codigo"]}: #{e}"]}
+          end
         {:skip, _}, acc -> acc
       end)
     end
@@ -360,23 +366,30 @@ defmodule PrettycoreWeb.ProductosNativosLive do
         |> Enum.filter(fn {_, v} -> String.trim(v) == "" end)
         |> Enum.map(fn {campo, _} -> campo end)
 
-      if campos_vacios != [] do
-        {:error, "Fila #{row_num} (#{codigo}): campos obligatorios vacíos → #{Enum.join(campos_vacios, ", ")}"}
-      else
-        attrs = %{
-          "codigo"          => codigo,
-          "descripcion"     => nilify_str(desc_larga) || codigo,
-          "desc_corta"      => nilify_str(desc_corta),
-          "precio_base"     => precio,
-          "unidad"          => nilify_str(unidad) || "PZA",
-          "marca"           => nilify_str(marca),
-          "categoria"       => nilify_str(categoria),
-          "super_categoria" => nilify_str(super_cat),
-          "notas"           => nilify_str(notas),
-          "imagen_url"      => nilify_str(imagen_url),
-          "activo"          => true
-        }
-        {:ok, attrs}
+      cond do
+        campos_vacios != [] ->
+          {:error, "Fila #{row_num} (#{codigo}): campos obligatorios vacíos → #{Enum.join(campos_vacios, ", ")}"}
+        precio < 0 ->
+          {:error, "Fila #{row_num} (#{codigo}): PRECIO negativo ($#{precio}) — no se permite importar productos con precio negativo"}
+        true ->
+          attrs = %{
+            "codigo"          => codigo,
+            "descripcion"     => nilify_str(desc_larga) || codigo,
+            "desc_corta"      => nilify_str(desc_corta),
+            "precio_base"     => precio,
+            "unidad"          => nilify_str(unidad) || "PZA",
+            "marca"           => nilify_str(marca),
+            "categoria"       => nilify_str(categoria),
+            "super_categoria" => nilify_str(super_cat),
+            "notas"           => nilify_str(notas),
+            "imagen_url"      => nilify_str(imagen_url),
+            "activo"          => true
+          }
+          if precio == 0.0 do
+            {:warning, "Fila #{row_num} (#{codigo}): PRECIO = $0.00 — se importará pero no podrá pedirse en tienda", attrs}
+          else
+            {:ok, attrs}
+          end
       end
     end
   end

@@ -44,7 +44,11 @@ config :prettycore, Prettycore.PsqlRepo,
     password: db_password,
     database: db_name,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    socket_options: maybe_ipv6,
+    idle_interval: 4_000,
+    queue_target: 5_000,
+    queue_interval: 2_000,
+    connect_timeout: 30_000,
+    socket_options: maybe_ipv6 ++ [keepalive: true],
     parameters: [client_encoding: "UTF8"]
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -58,9 +62,10 @@ config :prettycore, Prettycore.PsqlRepo,
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("RENDER_EXTERNAL_HOSTNAME") || "localhost"
+  host = System.get_env("RENDER_EXTERNAL_HOSTNAME") || "prettycore.onrender.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
 
+  config :prettycore, :app_base_url, "https://#{host}"
   config :prettycore, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :prettycore, PrettycoreWeb.Endpoint,
@@ -105,21 +110,20 @@ config :prettycore, Prettycore.PsqlRepo,
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :prettycore, Prettycore.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://hexdocs.pm/swoosh/Swoosh.html#module-installation for details.
+  # SMTP — Hostinger
+  config :prettycore, Prettycore.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: System.get_env("SMTP_HOST") || "smtp.hostinger.com",
+    username: System.get_env("SMTP_USERNAME") || "servicio.cliente@ennovacore.com.mx",
+    password: System.get_env("SMTP_PASSWORD") || "MegaCore.1",
+    ssl: false,
+    tls: :always,
+    tls_options: [
+      verify: :verify_none,
+      versions: [:"tlsv1.2", :"tlsv1.3"]
+    ],
+    auth: :always,
+    port: 587,
+    retries: 2,
+    timeout: 15_000
 end

@@ -10,30 +10,31 @@ config :prettycore, Prettycore.PsqlRepo,
   ssl: if(System.get_env("DB_HOSTNAME_PSQL", "localhost") == "localhost", do: false, else: [verify: :verify_none]),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  # Render cierra conexiones inactivas ~10min. Reducir pool y mantener vivas con pings.
-  pool_size: 15,
-  idle_interval: 10_000,     # ping cada 10s para evitar que Render cierre la conexión
-  queue_target: 5_000,       # esperar hasta 5s si el pool está ocupado
-  connect_timeout: 30_000,   # 30s para establecer conexión (DNS de Render puede tardar)
+  pool_size: 10,
+  idle_interval: 4_000,      # ping SQL cada 4s — Render cierra SSL idle ~10min pero con NAT puede ser menos
+  queue_target: 5_000,
+  queue_interval: 2_000,
+  connect_timeout: 30_000,
+  socket_options: [keepalive: true],  # TCP keepalive a nivel OS, previene drops silenciosos de NAT/firewall
   parameters: [client_encoding: "UTF8"]
 
 
 # SMTP Configuration for Hostinger
-#config :prettycore, Prettycore.Mailer,
-#  adapter: Swoosh.Adapters.SMTP,
-#  relay: "smtp.hostinger.com",
-#  username: "servicio.cliente@ennovacore.com.mx",
-#  password: "MegaCore.1",
-#  ssl: false,
-#  tls: :always,
-#  tls_options: [
-#    verify: :verify_none,
-#    versions: [:"tlsv1.2", :"tlsv1.3"]
-#  ],
-#  auth: :always,
-#  port: 587,
-#  retries: 3,
-#  timeout: 10_000
+config :prettycore, Prettycore.Mailer,
+  adapter: Swoosh.Adapters.SMTP,
+  relay: "smtp.hostinger.com",
+  username: "servicio.cliente@ennovacore.com.mx",
+  password: System.get_env("SMTP_PASSWORD") || "MegaCore.1",
+  ssl: false,
+  tls: :always,
+  tls_options: [
+    verify: :verify_none,
+    versions: [:"tlsv1.2", :"tlsv1.3"]
+  ],
+  auth: :always,
+  port: 587,
+  retries: 2,
+  timeout: 15_000
 
 # For development, we disable any cache and enable
 # debugging and code reloading.
@@ -106,5 +107,5 @@ config :phoenix_live_view,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
 
-# SMTP adapter doesn't need an API client, but we must not disable delivery
+# SMTP no necesita API client HTTP
 config :swoosh, :api_client, false

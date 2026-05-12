@@ -40,15 +40,20 @@ defmodule Prettycore.StockSucursal do
     end
   end
 
-  @doc "Decrementa el stock de un producto en una sucursal, nunca baja de 0."
+  @doc "Decrementa el stock de forma atómica solo si hay suficiente. Devuelve :ok o {:error, :insufficient_stock}."
   def decrement_stock(producto_codigo, sucursal_numero, cantidad) do
-    PsqlRepo.update_all(
-      from(s in StockItem,
-        where: s.producto_codigo == ^producto_codigo and s.sucursal_numero == ^sucursal_numero,
-        update: [set: [cantidad: fragment("GREATEST(0, cantidad - ?)", ^cantidad)]]
-      ),
-      []
-    )
+    {rows, _} =
+      PsqlRepo.update_all(
+        from(s in StockItem,
+          where:
+            s.producto_codigo == ^producto_codigo and
+            s.sucursal_numero == ^sucursal_numero and
+            s.cantidad >= ^cantidad,
+          update: [set: [cantidad: fragment("cantidad - ?", ^cantidad)]]
+        ),
+        []
+      )
+    if rows > 0, do: :ok, else: {:error, :insufficient_stock}
   end
 
   @doc "Guarda múltiples entradas de stock: recibe %{producto_codigo => cantidad_string}."

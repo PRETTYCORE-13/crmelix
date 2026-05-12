@@ -81,7 +81,8 @@
       "Bash(grep -n '^\\\\s*\"\"\"\\\\s*$\\\\|^\\\\s*end\\\\s*$' lib/prettycore_web/live/index/pages/tienda_live.ex)",
       "WebFetch(domain:prettycore.xyz)",
       "Bash(Get-ChildItem -Path \"d:\\\\prettycore\" -Directory)",
-      "Bash(Select-Object -First 20)"
+      "Bash(Select-Object -First 20)",
+      "Bash(Get-ChildItem -Path \"d:\\\\prettycore\\\\lib\" -Recurse -Filter \"*import*\" -Name)"
     ],
     "deny": [],
     "ask": []

@@ -21,7 +21,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
      |> assign(:productos, productos)
      |> assign(:numeros, numeros)
      |> assign(:numero_activo, numero_activo)
-     |> assign(:precios_map, ListasPrecios.get_precios_map(numero_activo))
+     |> assign(:precios_map, load_precios(numero_activo))
      |> assign(:search, "")
      |> assign(:nuevo_numero, "")
      |> assign(:show_nueva_lista, false)
@@ -41,8 +41,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
   @impl true
   def handle_event("seleccionar_lista", %{"numero" => n_str}, socket) do
     numero = String.to_integer(n_str)
-    precios_map = ListasPrecios.get_precios_map(numero)
-    {:noreply, assign(socket, numero_activo: numero, precios_map: precios_map, edits: %{}, saved: false)}
+    {:noreply, assign(socket, numero_activo: numero, precios_map: load_precios(numero), edits: %{}, saved: false)}
   end
 
   # ── Crear nueva lista ─────────────────────────────────────────────────────────
@@ -84,15 +83,28 @@ defmodule PrettycoreWeb.ListasPreciosLive do
 
   @impl true
   def handle_event("edit_precio", %{"codigo" => codigo, "value" => value}, socket) do
-    numero = socket.assigns.numero_activo
-    case ListasPrecios.guardar_lista(numero, [%{"producto_codigo" => codigo, "precio" => value}]) do
-      {:ok, _} ->
-        precios_map = Map.put(socket.assigns.precios_map, codigo, parse_precio_float(value))
+    numero   = socket.assigns.numero_activo
+    v_str    = String.trim(value)
+    v_float  = parse_precio_float(v_str)
+
+    cond do
+      v_str == "" ->
+        {:noreply, socket}
+
+      v_float <= 0 ->
         edits = Map.delete(socket.assigns.edits, codigo)
-        {:noreply, assign(socket, precios_map: precios_map, edits: edits, saved: true)}
-      {:error, _} ->
-        edits = Map.put(socket.assigns.edits, codigo, value)
-        {:noreply, assign(socket, edits: edits, saved: false)}
+        {:noreply, assign(socket, edits: edits) |> put_flash(:error, "El precio debe ser mayor a $0.00")}
+
+      true ->
+        case ListasPrecios.guardar_lista(numero, [%{"producto_codigo" => codigo, "precio" => value}]) do
+          {:ok, _} ->
+            precios_map = Map.put(socket.assigns.precios_map, codigo, v_float)
+            edits = Map.delete(socket.assigns.edits, codigo)
+            {:noreply, assign(socket, precios_map: precios_map, edits: edits, saved: true)}
+          {:error, _} ->
+            edits = Map.put(socket.assigns.edits, codigo, value)
+            {:noreply, assign(socket, edits: edits, saved: false)}
+        end
     end
   end
 
@@ -238,7 +250,7 @@ defmodule PrettycoreWeb.ListasPreciosLive do
                       <input
                         type="number"
                         step="0.01"
-                        min="0"
+                        min="0.01"
                         value={precio_lista}
                         phx-blur="edit_precio"
                         phx-value-codigo={prod.codigo}
@@ -271,6 +283,11 @@ defmodule PrettycoreWeb.ListasPreciosLive do
       </p>
     </div>
     """
+  end
+
+  defp load_precios(numero) do
+    ListasPrecios.limpiar_precios_cero(numero)
+    ListasPrecios.get_precios_map(numero)
   end
 
   defp parse_precio_float(v) when is_binary(v) do

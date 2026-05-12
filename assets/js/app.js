@@ -596,6 +596,12 @@ topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
+// Scroll suave a la sección de productos al filtrar por super categoría
+window.addEventListener("scroll-to-productos", () => {
+  const el = document.getElementById("productos-section")
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+})
+
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 

@@ -15,6 +15,23 @@ defmodule PrettycoreWeb.Tienda do
   alias Prettycore.Gamas
   alias Prettycore.ClientesNativos
 
+  @max_cantidad_sin_stock 999
+
+  @estados_mx ~w(Aguascalientes) ++
+    ["Baja California", "Baja California Sur", "Campeche", "Chiapas",
+     "Chihuahua", "Ciudad de México", "Coahuila de Zaragoza", "Colima",
+     "Durango", "Estado de México", "Guanajuato", "Guerrero", "Hidalgo",
+     "Jalisco", "Michoacán de Ocampo", "Morelos", "Nayarit", "Nuevo León",
+     "Oaxaca", "Puebla", "Querétaro", "Quintana Roo", "San Luis Potosí",
+     "Sinaloa", "Sonora", "Tabasco", "Tamaulipas", "Tlaxcala",
+     "Veracruz de Ignacio de la Llave", "Yucatán", "Zacatecas"]
+
+  @dir_form_vacio %{
+    "tipo_dir" => "", "calle" => "", "num_ext" => "", "num_int" => "",
+    "colonia" => "", "ciudad" => "", "estado" => "",
+    "cp" => "", "referencias" => "", "etiqueta" => ""
+  }
+
   @impl true
   def mount(_params, _session, socket) do
     role = socket.assigns[:user_role]
@@ -36,6 +53,7 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:categorias, [])
       |> assign(:cat_idx, 0)
       |> assign(:cat_nombre, "Todos")
+      |> assign(:super_cat_sel, nil)
       |> assign(:carrusel, [])
       |> assign(:secciones_tienda, [])
       |> assign(:super_categorias_tienda, [])
@@ -47,7 +65,14 @@ defmodule PrettycoreWeb.Tienda do
       |> assign(:ofertas_favoritos, [])
       |> assign(:ofertas_destacados, [])
       |> assign(:pago_modal, false)
+      |> assign(:modal_paso, "pago")
       |> assign(:metodo_pago_sel, "contado")
+      |> assign(:dir_form, @dir_form_vacio)
+      |> assign(:dir_form_errors, %{})
+      |> assign(:dirs_guardadas, [])
+      |> assign(:dir_seleccionada, nil)
+      |> assign(:editing_dir_id, nil)
+      |> assign(:estados_mx, @estados_mx)
       |> assign(:cliente_nativo_info, nil)
       |> assign(:credito_disponible, Decimal.new(0))
     if connected?(socket) do
@@ -184,8 +209,19 @@ defmodule PrettycoreWeb.Tienda do
     es_todos = String.downcase(cat) in ["inicio", "todos", "all", "inicio", ""]
     nombre_filtro = if es_todos, do: "Todos", else: cat
     idx = Enum.find_index(cats, &(&1.nombre == cat)) || 0
-    productos = list_productos_by_categoria(socket, nombre_filtro)
+    productos = list_productos_by_super_cat(list_productos_by_categoria(socket, nombre_filtro), socket.assigns.super_cat_sel)
     {:noreply, assign(socket, cat_idx: idx, cat_nombre: nombre_filtro, search: "", productos: productos)}
+  end
+
+  @impl true
+  def handle_event("filtrar_super_cat", %{"nombre" => nombre}, socket) do
+    nueva_sel = if socket.assigns.super_cat_sel == nombre, do: nil, else: nombre
+    productos =
+      list_productos_by_super_cat(
+        list_productos_by_categoria(socket, socket.assigns.cat_nombre),
+        nueva_sel
+      )
+    {:noreply, assign(socket, super_cat_sel: nueva_sel, search: "", productos: productos)}
   end
 
   @impl true
@@ -240,6 +276,9 @@ defmodule PrettycoreWeb.Tienda do
       stock_val != nil and cart_qty >= stock_val ->
         {:noreply, put_flash(socket, :error, "Stock máximo alcanzado (#{stock_val} disponibles)")}
 
+      stock_val == nil and cart_qty >= @max_cantidad_sin_stock ->
+        {:noreply, put_flash(socket, :error, "Cantidad máxima por producto: #{@max_cantidad_sin_stock}")}
+
       true ->
         case Carritos.add_item(socket.assigns.current_user_id, codigo) do
           {:ok, _} ->
@@ -271,12 +310,15 @@ defmodule PrettycoreWeb.Tienda do
       {cantidad, _} when cantidad > 0 ->
         item      = Enum.find(socket.assigns.cart_items, &(to_string(&1.id) == item_id))
         stock_val = item && Map.get(socket.assigns.stock_map, item.producto_codigo)
-        if stock_val != nil and cantidad > stock_val do
-          {:noreply, put_flash(socket, :error, "Stock insuficiente (#{stock_val} disponibles)")}
-        else
-          Carritos.update_cantidad(item_id, cantidad)
-          %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
-          {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
+        cond do
+          stock_val != nil and cantidad > stock_val ->
+            {:noreply, put_flash(socket, :error, "Stock insuficiente (#{stock_val} disponibles)")}
+          stock_val == nil and cantidad > @max_cantidad_sin_stock ->
+            {:noreply, put_flash(socket, :error, "Cantidad máxima por producto: #{@max_cantidad_sin_stock}")}
+          true ->
+            Carritos.update_cantidad(item_id, cantidad)
+            %{items: items, total_items: total} = Carritos.get_carrito(socket.assigns.current_user_id)
+            {:noreply, assign(socket, cart_items: items, cart_total_items: total)}
         end
       _ ->
         {:noreply, socket}
@@ -305,12 +347,22 @@ defmodule PrettycoreWeb.Tienda do
       else
         Decimal.new(0)
       end
-    {:noreply, assign(socket, pago_modal: true, metodo_pago_sel: "contado", credito_disponible: disponible)}
+    {:noreply, assign(socket,
+      pago_modal: true,
+      modal_paso: "pago",
+      metodo_pago_sel: "contado",
+      credito_disponible: disponible,
+      dir_form: @dir_form_vacio,
+      dir_form_errors: %{},
+      dirs_guardadas: [],
+      dir_seleccionada: nil,
+      editing_dir_id: nil
+    )}
   end
 
   @impl true
   def handle_event("cerrar_pago_modal", _, socket) do
-    {:noreply, assign(socket, pago_modal: false)}
+    {:noreply, assign(socket, pago_modal: false, modal_paso: "pago", dir_form_errors: %{}, editing_dir_id: nil)}
   end
 
   @impl true
@@ -319,64 +371,231 @@ defmodule PrettycoreWeb.Tienda do
   end
 
   @impl true
+  def handle_event("pago_continuar", _, socket) do
+    dirs = Pedidos.list_direcciones_guardadas(socket.assigns.current_user_id)
+    {:noreply, assign(socket, modal_paso: "direcciones", dirs_guardadas: dirs, dir_seleccionada: nil)}
+  end
+
+  @impl true
+  def handle_event("volver_a_pago", _, socket) do
+    {:noreply, assign(socket, modal_paso: "pago", dir_form_errors: %{})}
+  end
+
+  def handle_event("volver_a_dirs", _, socket) do
+    dirs = Pedidos.list_direcciones_guardadas(socket.assigns.current_user_id)
+    {:noreply, assign(socket, modal_paso: "direcciones", dirs_guardadas: dirs, dir_form_errors: %{}, dir_seleccionada: nil)}
+  end
+
+  def handle_event("ir_dir_nueva", _, socket) do
+    {:noreply, assign(socket, modal_paso: "dir_nueva", dir_form: @dir_form_vacio, dir_form_errors: %{}, dir_seleccionada: nil, editing_dir_id: nil)}
+  end
+
+  def handle_event("sel_dir_guardada", %{"dir" => dir}, socket) do
+    {:noreply, assign(socket, dir_seleccionada: dir)}
+  end
+
+  def handle_event("editar_dir_guardada", %{"id" => id}, socket) do
+    dir = Enum.find(socket.assigns.dirs_guardadas, &(&1.id == id))
+    form = (dir && dir.form) || @dir_form_vacio
+    {:noreply, assign(socket,
+      modal_paso: "dir_nueva",
+      dir_form: form,
+      dir_form_errors: %{},
+      editing_dir_id: id,
+      dir_seleccionada: nil
+    )}
+  end
+
+  def handle_event("eliminar_dir_guardada", %{"id" => id}, socket) do
+    Pedidos.eliminar_dir_usuario(id)
+    dirs = Pedidos.list_direcciones_guardadas(socket.assigns.current_user_id)
+    sel  = if socket.assigns[:dir_seleccionada] in Enum.map(dirs, & &1.display),
+             do: socket.assigns[:dir_seleccionada], else: nil
+    {:noreply, assign(socket, dirs_guardadas: dirs, dir_seleccionada: sel)}
+  end
+
+  @impl true
+  def handle_event("update_dir_form", params, socket) do
+    campos = ~w(calle num_ext num_int colonia ciudad estado cp referencias)
+    form = Map.merge(socket.assigns.dir_form, Map.take(params, campos))
+    {:noreply, assign(socket, dir_form: form, dir_form_errors: %{})}
+  end
+
+  def handle_event("sel_tipo_dir", %{"tipo" => tipo}, socket) do
+    form = Map.put(socket.assigns.dir_form, "tipo_dir", tipo)
+    errors = Map.delete(socket.assigns.dir_form_errors, "tipo_dir")
+    {:noreply, assign(socket, dir_form: form, dir_form_errors: errors)}
+  end
+
+  def handle_event("sel_etiqueta", %{"etiq" => etiq}, socket) do
+    current = Map.get(socket.assigns.dir_form, "etiqueta", "")
+    new_etiq = if current == etiq, do: "", else: etiq
+    form = Map.put(socket.assigns.dir_form, "etiqueta", new_etiq)
+    {:noreply, assign(socket, dir_form: form)}
+  end
+
+  def handle_event("agregar_dir_nueva", _, socket) do
+    editing_id = socket.assigns[:editing_dir_id]
+
+    if is_nil(editing_id) and length(socket.assigns.dirs_guardadas) >= 4 do
+      {:noreply, assign(socket, modal_paso: "direcciones")}
+    else
+      dir_form = socket.assigns.dir_form
+      dir_errors =
+        %{
+          "tipo_dir" => "Selecciona el tipo de dirección",
+          "calle"    => "Calle es requerida",
+          "num_ext"  => "Número exterior es requerido",
+          "colonia"  => "Colonia es requerida",
+          "ciudad"   => "Ciudad es requerida",
+          "estado"   => "Estado es requerido",
+          "cp"       => "Código postal es requerido"
+        }
+        |> Enum.filter(fn {k, _} -> String.trim(Map.get(dir_form, k, "")) == "" end)
+        |> Map.new()
+
+      if dir_errors != %{} do
+        {:noreply, assign(socket, dir_form_errors: dir_errors)}
+      else
+        if editing_id, do: Pedidos.eliminar_dir_usuario(editing_id)
+        nueva = build_direccion_envio(dir_form)
+        Pedidos.guardar_direccion_usuario(socket.assigns.current_user_id, nueva, dir_form)
+        dirs = Pedidos.list_direcciones_guardadas(socket.assigns.current_user_id)
+        {:noreply, assign(socket,
+          modal_paso: "direcciones",
+          dirs_guardadas: dirs,
+          dir_seleccionada: nueva,
+          dir_form: @dir_form_vacio,
+          dir_form_errors: %{},
+          editing_dir_id: nil
+        )}
+      end
+    end
+  end
+
+  @impl true
   def handle_event("confirmar_pedido", _, socket) do
-    # Fix 7: carrito no puede estar vacío
+    case socket.assigns[:dir_seleccionada] do
+      dir when is_binary(dir) and dir != "" ->
+        do_crear_pedido(socket, dir)
+
+      _ ->
+        dir_form = socket.assigns.dir_form
+        dir_errors =
+          %{
+            "tipo_dir" => "Selecciona el tipo de dirección",
+            "calle"    => "Calle es requerida",
+            "num_ext"  => "Número exterior es requerido",
+            "colonia"  => "Colonia es requerida",
+            "ciudad"   => "Ciudad es requerida",
+            "estado"   => "Estado es requerido",
+            "cp"       => "Código postal es requerido"
+          }
+          |> Enum.filter(fn {k, _} -> String.trim(Map.get(dir_form, k, "")) == "" end)
+          |> Map.new()
+
+        if dir_errors != %{} do
+          {:noreply, assign(socket, dir_form_errors: dir_errors, modal_paso: "dir_nueva")}
+        else
+          do_crear_pedido(socket, build_direccion_envio(dir_form))
+        end
+    end
+  end
+
+  defp do_crear_pedido(socket, dir_envio) do
     if socket.assigns.cart_items == [] do
       {:noreply, put_flash(socket, :error, "El carrito está vacío")}
     else
       metodo_pago  = socket.assigns.metodo_pago_sel
       sucursal_num = socket.assigns[:sucursal_numero]
+      precios      = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
 
-      with :ok <- validar_credito(socket, metodo_pago) do
-        # Fix 8a: refrescar stock desde BD antes de confirmar
-        fresh_stock = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
+      total = Enum.reduce(socket.assigns.cart_items, 0.0, fn item, acc ->
+        acc + (Map.get(precios, item.producto_codigo) || 0) * item.cantidad
+      end)
 
-        sin_stock = Enum.find(socket.assigns.cart_items, fn item ->
-          sv = Map.get(fresh_stock, item.producto_codigo)
-          sv != nil and item.cantidad > sv
-        end)
+      precio_negativo = Enum.find(socket.assigns.cart_items, fn item ->
+        (Map.get(precios, item.producto_codigo) || 0) < 0
+      end)
 
-        if sin_stock do
-          nombre     = (sin_stock.producto && sin_stock.producto.descripcion) || sin_stock.producto_codigo
-          disponible = Map.get(fresh_stock, sin_stock.producto_codigo, 0)
-          {:noreply, socket |> assign(stock_map: fresh_stock) |> put_flash(:error, "Stock insuficiente para \"#{nombre}\" (disponible: #{disponible})")}
-        else
-          user    = Auth.get_user(socket.assigns.current_user_id)
-          cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
-          dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
-          precios = Map.merge(socket.assigns.precios, socket.assigns.precios_nativos)
+      codigos   = Enum.map(socket.assigns.cart_items, & &1.producto_codigo)
+      inactivos = ProductosNativos.list_inactivos_by_codigos(codigos)
 
-          # Fix 8b: decremento de stock dentro de la transacción vía crear_desde_carrito
-          case Pedidos.crear_desde_carrito(
-                 socket.assigns.current_user_id,
-                 socket.assigns.cart_items,
-                 precios,
-                 cliente,
-                 dir,
-                 metodo_pago,
-                 sucursal_num
-               ) do
-            {:ok, _pedido} ->
-              new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: fresh_stock
-              Carritos.vaciar_carrito(socket.assigns.current_user_id)
-              pago_label = if metodo_pago == "credito", do: "a crédito", else: "de contado"
-              Notificaciones.crear(socket.assigns.current_user_id, %{
-                titulo: "Pedido realizado",
-                mensaje: "Tu pedido #{pago_label} fue enviado para procesamiento.",
-                tipo: "success"
-              })
-              {:noreply,
-               socket
-               |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map, pago_modal: false)
-               |> put_flash(:info, "¡Pedido realizado con éxito!")}
+      cond do
+        total == 0 ->
+          {:noreply, put_flash(socket, :error, "No se puede realizar el pedido: el total es $0.00. Verifica que los productos tengan precio asignado.")}
 
-            {:error, _} ->
-              {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+        precio_negativo != nil ->
+          nombre = (precio_negativo.producto && precio_negativo.producto.descripcion) || precio_negativo.producto_codigo
+          {:noreply, put_flash(socket, :error, "El producto \"#{nombre}\" tiene precio inválido. Contacta al administrador.")}
+
+        inactivos != [] ->
+          nombres = Enum.map_join(inactivos, ", ", fn {_c, d} -> d end)
+          {:noreply, put_flash(socket, :error, "Productos no disponibles: #{nombres}. Retíralos del carrito.")}
+
+        true ->
+          with :ok <- validar_credito(socket, metodo_pago) do
+            fresh_stock = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: socket.assigns.stock_map
+
+            sin_stock = Enum.find(socket.assigns.cart_items, fn item ->
+              sv = Map.get(fresh_stock, item.producto_codigo)
+              sv != nil and item.cantidad > sv
+            end)
+
+            if sin_stock do
+              nombre     = (sin_stock.producto && sin_stock.producto.descripcion) || sin_stock.producto_codigo
+              disponible = Map.get(fresh_stock, sin_stock.producto_codigo, 0)
+              {:noreply, socket |> assign(stock_map: fresh_stock) |> put_flash(:error, "Stock insuficiente para \"#{nombre}\" (disponible: #{disponible})")}
+            else
+              user    = Auth.get_user(socket.assigns.current_user_id)
+              cliente = (user && user.cliente_codigo not in [nil, ""] && user.cliente_codigo) || nil
+              dir     = (user && user.dir_codigo     not in [nil, ""] && user.dir_codigo)     || nil
+              limite_credito =
+                if metodo_pago == "credito",
+                  do: socket.assigns[:cliente_nativo_info] && socket.assigns.cliente_nativo_info.limite_credito,
+                  else: nil
+
+              case Pedidos.crear_desde_carrito(
+                     socket.assigns.current_user_id,
+                     socket.assigns.cart_items,
+                     precios,
+                     cliente,
+                     dir,
+                     metodo_pago,
+                     sucursal_num,
+                     limite_credito,
+                     (if dir_envio != "", do: dir_envio, else: nil)
+                   ) do
+                {:ok, pedido} ->
+                  new_stock_map = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: fresh_stock
+                  Carritos.vaciar_carrito(socket.assigns.current_user_id)
+                  pago_label = if metodo_pago == "credito", do: "a crédito", else: "de contado"
+                  Notificaciones.crear(socket.assigns.current_user_id, %{
+                    titulo: "Pedido realizado",
+                    mensaje: "Tu pedido #{pago_label} fue enviado para procesamiento.",
+                    tipo: "success",
+                    pedido_id: pedido.id
+                  })
+                  {:noreply,
+                   socket
+                   |> assign(cart_items: [], cart_total_items: 0, cart_open: false, stock_map: new_stock_map, pago_modal: false, modal_paso: "pago", dir_seleccionada: nil)
+                   |> put_flash(:info, "¡Pedido realizado con éxito!")}
+
+                {:error, :credito_excedido} ->
+                  {:noreply, put_flash(socket, :error, "Crédito excedido. Intenta de nuevo o reduce el pedido.")}
+
+                {:error, {:stock_insuficiente, _codigo}} ->
+                  new_stock = if sucursal_num, do: StockSucursal.get_stock_map(sucursal_num), else: fresh_stock
+                  {:noreply, socket |> assign(stock_map: new_stock) |> put_flash(:error, "Stock insuficiente al confirmar. Actualiza el carrito.")}
+
+                {:error, _} ->
+                  {:noreply, put_flash(socket, :error, "Error al realizar el pedido")}
+              end
+            end
+          else
+            {:error, msg} ->
+              {:noreply, assign(socket, pago_modal: true) |> put_flash(:error, msg)}
           end
-        end
-      else
-        {:error, msg} ->
-          {:noreply, assign(socket, pago_modal: true) |> put_flash(:error, msg)}
       end
     end
   end
@@ -530,7 +749,7 @@ defmodule PrettycoreWeb.Tienda do
                 {sec, prev}
               end)
           %>
-          <div class="flex-1 min-w-0 w-full overflow-hidden">
+          <div class={"flex-1 min-w-0 w-full overflow-hidden #{if @user_role != "sysadmin", do: "lg:pr-[228px]"}"}>
           <%= for {sec, prev_tipo} <- secs_with_prev do %>
 
             <!-- ══ SECCIÓN: CARRUSEL ══ -->
@@ -601,7 +820,7 @@ defmodule PrettycoreWeb.Tienda do
 
             <!-- ══ SECCIÓN: TIENDA PRINCIPAL (productos) ══ -->
             <%= if sec.tipo == "productos" do %>
-              <div style={"position:relative;z-index:30;background:#ffffff;padding:10px 8px 24px;#{if prev_tipo == "carrusel", do: "margin-top:-16px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}"}>
+              <div id="productos-section" style={"position:relative;z-index:30;background:#ffffff;padding:10px 8px 24px;#{if prev_tipo == "carrusel", do: "margin-top:-16px;border-radius:16px 16px 0 0;", else: "margin-bottom:8px;"}"}>
                     <%= if Enum.empty?(@productos) do %>
                       <div class="text-center py-20 text-gray-400">
                         <p class="text-sm font-medium">Sin productos en esta categoría</p>
@@ -799,8 +1018,12 @@ defmodule PrettycoreWeb.Tienda do
                 <p class="text-sm font-bold text-gray-900 mb-3"><%= sec.nombre %></p>
                 <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                   <%= for sc <- @super_categorias_tienda do %>
-                    <div class="flex flex-col items-center gap-1.5">
-                      <div class="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100">
+                    <% activa_sc = @super_cat_sel == sc.nombre %>
+                    <button type="button"
+                      phx-click={JS.push("filtrar_super_cat", value: %{nombre: sc.nombre}) |> JS.dispatch("scroll-to-productos")}
+                      class={"flex flex-col items-center gap-1.5 p-1 rounded-2xl transition-all touch-manipulation #{if activa_sc, do: "bg-purple-50 ring-2 ring-purple-400", else: "hover:bg-gray-50"}"}
+                    >
+                      <div class={"w-16 h-16 rounded-2xl overflow-hidden shadow-sm border transition-all #{if activa_sc, do: "border-purple-400 shadow-purple-100 shadow-md", else: "border-gray-100 bg-gray-100"}"}>
                         <%= if sc.imagen_url && sc.imagen_url != "" do %>
                           <img src={sc.imagen_url} alt={sc.nombre} class="w-full h-full object-cover" />
                         <% else %>
@@ -811,10 +1034,21 @@ defmodule PrettycoreWeb.Tienda do
                           </div>
                         <% end %>
                       </div>
-                      <span class="text-[10px] font-medium text-gray-700 text-center leading-tight line-clamp-2 w-full"><%= sc.nombre %></span>
-                    </div>
+                      <span class={"text-[10px] text-center leading-tight line-clamp-2 w-full #{if activa_sc, do: "font-bold text-purple-700", else: "font-medium text-gray-700"}"}>
+                        <%= sc.nombre %>
+                      </span>
+                    </button>
                   <% end %>
                 </div>
+                <%= if @super_cat_sel do %>
+                  <div class="mt-2 flex items-center gap-2">
+                    <span class="text-xs text-purple-700 font-semibold">Filtrando: <%= @super_cat_sel %></span>
+                    <button type="button" phx-click="filtrar_super_cat" phx-value-nombre={@super_cat_sel}
+                      class="text-xs text-gray-400 hover:text-gray-700 underline touch-manipulation">
+                      Ver todos
+                    </button>
+                  </div>
+                <% end %>
               </div>
             <% end %>
 
@@ -889,8 +1123,8 @@ defmodule PrettycoreWeb.Tienda do
 
           <!-- MINI CARRITO - solo desktop (lg+), en móvil se usa el drawer -->
           <%= if @user_role != "sysadmin" do %>
-            <div class="hidden lg:block flex-shrink-0 w-[220px] sticky self-start" style="top: 130px;">
-              <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mx-2 overflow-hidden flex flex-col" style="max-height: calc(100vh - 145px);">
+            <div class="hidden lg:block" style="position: fixed; top: 130px; right: 0; bottom: 0; width: 220px; z-index: 40; padding: 0 8px 8px 0;">
+              <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" style="height: 100%; display: grid; grid-template-rows: auto 1fr auto;">
                 <!-- Header carrito -->
                 <div class="flex items-center justify-between px-3 py-2 border-b border-gray-50">
                   <div class="flex items-center gap-1.5">
@@ -906,8 +1140,8 @@ defmodule PrettycoreWeb.Tienda do
                     <button phx-click="vaciar_carrito" data-confirm="¿Vaciar carrito?" class="text-[10px] text-red-400 hover:text-red-600 transition-colors">Vaciar</button>
                   <% end %>
                 </div>
-                <!-- Items -->
-                <div class="flex-1 overflow-y-auto px-2 py-2" style="min-height:80px;">
+                <!-- Items (scrollable) — 1fr del grid le da altura exacta, overflow-y-auto scrollea dentro -->
+                <div class="overflow-y-auto px-2 py-2">
                   <%= if Enum.empty?(@cart_items) do %>
                     <div class="flex flex-col items-center justify-center py-6 text-gray-300">
                       <svg class="w-8 h-8 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -959,23 +1193,23 @@ defmodule PrettycoreWeb.Tienda do
                     </div>
                   <% end %>
                 </div>
-                <!-- Footer -->
+                <!-- Stats + Botón: bloque fijo fuera del scroll, siempre visible -->
                 <%= if @cart_items != [] do %>
-                  <%
-                    total_mini = Enum.reduce(@cart_items, 0.0, fn item, acc ->
-                      p = Map.get(@precios, item.producto_codigo) || Map.get(@precios_nativos, item.producto_codigo) || Map.get(@precios, "0") || 0.0
-                      acc + p * (item.cantidad || 1)
-                    end)
-                  %>
-                  <div class="border-t border-gray-100 px-3 py-2.5 space-y-2">
+                  <div class="border-t border-gray-100 px-3 pt-2 pb-2.5 space-y-1.5 bg-white">
                     <div class="flex justify-between text-[11px] text-gray-600">
                       <span>Productos</span>
                       <span class="font-semibold text-gray-900"><%= @cart_total_items %> pzas</span>
                     </div>
-                    <%= if total_mini > 0 do %>
+                    <%
+                      total_footer = Enum.reduce(@cart_items, 0.0, fn item, acc ->
+                        p = Map.get(@precios, item.producto_codigo) || Map.get(@precios_nativos, item.producto_codigo) || Map.get(@precios, "0") || 0.0
+                        acc + p * (item.cantidad || 1)
+                      end)
+                    %>
+                    <%= if total_footer > 0 do %>
                       <div class="flex justify-between text-[11px]">
                         <span class="text-gray-400">Importe</span>
-                        <span class="font-bold text-green-600">$<%= :erlang.float_to_binary(total_mini / 1, decimals: 2) %></span>
+                        <span class="font-bold text-green-600">$<%= :erlang.float_to_binary(total_footer / 1, decimals: 2) %></span>
                       </div>
                     <% end %>
                     <%= if @user_role not in ["admin", "oficina"] do %>
@@ -1278,8 +1512,7 @@ defmodule PrettycoreWeb.Tienda do
               <%= if @user_role not in ["admin", "oficina"] do %>
                 <button
                   phx-click="hacer_pedido"
-                  data-confirm="¿Confirmar pedido?"
-                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors shadow-md"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-colors shadow-md touch-manipulation"
                 >
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -1297,7 +1530,7 @@ defmodule PrettycoreWeb.Tienda do
       </div>
     <% end %>
 
-    <!-- ═══ MODAL TIPO DE PAGO ═══ -->
+    <!-- ═══ MODAL PEDIDO (2 pasos) ═══ -->
     <%= if @pago_modal do %>
       <%
         info          = @cliente_nativo_info
@@ -1308,104 +1541,353 @@ defmodule PrettycoreWeb.Tienda do
         end)
         disponible_dec = @credito_disponible
         alcanza        = tiene_credito and Decimal.compare(Decimal.round(Decimal.from_float(total_pedido), 2), Decimal.round(disponible_dec, 2)) in [:lt, :eq]
-        puede_confirmar = @metodo_pago_sel == "contado" or (tiene_credito and alcanza)
+        puede_continuar = @metodo_pago_sel == "contado" or (tiene_credito and alcanza)
       %>
-      <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <div>
-              <h2 class="text-base font-bold text-gray-900">Tipo de pago</h2>
-              <p class="text-xs text-gray-400 mt-0.5">Selecciona cómo deseas pagar</p>
-            </div>
-            <button phx-click="cerrar_pago_modal" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+
+      <!-- Overlay: bottom-sheet on mobile, centered on desktop -->
+      <div class="fixed inset-0 z-[80] flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm">
+
+        <!-- Modal card -->
+        <div class="w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[92vh]">
+
+          <!-- Drag handle (mobile only) -->
+          <div class="sm:hidden flex justify-center pt-2.5 pb-0 shrink-0">
+            <div class="w-9 h-1 bg-gray-300 rounded-full"></div>
           </div>
 
-          <div class="px-5 py-4 space-y-4">
-            <div class="grid grid-cols-2 gap-3">
-              <!-- Contado -->
-              <button phx-click="sel_metodo_pago" phx-value-metodo="contado"
-                class={"p-4 rounded-xl border-2 text-left transition-all #{if @metodo_pago_sel == "contado", do: "border-amber-400 bg-amber-50", else: "border-gray-200 hover:border-gray-300 bg-white"}"}>
-                <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "contado", do: "bg-amber-400", else: "bg-gray-100"}"}>
-                  <svg class={"w-4 h-4 #{if @metodo_pago_sel == "contado", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
-                  </svg>
-                </div>
-                <p class="text-sm font-bold text-gray-800">Contado</p>
-                <p class="text-xs text-gray-400 mt-0.5">Pago inmediato</p>
-              </button>
-
-              <!-- Crédito -->
-              <button phx-click={if tiene_credito, do: "sel_metodo_pago", else: nil}
-                phx-value-metodo="credito"
-                class={"p-4 rounded-xl border-2 text-left transition-all #{cond do
-                  not tiene_credito -> "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
-                  @metodo_pago_sel == "credito" -> "border-blue-400 bg-blue-50"
-                  true -> "border-gray-200 hover:border-gray-300 bg-white"
-                end}"}>
-                <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "credito", do: "bg-blue-500", else: "bg-gray-100"}"}>
-                  <svg class={"w-4 h-4 #{if @metodo_pago_sel == "credito", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
-                  </svg>
-                </div>
-                <p class="text-sm font-bold text-gray-800">Crédito</p>
+          <!-- Header con indicador de pasos -->
+          <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
+            <div class="flex items-center gap-3">
+              <%= if @modal_paso in ["direcciones", "dir_nueva"] do %>
+                <button phx-click={if @modal_paso == "dir_nueva", do: "volver_a_dirs", else: "volver_a_pago"}
+                  class="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors touch-manipulation" title="Volver">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+              <% end %>
+              <div>
+                <h2 class="text-base font-bold text-gray-900 leading-tight">
+                  <%= case @modal_paso do %>
+                    <% "pago"        -> %> Tipo de pago
+                    <% "direcciones" -> %> Dirección de envío
+                    <% "dir_nueva"   -> %> <%= if @editing_dir_id, do: "Editar dirección", else: "Nueva dirección" %>
+                  <% end %>
+                </h2>
                 <p class="text-xs text-gray-400 mt-0.5">
-                  <%= if tiene_credito, do: "#{info.dias_credito || 0} días", else: "No disponible" %>
+                  <%= case @modal_paso do %>
+                    <% "pago"        -> %> Selecciona cómo deseas pagar
+                    <% "direcciones" -> %> ¿A dónde enviamos tu pedido?
+                    <% "dir_nueva"   -> %> <%= if @editing_dir_id, do: "Modifica los datos de entrega", else: "Ingresa los datos de entrega" %>
+                  <% end %>
                 </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5">
+                <div class={"w-2 h-2 rounded-full #{if @modal_paso == "pago", do: "bg-purple-600", else: "bg-gray-300"}"} />
+                <div class="w-4 h-px bg-gray-200" />
+                <div class={"w-2 h-2 rounded-full #{if @modal_paso in ["direcciones", "dir_nueva"], do: "bg-purple-600", else: "bg-gray-300"}"} />
+              </div>
+              <button phx-click="cerrar_pago_modal" class="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors touch-manipulation">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
+          </div>
 
-            <!-- Detalle de crédito -->
-            <%= if @metodo_pago_sel == "credito" and tiene_credito do %>
-              <div class={"rounded-xl p-3 border #{if alcanza, do: "bg-green-50 border-green-200", else: "bg-red-50 border-red-200"}"}>
-                <div class="flex items-center gap-2 mb-2">
-                  <%= if alcanza do %>
-                    <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <p class="text-xs font-semibold text-green-700">Crédito disponible</p>
-                  <% else %>
-                    <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                    <p class="text-xs font-semibold text-red-700">Crédito insuficiente</p>
+          <!-- ── Scrollable body (flex-1 + min-h-0 for proper flex overflow) ── -->
+          <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            <div class="px-5 pt-4 pb-3 space-y-4">
+
+              <!-- ══ PASO 1: PAGO ══ -->
+              <%= if @modal_paso == "pago" do %>
+                <div class="grid grid-cols-2 gap-3">
+                  <button phx-click="sel_metodo_pago" phx-value-metodo="contado" touch-manipulation
+                    class={"p-4 rounded-2xl border-2 text-left transition-all #{if @metodo_pago_sel == "contado", do: "border-amber-400 bg-amber-50", else: "border-gray-200 hover:border-gray-300 bg-white"}"}>
+                    <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "contado", do: "bg-amber-400", else: "bg-gray-100"}"}>
+                      <svg class={"w-4 h-4 #{if @metodo_pago_sel == "contado", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                      </svg>
+                    </div>
+                    <p class="text-sm font-bold text-gray-800">Contado</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Pago inmediato</p>
+                  </button>
+                  <button phx-click={if tiene_credito, do: "sel_metodo_pago", else: nil}
+                    phx-value-metodo="credito"
+                    class={"p-4 rounded-2xl border-2 text-left transition-all #{cond do
+                      not tiene_credito -> "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                      @metodo_pago_sel == "credito" -> "border-blue-400 bg-blue-50"
+                      true -> "border-gray-200 hover:border-gray-300 bg-white"
+                    end}"}>
+                    <div class={"w-9 h-9 rounded-full flex items-center justify-center mb-2.5 #{if @metodo_pago_sel == "credito", do: "bg-blue-500", else: "bg-gray-100"}"}>
+                      <svg class={"w-4 h-4 #{if @metodo_pago_sel == "credito", do: "text-white", else: "text-gray-500"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                      </svg>
+                    </div>
+                    <p class="text-sm font-bold text-gray-800">Crédito</p>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                      <%= if tiene_credito, do: "#{info.dias_credito || 0} días", else: "No disponible" %>
+                    </p>
+                  </button>
+                </div>
+                <%= if @metodo_pago_sel == "credito" and tiene_credito do %>
+                  <div class={"rounded-2xl p-3 border #{if alcanza, do: "bg-green-50 border-green-200", else: "bg-red-50 border-red-200"}"}>
+                    <div class="flex items-center gap-2 mb-2">
+                      <%= if alcanza do %>
+                        <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <p class="text-xs font-semibold text-green-700">Crédito disponible</p>
+                      <% else %>
+                        <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                        <p class="text-xs font-semibold text-red-700">Crédito insuficiente</p>
+                      <% end %>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                      <div><p class="text-gray-400">Disponible</p><p class={"font-bold #{if Decimal.compare(disponible_dec, Decimal.new(0)) == :gt, do: "text-gray-700", else: "text-red-600"}"}>$<%= format_miles(disponible_dec) %></p></div>
+                      <div><p class="text-gray-400">Este pedido</p><p class={"font-bold #{if alcanza, do: "text-green-700", else: "text-red-600"}"}>$<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></p></div>
+                      <div><p class="text-gray-400">Plazo</p><p class="font-bold text-gray-700"><%= info.dias_credito || 0 %> días</p></div>
+                    </div>
+                  </div>
+                <% end %>
+              <% end %>
+
+              <!-- ══ PASO 2A: DIRECCIONES GUARDADAS ══ -->
+              <%= if @modal_paso == "direcciones" do %>
+                <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Direcciones guardadas</p>
+                <div class="space-y-2">
+                  <%= for dir <- @dirs_guardadas do %>
+                    <div class={"w-full flex items-center gap-2 px-3 py-3 rounded-2xl border-2 transition-all #{if @dir_seleccionada == dir.display, do: "border-purple-500 bg-purple-50", else: "border-gray-200 bg-white"}"}>
+                      <button type="button" phx-click="sel_dir_guardada" phx-value-dir={dir.display}
+                        class="flex items-center gap-3 min-w-0 flex-1 text-left touch-manipulation">
+                        <div class={"w-8 h-8 rounded-full flex items-center justify-center shrink-0 #{if @dir_seleccionada == dir.display, do: "bg-purple-100", else: "bg-gray-100"}"}>
+                          <svg class={"w-4 h-4 #{if @dir_seleccionada == dir.display, do: "text-purple-600", else: "text-gray-400"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                          </svg>
+                        </div>
+                        <span class={"text-sm leading-snug line-clamp-2 #{if @dir_seleccionada == dir.display, do: "text-purple-800 font-semibold", else: "text-gray-700 font-medium"}"}><%= dir.display %></span>
+                      </button>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <%= if @dir_seleccionada == dir.display do %>
+                          <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        <% end %>
+                        <%= if dir.id do %>
+                          <%= if dir.form do %>
+                            <button type="button" phx-click="editar_dir_guardada" phx-value-id={dir.id}
+                              class="p-2 rounded-xl hover:bg-blue-50 text-gray-300 hover:text-blue-500 transition-colors touch-manipulation" title="Editar">
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            </button>
+                          <% end %>
+                          <button type="button" phx-click="eliminar_dir_guardada" phx-value-id={dir.id}
+                            class="p-2 rounded-xl hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors touch-manipulation" title="Eliminar">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                          </button>
+                        <% end %>
+                      </div>
+                    </div>
                   <% end %>
                 </div>
-                <div class="grid grid-cols-3 gap-2 text-xs">
+              <% end %>
+
+              <!-- ══ PASO 2B: FORMULARIO NUEVA DIRECCIÓN ══ -->
+              <%= if @modal_paso == "dir_nueva" do %>
+                <%
+                  f    = @dir_form
+                  e    = @dir_form_errors
+                  tipo = Map.get(f, "tipo_dir", "")
+                  etiq = Map.get(f, "etiqueta", "")
+                  inp      = "w-full px-3.5 py-3 text-base sm:text-sm rounded-xl bg-gray-50 border focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white text-gray-800 placeholder-gray-400 transition-colors"
+                  inp_ok   = inp <> " border-gray-200"
+                  inp_err  = inp <> " border-red-400 bg-red-50 focus:ring-red-400"
+                  lbl      = "block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide"
+                  lbl_norm = "block text-xs font-semibold text-gray-500 mb-1.5"
+                  tipo_opts = [
+                    {"Casa",    "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"},
+                    {"Dpto.",   "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"},
+                    {"Oficina", "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"},
+                    {"Hotel",   "M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"},
+                    {"Otro",    "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z"}
+                  ]
+                %>
+
+                <!-- Tipo de dirección -->
+                <div>
+                  <p class={lbl}>Tipo de dirección <span class="normal-case text-red-500">*</span></p>
+                  <div class="grid grid-cols-5 gap-1.5">
+                    <%= for {label, path} <- tipo_opts do %>
+                      <button type="button" phx-click="sel_tipo_dir" phx-value-tipo={label}
+                        class={"flex flex-col items-center justify-center gap-1 py-2.5 sm:py-3 rounded-2xl border-2 transition-all touch-manipulation #{if tipo == label, do: "border-purple-500 bg-purple-50", else: "border-gray-200 bg-white hover:border-purple-300"}"}>
+                        <svg class={"w-5 h-5 #{if tipo == label, do: "text-purple-600", else: "text-gray-400"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                          <path stroke-linecap="round" stroke-linejoin="round" d={path}/>
+                        </svg>
+                        <span class={"text-[9px] font-bold leading-none #{if tipo == label, do: "text-purple-700", else: "text-gray-500"}"}><%= label %></span>
+                      </button>
+                    <% end %>
+                  </div>
+                  <%= if e["tipo_dir"] do %>
+                    <p class="text-[10px] text-red-500 mt-1.5 flex items-center gap-1">
+                      <svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                      <%= e["tipo_dir"] %>
+                    </p>
+                  <% end %>
+                </div>
+
+                <form phx-change="update_dir_form" id="dir-form" class="space-y-4">
                   <div>
-                    <p class="text-gray-400">Disponible</p>
-                    <p class={"font-bold #{if Decimal.compare(disponible_dec, Decimal.new(0)) == :gt, do: "text-gray-700", else: "text-red-600"}"}>$<%= format_miles(disponible_dec) %></p>
+                    <label class={lbl_norm}>Calle / Avenida <span class="text-red-500">*</span></label>
+                    <input type="text" name="calle" value={Map.get(f,"calle","")} phx-debounce="300" autocomplete="street-address"
+                      placeholder="Ej. Av. Insurgentes Sur"
+                      class={if e["calle"], do: inp_err, else: inp_ok} />
+                    <%= if e["calle"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["calle"] %></p><% end %>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class={lbl_norm}>Núm. Exterior <span class="text-red-500">*</span></label>
+                      <input type="text" name="num_ext" value={Map.get(f,"num_ext","")} phx-debounce="300"
+                        placeholder="123" class={if e["num_ext"], do: inp_err, else: inp_ok} />
+                      <%= if e["num_ext"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["num_ext"] %></p><% end %>
+                    </div>
+                    <div>
+                      <label class={lbl_norm}>Núm. Interior <span class="text-[10px] text-gray-400 font-normal">(opc.)</span></label>
+                      <input type="text" name="num_int" value={Map.get(f,"num_int","")} phx-debounce="300"
+                        placeholder="4A" class={inp_ok} />
+                    </div>
                   </div>
                   <div>
-                    <p class="text-gray-400">Este pedido</p>
-                    <p class={"font-bold #{if alcanza, do: "text-green-700", else: "text-red-600"}"}> $<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></p>
+                    <label class={lbl_norm}>Colonia / Fraccionamiento <span class="text-red-500">*</span></label>
+                    <input type="text" name="colonia" value={Map.get(f,"colonia","")} phx-debounce="300"
+                      placeholder="Ej. Col. Centro" class={if e["colonia"], do: inp_err, else: inp_ok} />
+                    <%= if e["colonia"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["colonia"] %></p><% end %>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class={lbl_norm}>Ciudad / Municipio <span class="text-red-500">*</span></label>
+                      <input type="text" name="ciudad" value={Map.get(f,"ciudad","")} phx-debounce="300"
+                        placeholder="Ej. Monterrey" class={if e["ciudad"], do: inp_err, else: inp_ok} />
+                      <%= if e["ciudad"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["ciudad"] %></p><% end %>
+                    </div>
+                    <div>
+                      <label class={lbl_norm}>Código Postal <span class="text-red-500">*</span></label>
+                      <input type="text" inputmode="numeric" name="cp" value={Map.get(f,"cp","")} phx-debounce="300"
+                        maxlength="5" placeholder="64000" class={if e["cp"], do: inp_err, else: inp_ok} />
+                      <%= if e["cp"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["cp"] %></p><% end %>
+                    </div>
                   </div>
                   <div>
-                    <p class="text-gray-400">Plazo</p>
-                    <p class="font-bold text-gray-700"><%= info.dias_credito || 0 %> días</p>
+                    <label class={lbl_norm}>Estado <span class="text-red-500">*</span></label>
+                    <select name="estado" class={if e["estado"], do: inp_err <> " cursor-pointer", else: inp_ok <> " cursor-pointer"}>
+                      <option value="">— Seleccionar estado —</option>
+                      <%= for estado <- @estados_mx do %>
+                        <option value={estado} selected={Map.get(f,"estado") == estado}><%= estado %></option>
+                      <% end %>
+                    </select>
+                    <%= if e["estado"] do %><p class="text-[10px] text-red-500 mt-1 flex items-center gap-1"><svg class="w-3 h-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><%= e["estado"] %></p><% end %>
+                  </div>
+                  <div>
+                    <label class={lbl_norm}>Instrucciones de entrega <span class="text-[10px] text-gray-400 font-normal">(opcional)</span></label>
+                    <input type="text" name="referencias" value={Map.get(f,"referencias","")} phx-debounce="300"
+                      placeholder="Ej. Casa de tejado verde, timbre roto..." class={inp_ok} />
+                  </div>
+                </form>
+
+                <!-- Etiqueta -->
+                <div>
+                  <p class={lbl}>Etiqueta <span class="normal-case text-gray-400 font-normal text-[10px]">(opcional)</span></p>
+                  <div class="flex gap-2 flex-wrap">
+                    <%= for tag <- ["Casa", "Trabajo", "Pareja"] do %>
+                      <button type="button" phx-click="sel_etiqueta" phx-value-etiq={tag}
+                        class={"px-5 py-2 rounded-full border text-sm font-semibold transition-all touch-manipulation #{if etiq == tag, do: "border-purple-500 bg-purple-600 text-white", else: "border-gray-300 text-gray-600 bg-white hover:border-purple-400"}"}>
+                        <%= tag %>
+                      </button>
+                    <% end %>
                   </div>
                 </div>
+
+              <% end %>
+
+            </div>
+          </div>
+
+          <!-- ── Sticky footer con botones de acción ── -->
+          <div class="shrink-0 px-5 pt-3 pb-6 sm:pb-4 border-t border-gray-100 bg-white space-y-2.5">
+
+            <!-- Pago footer -->
+            <%= if @modal_paso == "pago" do %>
+              <div class="bg-gray-50 rounded-2xl px-4 py-3 flex justify-between items-center">
+                <span class="text-sm text-gray-500">Total</span>
+                <span class="text-lg font-bold text-gray-900">$<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></span>
               </div>
+              <button phx-click="pago_continuar"
+                disabled={not puede_continuar}
+                class={"w-full py-3.5 rounded-2xl text-sm font-bold transition-colors flex items-center justify-center gap-2 touch-manipulation #{if puede_continuar, do: "bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white", else: "bg-gray-200 text-gray-400 cursor-not-allowed"}"}>
+                <%= if @metodo_pago_sel == "credito" and tiene_credito and not alcanza do %>
+                  Crédito insuficiente
+                <% else %>
+                  Continuar
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                <% end %>
+              </button>
             <% end %>
 
-            <!-- Total y confirmar -->
-            <div class="bg-gray-50 rounded-xl px-4 py-3 flex justify-between items-center">
-              <span class="text-sm text-gray-500">Total</span>
-              <span class="text-lg font-bold text-gray-900">$<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></span>
-            </div>
-
-            <button phx-click="confirmar_pedido"
-              disabled={not puede_confirmar}
-              class={"w-full py-3 rounded-xl text-sm font-bold transition-colors #{if puede_confirmar, do: "bg-purple-600 hover:bg-purple-500 text-white", else: "bg-gray-200 text-gray-400 cursor-not-allowed"}"}>
-              <%= if @metodo_pago_sel == "credito" and tiene_credito and not alcanza do %>
-                Crédito insuficiente
-              <% else %>
+            <!-- Direcciones footer -->
+            <%= if @modal_paso == "direcciones" do %>
+              <div class="bg-gray-50 rounded-2xl px-4 py-3 flex justify-between items-center">
+                <span class="text-sm text-gray-500">Total</span>
+                <span class="text-lg font-bold text-gray-900">$<%= :erlang.float_to_binary(total_pedido / 1, decimals: 2) %></span>
+              </div>
+              <button phx-click="confirmar_pedido"
+                phx-disable-with="Procesando..."
+                disabled={is_nil(@dir_seleccionada)}
+                class={"w-full py-3.5 rounded-2xl text-sm font-bold transition-colors flex items-center justify-center gap-2 touch-manipulation #{if @dir_seleccionada, do: "bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white shadow-sm shadow-purple-200", else: "bg-gray-200 text-gray-400 cursor-not-allowed"}"}>
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                 Confirmar pedido
+              </button>
+              <%= if length(@dirs_guardadas) < 4 do %>
+                <button type="button" phx-click="ir_dir_nueva"
+                  class="w-full py-3 rounded-2xl text-sm font-semibold border-2 border-dashed border-gray-300 text-gray-500 hover:border-purple-400 hover:text-purple-600 transition-colors flex items-center justify-center gap-2 touch-manipulation">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Agregar nueva dirección
+                </button>
+              <% else %>
+                <p class="text-center text-xs text-gray-400 py-1">Límite de 4 direcciones alcanzado</p>
               <% end %>
-            </button>
+            <% end %>
+
+            <!-- Dir_nueva footer -->
+            <%= if @modal_paso == "dir_nueva" do %>
+              <button phx-click="agregar_dir_nueva"
+                class="w-full py-3.5 rounded-2xl text-sm font-bold bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white transition-colors flex items-center justify-center gap-2 shadow-sm shadow-purple-200 touch-manipulation">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                <%= if @editing_dir_id, do: "Guardar cambios", else: "Agregar dirección" %>
+              </button>
+            <% end %>
+
           </div>
         </div>
       </div>
     <% end %>
 
     """
+  end
+
+  defp build_direccion_envio(form) do
+    tipo      = String.trim(form["tipo_dir"]  || "")
+    num_int   = String.trim(form["num_int"]   || "")
+    ref       = String.trim(form["referencias"] || "")
+    etiqueta  = String.trim(form["etiqueta"]  || "")
+
+    dir = [
+      "#{form["calle"]} ##{form["num_ext"]}",
+      (unless num_int   == "", do: "Int. #{num_int}"),
+      "Col. #{form["colonia"]}",
+      form["ciudad"],
+      form["estado"],
+      "C.P. #{form["cp"]}"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(", ")
+
+    prefix = unless tipo     == "", do: "#{tipo} — ", else: ""
+    suf_r  = unless ref      == "", do: " (#{ref})",   else: ""
+    suf_e  = unless etiqueta == "", do: " [#{etiqueta}]", else: ""
+
+    "#{prefix}#{dir}#{suf_r}#{suf_e}"
   end
 
   defp validar_credito(socket, "credito") do
@@ -1466,6 +1948,10 @@ defmodule PrettycoreWeb.Tienda do
     es_todos = cat_nombre in [nil, ""] or String.downcase(cat_nombre) in ["todos", "inicio", "all"]
     if es_todos, do: all, else: Enum.filter(all, fn p -> p.categoria == cat_nombre end)
   end
+
+  defp list_productos_by_super_cat(productos, nil), do: productos
+  defp list_productos_by_super_cat(productos, super_cat),
+    do: Enum.filter(productos, fn p -> p.super_categoria == super_cat end)
 
   defp search_productos(socket, q) do
     all = socket.assigns[:todos_nativos] || (ProductosNativos.list_activos() |> Enum.map(&ProductosNativos.to_tienda_map/1))

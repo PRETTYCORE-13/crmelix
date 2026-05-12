@@ -74,22 +74,29 @@ defmodule PrettycoreWeb.MenuLayout do
                 class="pc-sidebar-drop-logo"
               />
             </div>
-          <button
-            type="button"
-            class="pc-sidebar-toggle"
-            phx-click={toggle_sidebar_js(@menu_event)}
-          >
-            <%= if @sidebar_open do %>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
+            <!-- Cerrar sidebar: solo visible en móvil -->
+            <button type="button" class="pc-sidebar-close-mobile" phx-click={mobile_close_js()}>
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
-            <% else %>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
-              </svg>
-            <% end %>
-          </button>
-        </div>
+            </button>
+            <!-- Toggle colapso: solo visible en desktop (oculto en móvil via CSS) -->
+            <button
+              type="button"
+              class="pc-sidebar-toggle"
+              phx-click={toggle_sidebar_js(@menu_event)}
+            >
+              <%= if @sidebar_open do %>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" />
+                </svg>
+              <% else %>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" />
+                </svg>
+              <% end %>
+            </button>
+          </div>
 
         <!-- CUERPO DEL MENÚ -->
         <div class="pc-sidebar-body">
@@ -101,8 +108,7 @@ defmodule PrettycoreWeb.MenuLayout do
                 <button
                   type="button"
                   class={menu_item_class(menu_active?(item.id, @current_page))}
-                  phx-click={@menu_event}
-                  phx-value-id={item.id}
+                  phx-click={nav_and_close_js(@menu_event, item.id)}
                 >
                   <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
                   <span class="pc-nav-label">{item.label}</span>
@@ -112,8 +118,7 @@ defmodule PrettycoreWeb.MenuLayout do
                     <button
                       type="button"
                       class={submenu_item_class("programacion_sql", @current_page)}
-                      phx-click={@menu_event}
-                      phx-value-id="programacion_sql"
+                      phx-click={nav_and_close_js(@menu_event, "programacion_sql")}
                     >
                       <span class="pc-submenu-dot" />
                       <span class="pc-nav-label">Herramienta SQL</span>
@@ -125,8 +130,7 @@ defmodule PrettycoreWeb.MenuLayout do
                     <button
                       type="button"
                       class={submenu_item_class("clientes", @current_page)}
-                      phx-click={@menu_event}
-                      phx-value-id="clientes_frog"
+                      phx-click={nav_and_close_js(@menu_event, "clientes_frog")}
                     >
                       <span class="pc-submenu-dot" />
                       <span class="pc-nav-label">Clientes Frog</span>
@@ -147,8 +151,7 @@ defmodule PrettycoreWeb.MenuLayout do
                         <button
                           type="button"
                           class={submenu_item_class("secciones", @current_page) <> " w-full text-left"}
-                          phx-click={@menu_event}
-                          phx-value-id="secciones"
+                          phx-click={nav_and_close_js(@menu_event, "secciones")}
                         >
                           <span class="pc-submenu-icon">
                             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
@@ -175,18 +178,18 @@ defmodule PrettycoreWeb.MenuLayout do
                         <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
                           <div class="pl-3 pt-1 pb-1 space-y-0.5">
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
-                            <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={@menu_event} phx-value-id="categorias">Categorías</button>
-                            <button type="button" class={mobile_admin_item_class("super_categorias", @current_page)} phx-click={@menu_event} phx-value-id="super_categorias">Super Categorías</button>
-                            <button type="button" class={mobile_admin_item_class("productos_nativos", @current_page)} phx-click={@menu_event} phx-value-id="productos_nativos">Productos</button>
+                            <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={nav_and_close_js(@menu_event, "categorias")}>Categorías</button>
+                            <button type="button" class={mobile_admin_item_class("super_categorias", @current_page)} phx-click={nav_and_close_js(@menu_event, "super_categorias")}>Super Categorías</button>
+                            <button type="button" class={mobile_admin_item_class("productos_nativos", @current_page)} phx-click={nav_and_close_js(@menu_event, "productos_nativos")}>Productos</button>
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Tienda</p>
-                            <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={@menu_event} phx-value-id="carrusel">Anuncio</button>
-                            <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={@menu_event} phx-value-id="secciones">Secciones</button>
-                            <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={@menu_event} phx-value-id="stock">Stock</button>
-                            <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={@menu_event} phx-value-id="sucursales">Sucursales</button>
+                            <button type="button" class={mobile_admin_item_class("carrusel", @current_page)} phx-click={nav_and_close_js(@menu_event, "carrusel")}>Anuncio</button>
+                            <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={nav_and_close_js(@menu_event, "secciones")}>Secciones</button>
+                            <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={nav_and_close_js(@menu_event, "stock")}>Stock</button>
+                            <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={nav_and_close_js(@menu_event, "sucursales")}>Sucursales</button>
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Contenido</p>
-                            <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={@menu_event} phx-value-id="seccion_ofertas">Carrusel Ofertas</button>
-                            <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={@menu_event} phx-value-id="seccion_publicidad">Publicidad</button>
-                            <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={@menu_event} phx-value-id="seccion_envios">Envíos</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={nav_and_close_js(@menu_event, "seccion_ofertas")}>Carrusel Ofertas</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={nav_and_close_js(@menu_event, "seccion_publicidad")}>Publicidad</button>
+                            <button type="button" class={mobile_admin_item_class("seccion_envios", @current_page)} phx-click={nav_and_close_js(@menu_event, "seccion_envios")}>Envíos</button>
                           </div>
                         </div>
                       </div>
@@ -196,8 +199,7 @@ defmodule PrettycoreWeb.MenuLayout do
                       <button
                         type="button"
                         class={submenu_item_class("pedidos", @current_page)}
-                        phx-click={@menu_event}
-                        phx-value-id="pedidos"
+                        phx-click={nav_and_close_js(@menu_event, "pedidos")}
                       >
                         <span class="pc-submenu-icon">
                           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
@@ -227,19 +229,19 @@ defmodule PrettycoreWeb.MenuLayout do
                         <div class="pc-subsubmenu">
                           <button type="button"
                             class={subsubmenu_item_class("clientes_nativos", @current_page)}
-                            phx-click={@menu_event} phx-value-id="clientes_nativos">
+                            phx-click={nav_and_close_js(@menu_event, "clientes_nativos")}>
                             <span class="pc-subsubmenu-dot" />
                             <span class="pc-nav-label">Clientes</span>
                           </button>
                           <button type="button"
                             class={subsubmenu_item_class("listas_precios", @current_page)}
-                            phx-click={@menu_event} phx-value-id="listas_precios">
+                            phx-click={nav_and_close_js(@menu_event, "listas_precios")}>
                             <span class="pc-subsubmenu-dot" />
                             <span class="pc-nav-label">Lista de Precios</span>
                           </button>
                           <button type="button"
                             class={subsubmenu_item_class("gamas", @current_page)}
-                            phx-click={@menu_event} phx-value-id="gamas">
+                            phx-click={nav_and_close_js(@menu_event, "gamas")}>
                             <span class="pc-subsubmenu-dot" />
                             <span class="pc-nav-label">Gama de Productos</span>
                           </button>
@@ -434,6 +436,17 @@ defmodule PrettycoreWeb.MenuLayout do
   defp mobile_toggle_js do
     JS.toggle_class("pc-sidebar-visible", to: ".pc-platform-sidebar")
     |> JS.toggle_class("pc-sidebar-overlay-visible", to: ".pc-sidebar-overlay")
+  end
+
+  defp mobile_close_js do
+    JS.remove_class("pc-sidebar-visible", to: ".pc-platform-sidebar")
+    |> JS.remove_class("pc-sidebar-overlay-visible", to: ".pc-sidebar-overlay")
+  end
+
+  defp nav_and_close_js(menu_event, item_id) do
+    JS.push(menu_event, value: %{id: item_id})
+    |> JS.remove_class("pc-sidebar-visible", to: ".pc-platform-sidebar")
+    |> JS.remove_class("pc-sidebar-overlay-visible", to: ".pc-sidebar-overlay")
   end
 
   # ── Panel de navegación entre secciones ─────────────────────────

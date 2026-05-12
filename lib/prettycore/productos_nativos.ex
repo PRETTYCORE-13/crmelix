@@ -56,6 +56,15 @@ defmodule Prettycore.ProductosNativos do
   @doc "Obtiene un producto por código."
   def get(codigo), do: PsqlRepo.get(ProductoNativo, codigo)
 
+  @doc "Devuelve [{codigo, descripcion}] de productos nativos inactivos dentro de la lista dada."
+  def list_inactivos_by_codigos(codigos) do
+    PsqlRepo.all(
+      from p in ProductoNativo,
+        where: p.codigo in ^codigos and p.activo == false,
+        select: {p.codigo, p.descripcion}
+    )
+  end
+
   @doc "Genera el siguiente código disponible en formato PROD-NNN."
   def next_codigo do
     existing =

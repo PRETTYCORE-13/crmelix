@@ -8,8 +8,8 @@ import Config
 config :prettycore, PrettycoreWeb.Endpoint,
   cache_static_manifest: "priv/static/cache_manifest.json"
 
-# Configures Swoosh API Client
-config :swoosh, api_client: Swoosh.ApiClient.Req
+# SMTP no necesita API client HTTP — lo maneja directamente gen_smtp
+config :swoosh, :api_client, false
 
 # Disable Swoosh Local Memory Storage
 config :swoosh, local: false

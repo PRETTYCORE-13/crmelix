@@ -22,6 +22,8 @@ defmodule Prettycore.ClientesNativos.ClienteNativo do
     field :tipo_pago,       :string,  default: "contado"
     field :limite_credito,  :decimal, default: 0
     field :dias_credito,    :integer, default: 0
+    field :reset_token,            :string
+    field :reset_token_expires_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
   end

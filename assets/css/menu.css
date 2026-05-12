@@ -398,12 +398,11 @@
 }
 
 /* ---- MOBILE HAMBURGER BUTTON ---- */
-/* Oculto en desktop (el topbar lo contiene pero no se muestra) */
 .pc-mobile-menu-btn {
   display: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   border: none;
   background: rgba(0,0,0,0.06);
   color: #111827;
@@ -411,6 +410,30 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+/* ---- MOBILE CLOSE BUTTON (inside sidebar, hidden on desktop) ---- */
+.pc-sidebar-close-mobile {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.pc-sidebar-close-mobile:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+.pc-sidebar-close-mobile svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* ---- MOBILE OVERLAY ---- */
@@ -437,56 +460,77 @@
     height: 24px;
   }
 
-  /* Sidebar: hidden off-screen by default */
+  /* Sidebar: oculto fuera de pantalla por defecto */
   .pc-platform-sidebar {
     position: fixed;
     top: 0;
     left: 0;
     height: 100vh;
     height: 100dvh;
-    width: 240px;
+    width: 280px;
     z-index: 50;
     transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     background: #ffffff;
     border-right: 1px solid #e5e7eb;
+    padding: 12px 14px;
   }
 
-  /* When toggled open on mobile via JS: slide in */
+  /* Sidebar abierto en móvil: slide in */
   .pc-platform-sidebar.pc-sidebar-visible {
     transform: translateX(0);
-    width: 240px;
+    width: 280px;
   }
 
-  /* Always show labels on mobile when visible */
-  .pc-platform-sidebar.pc-sidebar-visible .pc-nav-label {
+  /* Mostrar labels siempre cuando está visible en móvil */
+  .pc-platform-sidebar.pc-sidebar-visible .pc-nav-label,
+  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-section-label {
     opacity: 1;
     width: auto;
+    font-size: 14px;
+    text-align: left;
+    padding: 14px 8px 6px;
   }
 
-  /* Override collapsed desktop styles when sidebar is visible on mobile */
-  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-drop-logo {
-    width: 40px;
-    height: 40px;
-  }
+  /* Corregir estilos colapsados de desktop cuando sidebar está visible en móvil */
+  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-drop-logo { width: 40px; height: 40px; }
   .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-header {
+    flex-direction: row;
+    align-items: center;
     justify-content: space-between;
   }
-  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-brand {
-    justify-content: flex-start;
-  }
+  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-brand { justify-content: flex-start; }
   .pc-platform-sidebar.pc-sidebar-visible .pc-nav-item {
     justify-content: flex-start;
-    padding: 10px 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    min-height: 48px;
   }
   .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-user {
     justify-content: flex-start;
-    padding: 10px 12px;
+    padding: 12px 14px;
   }
-  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-section-label {
-    font-size: 11px;
-    text-align: left;
-    padding: 16px 8px 8px;
+
+  /* Ocultar botón de colapso de desktop en móvil */
+  .pc-sidebar-toggle {
+    display: none;
+  }
+
+  /* Mostrar botón X de cerrar en móvil */
+  .pc-sidebar-close-mobile {
+    display: flex;
+  }
+
+  /* Submenu items más grandes en móvil */
+  .pc-platform-sidebar.pc-sidebar-visible .pc-submenu-item {
+    padding: 10px 14px;
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .pc-platform-sidebar.pc-sidebar-visible .pc-subsubmenu-item {
+    padding: 9px 12px;
+    min-height: 40px;
+    font-size: 13px;
   }
 
   /* Overlay backdrop */
@@ -494,7 +538,8 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
     z-index: 40;
   }
 
@@ -502,14 +547,14 @@
     display: block;
   }
 
-  /* Main content full width */
+  /* Contenido ocupa todo el ancho */
   .pc-platform-main {
     width: 100%;
     padding-top: 0;
     min-width: 0;
   }
 
-  /* Evitar que el contenido empuje la pantalla horizontalmente */
+  /* Evitar scroll horizontal */
   .pc-platform-row {
     overflow-x: hidden;
   }

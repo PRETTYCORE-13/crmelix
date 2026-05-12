@@ -257,8 +257,18 @@ defmodule PrettycoreWeb.ClientesNativosLive do
 
       {:error, changeset} ->
         error = changeset.errors
-          |> Enum.map(fn {k, {msg, _}} -> "#{k}: #{msg}" end)
-          |> Enum.join(", ")
+          |> Enum.map(fn
+            {:email,    {_, [{:constraint, :unique} | _]}} -> "El correo electrónico ya está registrado en otra cuenta"
+            {:username, {_, [{:constraint, :unique} | _]}} -> "El nombre de usuario ya está en uso"
+            {:email,    {msg, _}} -> "Correo: #{msg}"
+            {:username, {msg, _}} -> "Usuario: #{msg}"
+            {:nombre,   {msg, _}} -> "Nombre: #{msg}"
+            {:telefono, {msg, _}} -> "Teléfono: #{msg}"
+            {:direccion, {msg, _}} -> "Dirección: #{msg}"
+            {:sucursal_numero, {msg, _}} -> "Sucursal: #{msg}"
+            {k, {msg, _}} -> "#{k}: #{msg}"
+          end)
+          |> Enum.join(" · ")
         {:noreply, assign(socket, :form_error, error)}
     end
   end
@@ -275,15 +285,40 @@ defmodule PrettycoreWeb.ClientesNativosLive do
     end
   end
 
+  # ── Restablecer contraseña (admin) ───────────────────────────────────────────
+
+  @impl true
+  def handle_event("reset_password", %{"id" => id}, socket) do
+    case ClientesNativos.get(id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Cliente no encontrado")}
+      %{email: e} when e in [nil, ""] ->
+        {:noreply, put_flash(socket, :error, "El cliente no tiene correo registrado")}
+      c ->
+        case ClientesNativos.generar_reset_token(c) do
+          {:ok, token, _} ->
+            base_url = Application.get_env(:prettycore, :app_base_url, "https://prettycore.onrender.com")
+            reset_url = base_url <> "/restablecer/#{token}"
+            BienvenidaCliente.send_reset_link(c.email, c.nombre, reset_url)
+            {:noreply, put_flash(socket, :info, "Enlace de restablecimiento enviado a #{c.email}")}
+          _ ->
+            {:noreply, put_flash(socket, :error, "No se pudo generar el enlace")}
+        end
+    end
+  end
+
   # ── Toggle activo rápido ─────────────────────────────────────────────────────
 
   @impl true
   def handle_event("toggle_activo", %{"id" => id}, socket) do
     case ClientesNativos.get(id) do
-      nil -> {:noreply, socket}
+      nil ->
+        {:noreply, put_flash(socket, :error, "Cliente no encontrado")}
       c ->
-        ClientesNativos.toggle_activo(c)
-        {:noreply, load_clientes(socket)}
+        case ClientesNativos.toggle_activo(c) do
+          {:ok, _}    -> {:noreply, load_clientes(socket)}
+          {:error, _} -> {:noreply, put_flash(socket, :error, "No se pudo actualizar el cliente")}
+        end
     end
   end
 
@@ -485,6 +520,7 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                       </td>
                       <td class="px-4 py-3 text-center">
                         <button phx-click="toggle_activo" phx-value-id={c.id}
+                          data-confirm={if c.activo, do: "¿Inactivar a #{c.nombre}?", else: "¿Activar a #{c.nombre}?"}
                           class={"inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition-colors #{if c.activo, do: "bg-green-100 text-green-700 hover:bg-green-200", else: "bg-gray-100 text-gray-500 hover:bg-gray-200"}"}>
                           <%= if c.activo, do: "Activo", else: "Inactivo" %>
                         </button>
@@ -500,6 +536,16 @@ defmodule PrettycoreWeb.ClientesNativosLive do
                               <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
+                          <%= if c.email not in [nil, ""] do %>
+                            <button phx-click="reset_password" phx-value-id={c.id}
+                              data-confirm={"¿Restablecer contraseña de #{c.nombre} y enviar por correo?"}
+                              class="p-1.5 rounded-lg transition-colors text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                              title="Restablecer contraseña y enviar por correo">
+                              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                              </svg>
+                            </button>
+                          <% end %>
                           <button phx-click="toggle_activo" phx-value-id={c.id}
                             data-confirm={if c.activo, do: "¿Inactivar a #{c.nombre}?", else: "¿Activar a #{c.nombre}?"}
                             class={"p-1.5 rounded-lg transition-colors #{if c.activo, do: "text-green-500 hover:text-red-500 hover:bg-red-50", else: "text-red-500 hover:text-green-600 hover:bg-green-50"}"}

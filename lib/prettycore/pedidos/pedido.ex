@@ -10,8 +10,9 @@ defmodule Prettycore.Pedidos.Pedido do
     field :cliente_codigo, :string
     field :dir_codigo, :string
     field :estado, :string, default: "pendiente"
-    field :metodo_pago, :string, default: "contado"
-    field :notas, :string
+    field :metodo_pago,      :string, default: "contado"
+    field :notas,            :string
+    field :direccion_envio,  :string
     has_many :items, Prettycore.Pedidos.PedidoItem
     timestamps()
   end
@@ -20,7 +21,7 @@ defmodule Prettycore.Pedidos.Pedido do
 
   def changeset(pedido, attrs) do
     pedido
-    |> cast(attrs, [:user_id, :cliente_codigo, :dir_codigo, :estado, :metodo_pago, :notas])
+    |> cast(attrs, [:user_id, :cliente_codigo, :dir_codigo, :estado, :metodo_pago, :notas, :direccion_envio])
     |> validate_required([:user_id, :estado])
     |> validate_inclusion(:estado, @estados)
   end

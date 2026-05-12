@@ -70,6 +70,45 @@ defmodule Prettycore.ClientesNativos do
     |> PsqlRepo.update()
   end
 
+  @token_ttl_hours 24
+
+  @doc "Genera un token de reset de contraseña válido por 24h y lo persiste."
+  def generar_reset_token(%ClienteNativo{} = c) do
+    token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+    expires_at = DateTime.utc_now() |> DateTime.add(@token_ttl_hours * 3600, :second) |> DateTime.truncate(:second)
+
+    c
+    |> Ecto.Changeset.change(reset_token: token, reset_token_expires_at: expires_at)
+    |> PsqlRepo.update()
+    |> case do
+      {:ok, updated} -> {:ok, token, updated}
+      error -> error
+    end
+  end
+
+  @doc "Busca un cliente por token válido (no expirado)."
+  def get_by_reset_token(token) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    PsqlRepo.one(
+      from c in ClienteNativo,
+        where: c.reset_token == ^token and c.reset_token_expires_at > ^now
+    )
+  end
+
+  @doc "Actualiza la contraseña y limpia el token de reset."
+  def consumir_reset_token(%ClienteNativo{} = c, new_password) do
+    PsqlRepo.transaction(fn ->
+      {:ok, updated} =
+        c
+        |> ClienteNativo.password_changeset(%{password: new_password})
+        |> PsqlRepo.update()
+
+      updated
+      |> Ecto.Changeset.change(reset_token: nil, reset_token_expires_at: nil)
+      |> PsqlRepo.update!()
+    end)
+  end
+
   def eliminar(%ClienteNativo{} = c), do: PsqlRepo.delete(c)
 
   def toggle_activo(%ClienteNativo{} = c) do

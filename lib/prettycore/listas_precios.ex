@@ -19,14 +19,19 @@ defmodule Prettycore.ListasPrecios do
     )
   end
 
-  @doc "Mapa %{producto_codigo => precio} para una lista."
+  @doc "Mapa %{producto_codigo => precio} para una lista. Excluye precios <= 0."
   def get_precios_map(numero) do
     PsqlRepo.all(
       from lp in ListaPrecio,
-        where: lp.numero == ^numero,
+        where: lp.numero == ^numero and lp.precio > 0.0,
         select: {lp.producto_codigo, lp.precio}
     )
     |> Map.new()
+  end
+
+  @doc "Elimina todos los registros con precio <= 0 de una lista."
+  def limpiar_precios_cero(numero) do
+    PsqlRepo.delete_all(from lp in ListaPrecio, where: lp.numero == ^numero and lp.precio <= 0.0)
   end
 
   @doc "Obtiene un registro por lista + código de producto."

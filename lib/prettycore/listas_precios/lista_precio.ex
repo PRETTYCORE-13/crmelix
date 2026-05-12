@@ -18,7 +18,7 @@ defmodule Prettycore.ListasPrecios.ListaPrecio do
     |> cast(attrs, [:numero, :producto_codigo, :precio, :descripcion])
     |> validate_required([:numero, :producto_codigo, :precio])
     |> validate_number(:numero, greater_than: 0)
-    |> validate_number(:precio, greater_than_or_equal_to: 0)
+    |> validate_number(:precio, greater_than: 0)
     |> unique_constraint([:numero, :producto_codigo],
         name: :listas_precios_numero_producto_codigo_index,
         message: "ya existe un precio para este producto en esa lista")

@@ -8,12 +8,21 @@ defmodule PrettycoreWeb.PedidosLive do
   alias Prettycore.Notificaciones
 
   @estados_color %{
-    "pendiente"              => "bg-yellow-100 text-yellow-700",
-    "procesando"             => "bg-blue-100 text-blue-700",
-    "enviado"                => "bg-purple-100 text-purple-700",
-    "entregado"              => "bg-green-100 text-green-700",
-    "cancelado"              => "bg-red-100 text-red-500",
-    "cancelacion_solicitada" => "bg-orange-100 text-orange-700"
+    "pendiente"              => "bg-yellow-400 text-black",
+    "procesando"             => "bg-blue-600 text-white",
+    "enviado"                => "bg-violet-600 text-white",
+    "entregado"              => "bg-green-600 text-white",
+    "cancelado"              => "bg-red-600 text-white",
+    "cancelacion_solicitada" => "bg-orange-500 text-white"
+  }
+
+  @estados_accent %{
+    "pendiente"              => "bg-yellow-400",
+    "procesando"             => "bg-blue-600",
+    "enviado"                => "bg-violet-600",
+    "entregado"              => "bg-green-600",
+    "cancelado"              => "bg-red-600",
+    "cancelacion_solicitada" => "bg-orange-500"
   }
 
   @impl true
@@ -31,11 +40,13 @@ defmodule PrettycoreWeb.PedidosLive do
       |> assign(:pedidos, [])
       |> assign(:loading, true)
       |> assign(:estados_color, @estados_color)
+      |> assign(:estados_accent, @estados_accent)
       |> assign(:clientes_map, %{})
       |> assign(:expanded_pedido_id, nil)
       |> assign(:search_pedidos, "")
       |> assign(:detalle_pedido_id, nil)
       |> assign(:detalle_imgs, %{})
+      |> assign(:open_pedido_id, nil)
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Prettycore.PubSub, "pedidos:updates")
@@ -50,10 +61,24 @@ defmodule PrettycoreWeb.PedidosLive do
   end
 
   @impl true
+  def handle_params(%{"pedido_id" => id}, _uri, socket) do
+    {:noreply, assign(socket, :open_pedido_id, id)}
+  end
+
+  def handle_params(_params, _uri, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:load_pedidos, user_id, role}, socket) do
     pedidos = Pedidos.list_pedidos(user_id, role)
     clientes_map = build_clientes_map(pedidos)
-    {:noreply, assign(socket, pedidos: pedidos, clientes_map: clientes_map, loading: false)}
+    socket = assign(socket, pedidos: pedidos, clientes_map: clientes_map, loading: false)
+    socket = case socket.assigns.open_pedido_id do
+      nil -> socket
+      id  -> abrir_detalle(socket, id)
+    end
+    {:noreply, socket}
   end
 
   def handle_info(:pedidos_updated, socket) do
@@ -112,11 +137,15 @@ defmodule PrettycoreWeb.PedidosLive do
 
   @impl true
   def handle_event("ver_detalle", %{"id" => id}, socket) do
+    {:noreply, abrir_detalle(socket, id)}
+  end
+
+  defp abrir_detalle(socket, id) do
+    import Ecto.Query
     pedido = Enum.find(socket.assigns.pedidos, &(&1.id == id))
     imgs =
       if pedido do
         codigos = Enum.map(pedido.items, & &1.producto_codigo)
-        import Ecto.Query
         frog_imgs =
           Prettycore.PsqlRepo.all(
             from p in Prettycore.Productos.Producto,
@@ -133,7 +162,7 @@ defmodule PrettycoreWeb.PedidosLive do
       else
         %{}
       end
-    {:noreply, assign(socket, detalle_pedido_id: id, detalle_imgs: imgs)}
+    assign(socket, detalle_pedido_id: id, detalle_imgs: imgs, open_pedido_id: nil)
   end
 
   @impl true
@@ -154,11 +183,13 @@ defmodule PrettycoreWeb.PedidosLive do
             "cancelado"  -> {"Pedido cancelado",      "Tu pedido fue cancelado por el equipo.",   "warning"}
             _            -> {"Pedido actualizado",    "El estado de tu pedido fue actualizado.",  "info"}
           end
-          Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo})
+          Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo, pedido_id: pedido.id})
         end
         Phoenix.PubSub.broadcast(Prettycore.PubSub, "pedidos:updates", :pedidos_updated)
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
+      {:error, :transicion_invalida} ->
+        {:noreply, put_flash(socket, :error, "Transición no permitida (ej: un pedido entregado o cancelado no puede modificarse)")}
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "No se pudo cambiar el estado")}
     end
@@ -171,7 +202,8 @@ defmodule PrettycoreWeb.PedidosLive do
         Notificaciones.crear(socket.assigns.current_user_id, %{
           titulo: "Cancelación solicitada",
           mensaje: "Tu solicitud de cancelación fue registrada y está pendiente de aprobación.",
-          tipo: "warning"
+          tipo: "warning",
+          pedido_id: id
         })
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
         {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Solicitud de cancelación enviada. El equipo la revisará.")}
@@ -192,7 +224,8 @@ defmodule PrettycoreWeb.PedidosLive do
           Notificaciones.crear(pedido.user_id, %{
             titulo: "Pedido cancelado",
             mensaje: "Tu pedido fue cancelado.",
-            tipo: "warning"
+            tipo: "warning",
+            pedido_id: pedido.id
           })
         end
         pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
@@ -334,41 +367,44 @@ defmodule PrettycoreWeb.PedidosLive do
                   cliente_info = Map.get(@clientes_map, pedido.user_id)
                   expandido = @expanded_pedido_id == pedido.id
                 %>
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div class="bg-white rounded-xl border border-gray-200 shadow-md overflow-hidden relative">
+                  <!-- Franja de color izquierda según estado -->
+                  <div class={"absolute left-0 top-0 bottom-0 w-1 #{Map.get(@estados_accent, pedido.estado, "bg-gray-400")}"}></div>
+
                   <!-- Cabecera del pedido -->
-                  <div class="px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-50 space-y-2">
+                  <div class="pl-5 pr-4 sm:pr-5 pt-4 pb-3 space-y-2.5">
                     <!-- Fila 1: icono + info + visualizar -->
-                    <div class="flex items-start justify-between gap-2">
-                      <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                          <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-9 h-9 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0">
+                          <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                           </svg>
                         </div>
                         <div class="min-w-0">
                           <div class="flex items-center gap-1.5 flex-wrap">
-                            <p class="text-sm font-semibold text-gray-900">Pedido <span class="font-mono text-xs text-gray-400"><%= String.slice(pedido.id, 0, 8) %>...</span></p>
+                            <p class="text-sm font-bold text-black tracking-tight">Pedido <span class="font-mono text-xs text-gray-400 font-normal"><%= String.slice(pedido.id, 0, 8) %>...</span></p>
                             <button type="button"
                               onclick={"navigator.clipboard.writeText('#{pedido.id}');this.querySelector('.ic').classList.add('hidden');this.querySelector('.ick').classList.remove('hidden');setTimeout(()=>{this.querySelector('.ic').classList.remove('hidden');this.querySelector('.ick').classList.add('hidden')},1500)"}
-                              class="text-gray-300 hover:text-indigo-500 transition-colors" title="Copiar ID completo">
+                              class="text-gray-300 hover:text-black transition-colors" title="Copiar ID completo">
                               <svg class="ic w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                               <svg class="ick w-3.5 h-3.5 hidden text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                             </button>
                           </div>
                           <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            <p class="text-xs text-gray-400"><%= fecha %></p>
+                            <p class="text-xs text-gray-500"><%= fecha %></p>
                             <%= if cliente_info do %>
                               <span class="text-gray-300">·</span>
-                              <p class="text-xs font-semibold text-indigo-600 truncate"><%= cliente_info.nombre %></p>
+                              <p class="text-xs font-bold text-black truncate"><%= cliente_info.nombre %></p>
                             <% end %>
                           </div>
                         </div>
                       </div>
-                      <!-- Botón Visualizar siempre visible -->
+                      <!-- Botón Visualizar -->
                       <button
                         phx-click="ver_detalle"
                         phx-value-id={pedido.id}
-                        class="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors flex-shrink-0"
+                        class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-black hover:bg-gray-700 text-white transition-colors flex-shrink-0"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -376,15 +412,15 @@ defmodule PrettycoreWeb.PedidosLive do
                         <span class="hidden sm:inline">Visualizar</span>
                       </button>
                     </div>
-                    <!-- Fila 2: estado + método de pago + controles (se envuelve en móvil) -->
+                    <!-- Fila 2: estado + método de pago + controles -->
                     <div class="flex items-center gap-2 flex-wrap">
-                      <span class={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold #{color}"}>
+                      <span class={"inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold #{color}"}>
                         <%= case pedido.estado do
                           "cancelacion_solicitada" -> "Cancelación sol."
                           e -> String.capitalize(e)
                         end %>
                       </span>
-                      <span class={"inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold #{if pedido.metodo_pago == "credito", do: "bg-blue-100 text-blue-700", else: "bg-amber-100 text-amber-700"}"}>
+                      <span class={"inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold #{if pedido.metodo_pago == "credito", do: "bg-blue-600 text-white", else: "bg-gray-900 text-white"}"}>
                         <%= if pedido.metodo_pago == "credito" do %>
                           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
                           Crédito
@@ -399,28 +435,29 @@ defmodule PrettycoreWeb.PedidosLive do
                           phx-click="cancelar"
                           phx-value-id={pedido.id}
                           data-confirm="¿Aprobar cancelación del pedido?"
-                          class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                          class="text-xs font-bold px-2.5 py-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
                         >Aprobar</button>
                         <button
                           phx-click="cambiar_estado"
                           phx-value-id={pedido.id}
                           phx-value-estado="pendiente"
                           data-confirm="¿Declinar la solicitud y regresar a pendiente?"
-                          class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                          class="text-xs font-bold px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-colors"
                         >Declinar</button>
                       <% end %>
                       <!-- Admin: cambio de estado normal -->
                       <%= if @user_role in ["admin", "sysadmin", "oficina"] and pedido.estado != "cancelacion_solicitada" do %>
-                        <select
-                          phx-change="cambiar_estado"
-                          name="estado"
-                          phx-value-id={pedido.id}
-                          class="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-purple-400 cursor-pointer"
-                        >
-                          <%= for estado <- Prettycore.Pedidos.Pedido.estados() do %>
-                            <option value={estado} selected={estado == pedido.estado}><%= String.capitalize(estado) %></option>
-                          <% end %>
-                        </select>
+                        <form phx-change="cambiar_estado">
+                          <input type="hidden" name="id" value={pedido.id} />
+                          <select
+                            name="estado"
+                            class="text-xs border-2 border-gray-900 rounded-md px-2 py-1 text-black font-bold bg-white focus:ring-2 focus:ring-black cursor-pointer"
+                          >
+                            <%= for estado <- Prettycore.Pedidos.Pedido.estados() do %>
+                              <option value={estado} selected={estado == pedido.estado}><%= String.capitalize(estado) %></option>
+                            <% end %>
+                          </select>
+                        </form>
                       <% end %>
                       <!-- Cliente: solicitar cancelación -->
                       <%= if @user_role not in ["admin", "sysadmin", "oficina"] and pedido.estado in ["pendiente", "procesando"] do %>
@@ -428,33 +465,33 @@ defmodule PrettycoreWeb.PedidosLive do
                           phx-click="solicitar_cancelacion"
                           phx-value-id={pedido.id}
                           data-confirm="¿Solicitar cancelación de este pedido?"
-                          class="text-xs text-red-400 hover:text-red-600 transition-colors"
+                          class="text-xs font-bold text-red-600 hover:text-red-800 transition-colors"
                         >Cancelar</button>
                       <% end %>
                     </div>
                   </div>
 
                   <!-- Items del pedido -->
-                  <div class="px-4 sm:px-5 py-3 space-y-2">
+                  <div class="px-4 sm:px-5 py-3 space-y-1.5 border-t border-gray-100">
                     <%= for item <- pedido.items do %>
                       <div class="flex items-center justify-between text-sm gap-2">
                         <div class="flex items-center gap-2 min-w-0">
-                          <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-gray-100 text-xs font-bold text-gray-600 flex-shrink-0"><%= item.cantidad %>×</span>
-                          <span class="text-gray-700 truncate"><%= item.descripcion || item.producto_codigo %></span>
+                          <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-gray-900 text-xs font-bold text-white flex-shrink-0"><%= item.cantidad %>×</span>
+                          <span class="text-gray-800 truncate font-medium"><%= item.descripcion || item.producto_codigo %></span>
                           <span class="text-xs text-gray-400 font-mono hidden sm:inline flex-shrink-0"><%= item.producto_codigo %></span>
                         </div>
                         <%= if item.precio_unitario > 0 do %>
-                          <span class="text-xs font-semibold text-gray-900 flex-shrink-0">$<%= :erlang.float_to_binary(item.precio_unitario * item.cantidad / 1, decimals: 2) %></span>
+                          <span class="text-sm font-bold text-black flex-shrink-0">$<%= :erlang.float_to_binary(item.precio_unitario * item.cantidad / 1, decimals: 2) %></span>
                         <% end %>
                       </div>
                     <% end %>
                   </div>
 
                   <!-- Pie del pedido -->
-                  <div class="flex items-center justify-between px-4 sm:px-5 py-3 bg-gray-50 border-t border-gray-100">
+                  <div class="flex items-center justify-between px-4 sm:px-5 py-2.5 bg-white border-t border-gray-100">
                     <span class="text-xs text-gray-400"><%= total_pzas %> pzas · <%= length(pedido.items) %> productos</span>
                     <%= if total_precio > 0 do %>
-                      <span class="text-sm font-bold text-gray-900">Total: $<%= :erlang.float_to_binary(total_precio / 1, decimals: 2) %></span>
+                      <span class="text-sm font-bold text-black">Total: $<%= :erlang.float_to_binary(total_precio / 1, decimals: 2) %></span>
                     <% end %>
                   </div>
                 </div>
@@ -506,7 +543,7 @@ defmodule PrettycoreWeb.PedidosLive do
           <!-- Fila 2: estado + controles (solo si hay pedido) -->
           <%= if pedido do %>
             <div class="flex items-center gap-2 flex-wrap">
-              <span class={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold #{color}"}>
+              <span class={"inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold #{color}"}>
                 <%= case pedido.estado do
                   "cancelacion_solicitada" -> "Cancelación sol."
                   e -> String.capitalize(e)
@@ -514,17 +551,20 @@ defmodule PrettycoreWeb.PedidosLive do
               </span>
               <%= if @user_role in ["admin", "sysadmin", "oficina"] and pedido.estado == "cancelacion_solicitada" do %>
                 <button phx-click="cancelar" phx-value-id={pedido.id} data-confirm="¿Aprobar cancelación?"
-                  class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors">Aprobar</button>
+                  class="text-xs font-bold px-2.5 py-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors">Aprobar</button>
                 <button phx-click="cambiar_estado" phx-value-id={pedido.id} phx-value-estado="pendiente" data-confirm="¿Declinar?"
-                  class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">Declinar</button>
+                  class="text-xs font-bold px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-colors">Declinar</button>
               <% end %>
               <%= if @user_role in ["admin", "sysadmin", "oficina"] and pedido.estado != "cancelacion_solicitada" do %>
-                <select phx-change="cambiar_estado" name="estado" phx-value-id={pedido.id}
-                  class="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white focus:ring-1 focus:ring-purple-400 cursor-pointer">
-                  <%= for estado <- Prettycore.Pedidos.Pedido.estados() do %>
-                    <option value={estado} selected={estado == pedido.estado}><%= String.capitalize(estado) %></option>
-                  <% end %>
-                </select>
+                <form phx-change="cambiar_estado">
+                  <input type="hidden" name="id" value={pedido.id} />
+                  <select name="estado"
+                    class="text-xs border-2 border-gray-900 rounded-md px-2 py-1 text-black font-bold bg-white focus:ring-2 focus:ring-black cursor-pointer">
+                    <%= for estado <- Prettycore.Pedidos.Pedido.estados() do %>
+                      <option value={estado} selected={estado == pedido.estado}><%= String.capitalize(estado) %></option>
+                    <% end %>
+                  </select>
+                </form>
               <% end %>
             </div>
           <% end %>
@@ -610,6 +650,19 @@ defmodule PrettycoreWeb.PedidosLive do
                   </div>
                 <% end %>
               </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Dirección de envío del pedido -->
+        <%= if pedido && pedido.direccion_envio && pedido.direccion_envio != "" do %>
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-50 flex items-center gap-2">
+              <svg class="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dirección de envío</span>
+            </div>
+            <div class="px-5 py-4">
+              <p class="text-sm text-gray-700"><%= pedido.direccion_envio %></p>
             </div>
           </div>
         <% end %>
