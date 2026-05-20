@@ -6,6 +6,7 @@ defmodule PrettycoreWeb.PedidosLive do
   alias Prettycore.ClientesNativos
   alias Prettycore.Sucursales
   alias Prettycore.Notificaciones
+  alias Prettycore.SysAdmin
 
   @estados_color %{
     "pendiente"              => "bg-yellow-400 text-black",
@@ -47,6 +48,7 @@ defmodule PrettycoreWeb.PedidosLive do
       |> assign(:detalle_pedido_id, nil)
       |> assign(:detalle_imgs, %{})
       |> assign(:open_pedido_id, nil)
+      |> assign(:timezone, SysAdmin.get_config().timezone || "America/Mexico_City")
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Prettycore.PubSub, "pedidos:updates")
@@ -363,7 +365,7 @@ defmodule PrettycoreWeb.PedidosLive do
                   total_pzas = Enum.sum(Enum.map(pedido.items, & &1.cantidad))
                   total_precio = Enum.reduce(pedido.items, 0.0, fn i, acc -> acc + i.precio_unitario * i.cantidad end)
                   color = Map.get(@estados_color, pedido.estado, "bg-gray-100 text-gray-500")
-                  fecha = Calendar.strftime(pedido.inserted_at, "%d/%m/%Y %H:%M")
+                  fecha = format_fecha(pedido.inserted_at, @timezone)
                   cliente_info = Map.get(@clientes_map, pedido.user_id)
                   expandido = @expanded_pedido_id == pedido.id
                 %>
@@ -511,7 +513,7 @@ defmodule PrettycoreWeb.PedidosLive do
       pedido       = Enum.find(@pedidos, &(&1.id == @detalle_pedido_id))
       cliente      = if pedido, do: Map.get(@clientes_map, pedido.user_id), else: nil
       color        = if pedido, do: Map.get(@estados_color, pedido.estado, "bg-gray-100 text-gray-500"), else: ""
-      fecha        = if pedido, do: Calendar.strftime(pedido.inserted_at, "%d/%m/%Y %H:%M"), else: ""
+      fecha        = if pedido, do: format_fecha(pedido.inserted_at, @timezone), else: ""
       total_precio = if pedido, do: Enum.reduce(pedido.items, 0.0, fn i, acc -> acc + i.precio_unitario * i.cantidad end), else: 0.0
       total_pzas   = if pedido, do: Enum.sum(Enum.map(pedido.items, & &1.cantidad)), else: 0
     %>
@@ -724,4 +726,16 @@ defmodule PrettycoreWeb.PedidosLive do
     </section>
     """
   end
+
+  defp format_fecha(%DateTime{} = dt, tz) do
+    try do
+      dt |> DateTime.shift_zone!(tz) |> Calendar.strftime("%d/%m/%Y %H:%M")
+    rescue
+      _ -> Calendar.strftime(dt, "%d/%m/%Y %H:%M")
+    end
+  end
+  defp format_fecha(%NaiveDateTime{} = ndt, tz) do
+    ndt |> DateTime.from_naive!("Etc/UTC") |> format_fecha(tz)
+  end
+  defp format_fecha(_, _), do: ""
 end

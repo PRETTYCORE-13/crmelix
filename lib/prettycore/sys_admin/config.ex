@@ -14,13 +14,14 @@ defmodule Prettycore.SysAdmin.Config do
     field :modo_nativo, :boolean, default: false
     field :banda_texto, :string
     field :banda_color, :string
+    field :timezone,    :string, default: "America/Mexico_City"
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(config, attrs) do
     config
-    |> cast(attrs, [:usuario, :instancia, :token, :url, :foto, :permitir_edicion, :modo_nativo, :banda_texto, :banda_color])
+    |> cast(attrs, [:usuario, :instancia, :token, :url, :foto, :permitir_edicion, :modo_nativo, :banda_texto, :banda_color, :timezone])
     |> validate_required([])
   end
 end

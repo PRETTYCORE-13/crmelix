@@ -74,6 +74,9 @@ defmodule Prettycore.MixProject do
       # Password hashing seguro (puro Elixir, no requiere compilador C)
       {:pbkdf2_elixir, "~> 2.0"},
 
+      # Zonas horarias completas (IANA tzdata)
+      {:tzdata, "~> 1.1"},
+
       # Test
       {:lazy_html, ">= 0.1.0", only: :test}
     ]

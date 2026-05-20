@@ -17,6 +17,7 @@ defmodule PrettycoreWeb.AdminNav do
     "productos_nativos"  => "/admin/productos-nativos",
     "stock"              => "/admin/stock",
     "sucursales"         => "/admin/sucursales",
+    "configuracion"      => "/admin/configuracion",
     "categorias_nativas" => "/admin/categorias-nativas",
     "tienda"             => "/admin/tienda",
     "pedidos"            => "/admin/pedidos",

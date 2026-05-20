@@ -1,262 +1,340 @@
-# apps/prettycore_web/lib/prettycore_web/live/password_reset_live.ex
 defmodule PrettycoreWeb.PasswordResetLive do
   use PrettycoreWeb, :live_view
+
   alias Prettycore.Auth
+  alias Prettycore.ClientesNativos
+  alias Prettycore.Emails.BienvenidaCliente
 
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:step, :request)
-     # <- Cambiar de email a username
-     |> assign(:username, "")
-     |> assign(:masked_email, nil)
-     |> assign(:code, "")
-     |> assign(:new_password, "")
-     |> assign(:confirm_password, "")
-     |> assign(:message, nil)
-     |> assign(:error, nil)
-     |> assign(:loading, false)}
+     |> assign(page_title: "Recuperar contraseña · PrettyCore")
+     |> assign(step: :request, username: "", masked_email: nil,
+               code: "", new_password: "", confirm_password: "",
+               message: nil, error: nil, loading: false,
+               show_pw: false, show_pw2: false)}
   end
+
+  @impl true
+  def handle_event("toggle_show_pw", _, socket),
+    do: {:noreply, assign(socket, show_pw: !socket.assigns.show_pw)}
+
+  def handle_event("toggle_show_pw2", _, socket),
+    do: {:noreply, assign(socket, show_pw2: !socket.assigns.show_pw2)}
 
   @impl true
   def handle_event("request_code", %{"username" => username}, socket) do
-    socket = assign(socket, :loading, true)
+    username = String.trim(username)
+    socket = assign(socket, loading: true, error: nil)
 
-    case Auth.request_reset(username) do
-      {:ok, message, masked_email} ->
-        {:noreply,
-         socket
-         |> assign(:step, :verify)
-         |> assign(:username, username)
-         |> assign(:masked_email, masked_email)
-         |> assign(:message, message)
-         |> assign(:error, nil)
-         |> assign(:loading, false)}
-
-      {:ok, message} ->
-        {:noreply,
-         socket
-         |> assign(:step, :verify)
-         |> assign(:username, username)
-         |> assign(:masked_email, "***")
-         |> assign(:message, message)
-         |> assign(:error, nil)
-         |> assign(:loading, false)}
-
-      {:error, :not_found} ->
-        {:noreply,
-         socket
-         |> assign(:error, "Lo sentimos, este usuario es incorrecto.")
-         |> assign(:message, nil)
-         |> assign(:loading, false)}
-
-      {:error, :inactive} ->
-        {:noreply,
-         socket
-         |> assign(:error, "Lo sentimos, este usuario se encuentra inactivo.")
-         |> assign(:message, nil)
-         |> assign(:loading, false)}
-
-      {:error, reason} ->
-        {:noreply,
-         socket
-         |> assign(:error, to_string(reason))
-         |> assign(:message, nil)
-         |> assign(:loading, false)}
-    end
-  end
-
-  @impl true
-  def handle_event(
-        "verify_code",
-        %{"code" => code, "new_password" => password, "confirm_password" => confirm},
-        socket
-      ) do
-    socket = assign(socket, :loading, true)
+    # Primero buscar en clientes nativos
+    cliente = ClientesNativos.get_by_username(username)
 
     cond do
-      password != confirm ->
-        {:noreply, assign(socket, error: "Las contraseñas no coinciden", loading: false)}
+      cliente != nil and not cliente.activo ->
+        {:noreply, assign(socket, loading: false, error: "Esta cuenta está inactiva.")}
 
-      String.length(password) < 8 ->
-        {:noreply,
-         assign(socket, error: "La contraseña debe tener al menos 8 caracteres", loading: false)}
+      cliente != nil and (is_nil(cliente.email) or cliente.email == "") ->
+        {:noreply, assign(socket, loading: false, error: "Esta cuenta no tiene correo registrado. Contacta a tu administrador.")}
 
-      true ->
-        # Usar username en lugar de email
-        case Auth.verify_and_reset(socket.assigns.username, code, password) do
-          {:ok, message} ->
+      cliente != nil ->
+        base_url = Application.get_env(:prettycore, :app_base_url, "https://prettycore.onrender.com")
+
+        case ClientesNativos.generar_reset_token(cliente) do
+          {:ok, token, _} ->
+            reset_url = base_url <> "/restablecer/#{token}"
+            BienvenidaCliente.send_reset_link(cliente.email, cliente.nombre, reset_url)
             {:noreply,
              socket
-             |> assign(:step, :success)
-             |> assign(:message, message)
-             |> assign(:error, nil)
-             |> assign(:loading, false)}
+             |> assign(loading: false, step: :link_sent,
+                       masked_email: mask_email(cliente.email))}
+
+          _ ->
+            {:noreply, assign(socket, loading: false, error: "Ocurrió un error. Intenta de nuevo.")}
+        end
+
+      true ->
+        # Buscar en usuarios admin (PostgreSQL)
+        case Auth.request_reset(username) do
+          {:ok, _message, masked_email} ->
+            {:noreply,
+             socket
+             |> assign(loading: false, step: :verify,
+                       username: username, masked_email: masked_email)}
+
+          {:ok, _message} ->
+            {:noreply,
+             socket
+             |> assign(loading: false, step: :verify,
+                       username: username, masked_email: "tu correo")}
+
+          {:error, :not_found} ->
+            {:noreply, assign(socket, loading: false, error: "Usuario no encontrado.")}
+
+          {:error, :inactive} ->
+            {:noreply, assign(socket, loading: false, error: "Esta cuenta está inactiva.")}
 
           {:error, reason} ->
-            {:noreply, assign(socket, error: to_string(reason), loading: false)}
+            {:noreply, assign(socket, loading: false, error: to_string(reason))}
         end
     end
   end
 
   @impl true
-  def handle_event("back_to_request", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:step, :request)
-     |> assign(:code, "")
-     |> assign(:new_password, "")
-     |> assign(:confirm_password, "")
-     |> assign(:message, nil)
-     |> assign(:error, nil)}
+  def handle_event("verify_code", %{"code" => code, "new_password" => pw, "confirm_password" => cpw}, socket) do
+    socket = assign(socket, loading: true)
+
+    cond do
+      String.length(pw) < 8 ->
+        {:noreply, assign(socket, loading: false, error: "La contraseña debe tener al menos 8 caracteres.")}
+
+      pw != cpw ->
+        {:noreply, assign(socket, loading: false, error: "Las contraseñas no coinciden.")}
+
+      true ->
+        case Auth.verify_and_reset(socket.assigns.username, code, pw) do
+          {:ok, _} ->
+            {:noreply, assign(socket, loading: false, step: :success, error: nil)}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, loading: false, error: to_string(reason))}
+        end
+    end
   end
+
+  @impl true
+  def handle_event("back", _, socket) do
+    {:noreply, assign(socket, step: :request, error: nil, username: "", code: "")}
+  end
+
+  defp mask_email(email) when is_binary(email) do
+    case String.split(email, "@") do
+      [name, domain] ->
+        prefix = if String.length(name) > 2, do: String.slice(name, 0, 2) <> "***", else: "***"
+        "#{prefix}@#{domain}"
+      _ -> "***"
+    end
+  end
+  defp mask_email(_), do: "***"
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-slate-900 to-slate-950 p-4">
-      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
-        <div class="text-center mb-8">
-          <h1 class="text-2xl font-bold text-gray-900 mb-2">Cambio de Contraseña</h1>
+    <div class="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-purple-950 via-slate-950 to-black">
 
-          <p class="text-sm text-gray-500">Recupera el acceso a tu cuenta</p>
+      <!-- Fondo decorativo -->
+      <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div class="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-purple-700/10 blur-3xl"></div>
+        <div class="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-indigo-700/10 blur-3xl"></div>
+      </div>
+
+      <div class="relative w-full max-w-md">
+
+        <!-- Brand -->
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 via-purple-600 to-purple-900 shadow-lg shadow-purple-600/40 mb-4">
+            <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <p class="text-sm text-purple-400 tracking-widest font-medium uppercase">PrettyCore</p>
         </div>
 
-        <%= if @message do %>
-          <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
-            {@message}
-          </div>
-        <% end %>
+        <!-- Card -->
+        <div class="w-full p-8 rounded-2xl bg-slate-950/95 border border-purple-600/35 shadow-2xl shadow-purple-500/20 backdrop-blur-xl">
 
-        <%= if @error do %>
-          <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-            {@error}
-          </div>
-        <% end %>
-
-        <%= if @step == :request do %>
-          <form id="request-form" phx-submit="request_code" class="space-y-6">
-            <div class="space-y-2">
-              <label for="username" class="block text-sm font-medium text-gray-700">Usuario</label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                maxlength="50"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-              />
+          <%= if @step == :request do %>
+            <!-- ── Paso 1: Ingresar usuario ─────────────────── -->
+            <div class="text-center mb-7">
+              <h2 class="text-2xl font-semibold text-gray-50 tracking-wide mb-1.5">Recuperar contraseña</h2>
+              <p class="text-sm text-gray-400">Ingresa tu usuario y te enviaremos instrucciones</p>
             </div>
 
-            <button
-              type="submit"
-              disabled={@loading}
-              class="w-full px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {if @loading, do: "Enviando...", else: "Enviar código"}
-            </button>
-          </form>
-        <% end %>
+            <%= if @error do %>
+              <div class="mb-5 flex items-center gap-2.5 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-300 text-sm">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01" />
+                </svg>
+                <%= @error %>
+              </div>
+            <% end %>
 
-        <%= if @step == :verify do %>
-          <form id="verify-form" phx-submit="verify_code" class="space-y-6">
-            <div class="space-y-2">
-              <label for="code" class="block text-sm font-medium text-gray-700">
-                Código de verificación
-              </label>
-              <input
-                id="code"
-                name="code"
-                type="text"
-                value={@code}
-                maxlength="6"
-                required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-center text-2xl font-mono tracking-widest focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-                placeholder="123456"
-              />
-              <p class="text-xs text-gray-500 mt-1">Revisa tu correo ({@masked_email})</p>
-            </div>
-
-            <div class="space-y-2">
-              <label for="new_password" class="block text-sm font-medium text-gray-700">
-                Nueva contraseña
-              </label>
-              <input
-                id="new_password"
-                name="new_password"
-                type="password"
-                minlength="8"
-                maxlength="72"
-                required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-              />
-            </div>
-
-            <div class="space-y-2">
-              <label for="confirm_password" class="block text-sm font-medium text-gray-700">
-                Confirmar contraseña
-              </label>
-              <input
-                id="confirm_password"
-                name="confirm_password"
-                type="password"
-                minlength="8"
-                maxlength="72"
-                required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none"
-              />
-            </div>
-
-            <div class="flex flex-col gap-3">
+            <form phx-submit="request_code" class="flex flex-col gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Usuario</label>
+                <input
+                  type="text"
+                  name="username"
+                  value={@username}
+                  required
+                  maxlength="50"
+                  placeholder="Tu nombre de usuario"
+                  autocomplete="username"
+                  class="w-full px-3.5 py-2.5 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 focus:shadow-lg focus:shadow-purple-900/50 transition-all"
+                />
+              </div>
               <button
                 type="submit"
                 disabled={@loading}
-                class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {if @loading, do: "Verificando...", else: "Cambiar contraseña"}
+                class="w-full mt-2 px-5 py-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-purple-600 to-purple-900 text-gray-50 text-sm font-medium border border-purple-500/70 shadow-lg shadow-purple-600/50 hover:brightness-110 hover:shadow-xl hover:shadow-purple-600/60 disabled:opacity-50 disabled:cursor-not-allowed active:shadow-md transition-all">
+                <%= if @loading, do: "Enviando...", else: "Enviar instrucciones" %>
               </button>
+            </form>
+
+            <div class="mt-6 text-center">
+              <a href="/" class="text-sm text-purple-500 hover:text-purple-300 transition-colors">
+                ← Volver al inicio de sesión
+              </a>
+            </div>
+
+          <% end %>
+
+          <%= if @step == :link_sent do %>
+            <!-- ── Link enviado (clientes nativos) ─────────── -->
+            <div class="text-center">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/15 border border-purple-500/30 mb-5">
+                <svg class="w-8 h-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h2 class="text-xl font-semibold text-gray-50 mb-2">Revisa tu correo</h2>
+              <p class="text-gray-400 text-sm leading-relaxed mb-2">
+                Enviamos un enlace a <span class="text-purple-400 font-medium"><%= @masked_email %></span>
+              </p>
+              <p class="text-gray-500 text-xs leading-relaxed mb-7">
+                El enlace es válido por 24 horas. Si no llega, revisa tu carpeta de spam.
+              </p>
               <button
                 type="button"
-                phx-click="back_to_request"
-                class="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
-              >
-                Nuevo código
+                phx-click="back"
+                class="text-sm text-purple-500 hover:text-purple-300 transition-colors">
+                ← Volver
               </button>
             </div>
-          </form>
-        <% end %>
 
-        <%= if @step == :success do %>
-          <div class="text-center space-y-6">
-            <div class="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-              <svg
-                class="w-8 h-8 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+          <% end %>
+
+          <%= if @step == :verify do %>
+            <!-- ── Paso 2: Código + nueva contraseña (admin) ── -->
+            <div class="text-center mb-7">
+              <h2 class="text-2xl font-semibold text-gray-50 tracking-wide mb-1.5">Verificar código</h2>
+              <p class="text-sm text-gray-400">
+                Enviamos un código a <span class="text-purple-400"><%= @masked_email %></span>
+              </p>
             </div>
 
-            <h2 class="text-xl font-semibold text-gray-900">¡Contraseña actualizada!</h2>
+            <%= if @error do %>
+              <div class="mb-5 flex items-center gap-2.5 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-300 text-sm">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01" />
+                </svg>
+                <%= @error %>
+              </div>
+            <% end %>
 
-            <p class="text-sm text-gray-600">Ya puedes iniciar sesión con tu nueva contraseña.</p>
+            <form phx-submit="verify_code" class="flex flex-col gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Código de verificación</label>
+                <input
+                  type="text"
+                  name="code"
+                  value={@code}
+                  required
+                  maxlength="6"
+                  placeholder="123456"
+                  autocomplete="one-time-code"
+                  class="w-full px-3.5 py-2.5 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm text-center tracking-[0.5em] font-mono placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Nueva contraseña</label>
+                <div class="relative">
+                  <input
+                    type={if @show_pw, do: "text", else: "password"}
+                    name="new_password"
+                    required
+                    minlength="8"
+                    maxlength="72"
+                    placeholder="Mínimo 8 caracteres"
+                    autocomplete="new-password"
+                    class="w-full px-3.5 py-2.5 pr-11 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all"
+                  />
+                  <button type="button" phx-click="toggle_show_pw" tabindex="-1"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
+                    <%= if @show_pw do %>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                    <% else %>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    <% end %>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">Confirmar contraseña</label>
+                <div class="relative">
+                  <input
+                    type={if @show_pw2, do: "text", else: "password"}
+                    name="confirm_password"
+                    required
+                    minlength="8"
+                    maxlength="72"
+                    placeholder="Repite la contraseña"
+                    autocomplete="new-password"
+                    class="w-full px-3.5 py-2.5 pr-11 rounded-lg border border-gray-800 bg-slate-950 text-gray-50 text-sm placeholder:text-gray-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all"
+                  />
+                  <button type="button" phx-click="toggle_show_pw2" tabindex="-1"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
+                    <%= if @show_pw2 do %>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                    <% else %>
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    <% end %>
+                  </button>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={@loading}
+                class="w-full mt-2 px-5 py-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-purple-600 to-purple-900 text-gray-50 text-sm font-medium border border-purple-500/70 shadow-lg shadow-purple-600/50 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                <%= if @loading, do: "Verificando...", else: "Cambiar contraseña" %>
+              </button>
+            </form>
 
-            <a
-              href={~p"/"}
-              class="inline-block w-full px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg font-medium hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg"
-            >
-              Ir a Login
-            </a>
-          </div>
-        <% end %>
+            <div class="mt-5 text-center">
+              <button type="button" phx-click="back"
+                class="text-sm text-purple-500 hover:text-purple-300 transition-colors">
+                ← Volver
+              </button>
+            </div>
+
+          <% end %>
+
+          <%= if @step == :success do %>
+            <!-- ── Éxito ──────────────────────────────────────── -->
+            <div class="text-center">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/15 border border-green-500/30 mb-5">
+                <svg class="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 class="text-xl font-semibold text-gray-50 mb-2">¡Contraseña actualizada!</h2>
+              <p class="text-gray-400 text-sm mb-7 leading-relaxed">
+                Ya puedes iniciar sesión con tu nueva contraseña.
+              </p>
+              <a href="/"
+                class="inline-block w-full text-center px-5 py-2.5 rounded-lg bg-gradient-to-br from-purple-500 via-purple-600 to-purple-900 text-gray-50 text-sm font-medium border border-purple-500/70 shadow-lg shadow-purple-600/40 hover:brightness-110 transition-all">
+                Ir al inicio de sesión
+              </a>
+            </div>
+          <% end %>
+
+        </div>
+
+        <p class="text-center text-xs text-gray-600 mt-6">
+          &copy; <%= DateTime.utc_now().year %> PrettyCore. Todos los derechos reservados.
+        </p>
+
       </div>
     </div>
     """

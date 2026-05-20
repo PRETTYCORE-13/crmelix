@@ -25,7 +25,7 @@ defmodule PrettycoreWeb.Router do
     live "/", LoginLive
 
     # Nueva ruta para cambio de contraseña (UI)
-    live "/password-reset", PasswordResetLives
+    live "/password-reset", PasswordResetLive
 
     # Restablecimiento de contraseña por token (clientes nativos)
     live "/restablecer/:token", ResetPasswordClienteLive
@@ -70,6 +70,7 @@ defmodule PrettycoreWeb.Router do
       live "/sucursales", SucursalesLive
       live "/stock", StockLive
       live "/categorias-nativas", CategoriasNativasLive
+      live "/configuracion", ConfiguracionLive
       live "/usuarios", Users.UsersCreateLive
       live "/clientes/new", ClienteFormNewLive
       live "/clientes/new/:tab", ClienteFormNewLive

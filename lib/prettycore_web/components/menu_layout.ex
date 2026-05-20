@@ -140,7 +140,7 @@ defmodule PrettycoreWeb.MenuLayout do
                 <%= if item.id == "tienda" and @current_page in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
                       "seccion_ofertas", "seccion_publicidad", "seccion_envios",
                       "productos_nativos", "clientes_nativos", "listas_precios", "gamas", "lista_productos",
-                      "stock", "sucursales", "pedidos"] and
+                      "stock", "sucursales", "configuracion", "pedidos"] and
                     (can_see_categorias?(@user_role, @user_permissions) or
                      (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions)) or
                      can_see_pedidos?(@user_role, @user_permissions)) do %>
@@ -175,7 +175,7 @@ defmodule PrettycoreWeb.MenuLayout do
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                           </svg>
                         </button>
-                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
+                        <div id="admin-mobile-menu" class={if @current_page in ["categorias","super_categorias","productos_nativos","carrusel","secciones","stock","sucursales","configuracion","seccion_ofertas","seccion_publicidad","seccion_envios"], do: "block", else: "hidden"}>
                           <div class="pl-3 pt-1 pb-1 space-y-0.5">
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-1 pb-0.5">Catálogo</p>
                             <button type="button" class={mobile_admin_item_class("categorias", @current_page)} phx-click={nav_and_close_js(@menu_event, "categorias")}>Categorías</button>
@@ -186,6 +186,7 @@ defmodule PrettycoreWeb.MenuLayout do
                             <button type="button" class={mobile_admin_item_class("secciones", @current_page)} phx-click={nav_and_close_js(@menu_event, "secciones")}>Secciones</button>
                             <button type="button" class={mobile_admin_item_class("stock", @current_page)} phx-click={nav_and_close_js(@menu_event, "stock")}>Stock</button>
                             <button type="button" class={mobile_admin_item_class("sucursales", @current_page)} phx-click={nav_and_close_js(@menu_event, "sucursales")}>Sucursales</button>
+                            <button type="button" class={mobile_admin_item_class("configuracion", @current_page)} phx-click={nav_and_close_js(@menu_event, "configuracion")}>Hora de pedidos</button>
                             <p class="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2 pt-2 pb-0.5">Contenido</p>
                             <button type="button" class={mobile_admin_item_class("seccion_ofertas", @current_page)} phx-click={nav_and_close_js(@menu_event, "seccion_ofertas")}>Carrusel Ofertas</button>
                             <button type="button" class={mobile_admin_item_class("seccion_publicidad", @current_page)} phx-click={nav_and_close_js(@menu_event, "seccion_publicidad")}>Publicidad</button>
@@ -393,7 +394,7 @@ defmodule PrettycoreWeb.MenuLayout do
        when current in ["tienda", "categorias", "carrusel", "super_categorias", "secciones",
                         "seccion_ofertas", "seccion_publicidad", "seccion_envios",
                         "productos_nativos", "clientes_nativos", "listas_precios", "gamas", "lista_productos",
-                        "stock", "sucursales", "pedidos"],
+                        "stock", "sucursales", "configuracion", "pedidos"],
        do: true
 
   defp menu_active?("clientes", current)
@@ -476,6 +477,7 @@ defmodule PrettycoreWeb.MenuLayout do
           <.sp_item img="/images/carrusel.png"   label="Anuncio"    href="/admin/carrusel"   active={@current_page == "carrusel"} />
           <.sp_item img="/images/stock.png"     label="Stock"     href="/admin/stock"     active={@current_page == "stock"} />
           <.sp_item img="/images/sucursales.png" label="Sucursales" href="/admin/sucursales" active={@current_page == "sucursales"} />
+          <.sp_item img="/images/pedidos.png" label="Hora de pedidos" href="/admin/configuracion" active={@current_page == "configuracion"} />
         </div>
       </div>
 
