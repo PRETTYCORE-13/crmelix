@@ -175,25 +175,29 @@ defmodule PrettycoreWeb.PedidosLive do
   @impl true
   def handle_event("cambiar_estado", %{"id" => id, "estado" => estado}, socket) do
     pedido = Pedidos.get_pedido(id)
-    case Pedidos.cambiar_estado(id, estado) do
-      {:ok, _} ->
-        if pedido do
-          {titulo, msg, tipo} = case estado do
-            "procesando" -> {"Pedido en proceso",    "Tu pedido está siendo preparado.",         "info"}
-            "enviado"    -> {"Pedido enviado",        "Tu pedido ha sido enviado.",               "success"}
-            "entregado"  -> {"Pedido entregado",      "Tu pedido fue entregado. ¡Gracias!",       "success"}
-            "cancelado"  -> {"Pedido cancelado",      "Tu pedido fue cancelado por el equipo.",   "warning"}
-            _            -> {"Pedido actualizado",    "El estado de tu pedido fue actualizado.",  "info"}
+    if is_nil(pedido) or pedido.estado == estado do
+      {:noreply, socket}
+    else
+      case Pedidos.cambiar_estado(id, estado) do
+        {:ok, _} ->
+          if pedido do
+            {titulo, msg, tipo} = case estado do
+              "procesando" -> {"Pedido en proceso",    "Tu pedido está siendo preparado.",         "info"}
+              "enviado"    -> {"Pedido enviado",        "Tu pedido ha sido enviado.",               "success"}
+              "entregado"  -> {"Pedido entregado",      "Tu pedido fue entregado. ¡Gracias!",       "success"}
+              "cancelado"  -> {"Pedido cancelado",      "Tu pedido fue cancelado por el equipo.",   "warning"}
+              _            -> {"Pedido actualizado",    "El estado de tu pedido fue actualizado.",  "info"}
+            end
+            Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo, pedido_id: pedido.id})
           end
-          Notificaciones.crear(pedido.user_id, %{titulo: titulo, mensaje: msg, tipo: tipo, pedido_id: pedido.id})
-        end
-        Phoenix.PubSub.broadcast(Prettycore.PubSub, "pedidos:updates", :pedidos_updated)
-        pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
-        {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
-      {:error, :transicion_invalida} ->
-        {:noreply, put_flash(socket, :error, "Transición no permitida (ej: un pedido entregado o cancelado no puede modificarse)")}
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "No se pudo cambiar el estado")}
+          Phoenix.PubSub.broadcast(Prettycore.PubSub, "pedidos:updates", :pedidos_updated)
+          pedidos = Pedidos.list_pedidos(socket.assigns.current_user_id, socket.assigns.user_role)
+          {:noreply, socket |> assign(pedidos: pedidos) |> put_flash(:info, "Estado actualizado a \"#{String.capitalize(estado)}\"")}
+        {:error, :transicion_invalida} ->
+          {:noreply, put_flash(socket, :error, "Transición no permitida (ej: un pedido entregado o cancelado no puede modificarse)")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "No se pudo cambiar el estado")}
+      end
     end
   end
 

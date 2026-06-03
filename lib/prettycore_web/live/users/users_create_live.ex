@@ -527,8 +527,14 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                           <tbody class="divide-y divide-gray-100">
                             <% perms_list = cond do
                             is_sysadmin_role -> [{"categorias", "Categorías Tienda"}, {"editar_imagenes", "Imágenes Tienda"}]
-                            user.role == "admin" -> []
-                            user.role == "oficina" -> [{"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Categorías"}, {"usuarios", "Usuarios"}]
+                            user.role == "admin" -> [
+                              {"clientes",   "Clientes"},
+                              {"tienda",     "Tienda"},
+                              {"categorias", "Administrar Tienda"},
+                              {"pedidos",    "Ver Pedidos"},
+                              {"usuarios",   "Usuarios"}
+                            ]
+                            user.role == "oficina" -> [{"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Administrar Tienda"}, {"pedidos", "Ver Pedidos"}, {"usuarios", "Usuarios"}]
                             true -> [{"tienda", "Tienda"}]
                           end %>
                             <%= for {perm_id, perm_label} <- perms_list do %>

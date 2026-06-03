@@ -240,11 +240,15 @@ defmodule PrettycoreWeb.Tienda do
 
   # ── Carrito ──
 
+  # DISABLED: detalle de producto (reactivar quitando el no-op y descomentando)
   @impl true
-  def handle_event("ver_detalle", %{"codigo" => codigo}, socket) do
-    prod = Enum.find(socket.assigns.productos, &(&1.codigo == codigo))
-    {:noreply, assign(socket, producto_detalle: prod)}
+  def handle_event("ver_detalle", %{"codigo" => _codigo}, socket) do
+    {:noreply, socket}
   end
+  # def handle_event("ver_detalle", %{"codigo" => codigo}, socket) do
+  #   prod = Enum.find(socket.assigns.productos, &(&1.codigo == codigo))
+  #   {:noreply, assign(socket, producto_detalle: prod)}
+  # end
 
   @impl true
   def handle_event("cerrar_detalle", _, socket) do
