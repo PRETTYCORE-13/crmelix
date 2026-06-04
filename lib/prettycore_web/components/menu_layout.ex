@@ -5,7 +5,6 @@ defmodule PrettycoreWeb.MenuLayout do
   @menu [
   #  %{id: "programacion", label: "Programación"},
   #  %{id: "workorder", label: "Orden T"},
-    %{id: "clientes", label: "Clientes"},
     %{id: "tienda", label: "Tienda"},
     %{id: "usuarios", label: "Usuarios", admin_only: true}
   ]
@@ -19,16 +18,14 @@ defmodule PrettycoreWeb.MenuLayout do
   attr :sidebar_open, :boolean, default: false
   attr :current_user_email, :string, default: nil
   attr :current_user_name, :string, default: nil
-  attr :company_logo, :string, default: nil
   attr :user_role, :string, default: nil
   attr :user_permissions, :list, default: nil
-  attr :modo_nativo, :boolean, default: false
   attr :current_user_id, :any, default: nil
   attr :notif_refresh, :integer, default: 0
   slot :inner_block, required: true
 
   def sidebar(assigns) do
-    assigns = assign(assigns, :menu_items, filter_menu(@menu, assigns.user_permissions, assigns.user_role, assigns.modo_nativo))
+    assigns = assign(assigns, :menu_items, filter_menu(@menu, assigns.user_permissions, assigns.user_role))
 
     ~H"""
     <div class="pc-platform">
@@ -142,7 +139,7 @@ defmodule PrettycoreWeb.MenuLayout do
                       "productos_nativos", "clientes_nativos", "listas_precios", "gamas", "lista_productos",
                       "stock", "sucursales", "configuracion", "pedidos"] and
                     (can_see_categorias?(@user_role, @user_permissions) or
-                     (@modo_nativo and can_see_clientes_nativos?(@user_role, @user_permissions)) or
+                     can_see_clientes_nativos?(@user_role, @user_permissions) or
                      can_see_pedidos?(@user_role, @user_permissions)) do %>
                   <div class="pc-submenu">
                     <%= if can_see_categorias?(@user_role, @user_permissions) do %>
@@ -209,8 +206,7 @@ defmodule PrettycoreWeb.MenuLayout do
                         <span class="pc-nav-label">Pedidos</span>
                       </button>
                     <% end %>
-                    <!-- Toggle Clientes Nativos: solo si puede ver clientes -->
-                    <%= if not @modo_nativo or can_see_clientes_nativos?(@user_role, @user_permissions) do %>
+                    <%= if can_see_clientes_nativos?(@user_role, @user_permissions) do %>
                       <button
                         type="button"
                         class={submenu_item_class("clientes_nativos", @current_page) <> " flex items-center justify-between w-full"}
@@ -462,10 +458,8 @@ defmodule PrettycoreWeb.MenuLayout do
   end
 
   ## FILTRO DE MENÚ
-  defp filter_menu(menu, perms, role, modo_nativo \\ false) do
-    menu
-    |> then(fn m -> if modo_nativo, do: Enum.reject(m, &(&1.id == "clientes")), else: m end)
-    |> do_filter_menu(perms, role)
+  defp filter_menu(menu, perms, role) do
+    do_filter_menu(menu, perms, role)
   end
 
   defp do_filter_menu(menu, _perms, "sysadmin"), do: menu

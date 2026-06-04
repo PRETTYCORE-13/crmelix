@@ -7,7 +7,6 @@ defmodule Prettycore.Productos do
   import Ecto.Query
   alias Prettycore.PsqlRepo
   alias Prettycore.Productos.Producto
-  alias Prettycore.Api.Client
 
   @doc "Lista todos los productos desde la BD local."
   def list_productos do
@@ -26,47 +25,6 @@ defmodule Prettycore.Productos do
           ilike(p.marca, ^term),
         order_by: p.descripcion
     )
-  end
-
-  @doc "Sincroniza productos desde la API y los guarda en PostgreSQL. Retorna {:ok, count} o {:error, reason}."
-  def sync_from_api do
-    case Client.get_productos() do
-      {:ok, registros} when is_list(registros) ->
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
-
-        entries =
-          registros
-          |> Enum.filter(fn r -> r["PRODUC_CODIGO_K"] not in [nil, ""] end)
-          |> Enum.map(fn r ->
-            %{
-              codigo: to_string(r["PRODUC_CODIGO_K"]),
-              descripcion: r["PRODUC_DESCRIPCION"],
-              desc_corta: r["PRODUC_DESCCORTA"],
-              marca: r["PROMAR_CODIGO_K"],
-              iva: r["PRODUC_IVA"] || 0.0,
-              pzas_min_vta: r["PRODUC_PZAMINVTA"] || 1,
-              activo: r["PRODUC_ACTIVO"] == 1,
-              raw: r,
-              inserted_at: now,
-              updated_at: now
-            }
-          end)
-
-        {count, _} =
-          PsqlRepo.insert_all(
-            Producto,
-            entries,
-            on_conflict: {:replace, [:descripcion, :desc_corta, :marca, :iva, :pzas_min_vta, :activo, :raw, :updated_at]},
-            conflict_target: :codigo
-          )
-
-        Logger.info("Productos sincronizados: #{count} registros")
-        {:ok, count}
-
-      {:error, reason} ->
-        Logger.error("Error sincronizando productos: #{inspect(reason)}")
-        {:error, reason}
-    end
   end
 
   @doc "Actualiza la imagen de un producto por su código. Retorna {:ok, count} o {:error, :not_found}."

@@ -88,21 +88,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
     {:noreply, assign(socket, show_password: !socket.assigns.show_password)}
   end
 
-  defp buscar_cliente_en_cache(codigo) do
-    codigo_upper = String.upcase(String.trim(codigo))
-    case :persistent_term.get(:cache_cte_clientes, nil) do
-      nil ->
-        # caché vacío, intenta via API
-        case Prettycore.Api.Client.get_cliente(codigo_upper) do
-          {:ok, c} -> c
-          _ -> nil
-        end
-      registros when is_list(registros) ->
-        Enum.find(registros, fn r ->
-          String.upcase(to_string(r["CTECLI_CODIGO_K"])) == codigo_upper
-        end)
-    end
-  end
+  defp buscar_cliente_en_cache(_codigo), do: nil
 
   @impl true
   def handle_event("delete_user", %{"id" => id}, socket) do

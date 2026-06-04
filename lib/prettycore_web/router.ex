@@ -24,10 +24,6 @@ defmodule PrettycoreWeb.Router do
     # Página de login (LiveView)
     live "/", LoginLive
 
-    # Nueva ruta para cambio de contraseña (UI)
-    live "/password-reset", PasswordResetLive
-
-    # Restablecimiento de contraseña por token (clientes nativos)
     live "/restablecer/:token", ResetPasswordClienteLive
 
     # Controlador que valida usuario y crea sesión
@@ -35,14 +31,6 @@ defmodule PrettycoreWeb.Router do
 
     # Logout (destruye sesión)
     get "/logout", SessionController, :delete
-  end
-
-  ## Pantalla de carga (sin AuthOnMount para no hacer API calls extra)
-  live_session :loading do
-    scope "/admin", PrettycoreWeb do
-      pipe_through :browser
-      live "/loading", LoadingLive
-    end
   end
 
   ## ÁREA PROTEGIDA: requiere sesión
@@ -55,7 +43,6 @@ defmodule PrettycoreWeb.Router do
   #    live "/programacion", Programacion
   #    live "/programacion/sql", HerramientaSql
   #    live "/workorder", WorkOrderLive
-      live "/clientes", Clientes
       live "/tienda", Tienda
       live "/pedidos", PedidosLive
       live "/categorias", CategoriasLive
@@ -72,10 +59,6 @@ defmodule PrettycoreWeb.Router do
       live "/categorias-nativas", CategoriasNativasLive
       live "/configuracion", ConfiguracionLive
       live "/usuarios", Users.UsersCreateLive
-      live "/clientes/new", ClienteFormNewLive
-      live "/clientes/new/:tab", ClienteFormNewLive
-      live "/clientes/edit/:id", ClienteFormEditLive
-      live "/clientes/edit/:id/:tab", ClienteFormEditLive
     end
   end
 
@@ -103,7 +86,6 @@ defmodule PrettycoreWeb.Router do
   scope "/admin", PrettycoreWeb do
     pipe_through :browser
 
-    get "/clientes/export/excel", ClientesExcelController, :download
     get "/productos-nativos/plantilla", ProductosNativosTemplateController, :download
     get "/productos-nativos/exportar", ProductosNativosTemplateController, :exportar
   end

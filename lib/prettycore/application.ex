@@ -11,14 +11,10 @@ defmodule Prettycore.Application do
      # PrettycoreWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:prettycore, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Prettycore.PubSub},
-      # Cache ETS para API REST
-      Prettycore.Api.Cache,
       # Start to serve requests, typically the last entry
       PrettycoreWeb.Endpoint,
       # PostgreSQL para autenticación
-      Prettycore.PsqlRepo,
-      # Seed one-time de tablas geográficas (estados/municipios/localidades)
-      Prettycore.Map.Seeder
+      Prettycore.PsqlRepo
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

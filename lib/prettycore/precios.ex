@@ -3,43 +3,9 @@ defmodule Prettycore.Precios do
   Manejo de precios de productos: sincronización desde API externa y lectura desde DB.
   """
 
-  alias Prettycore.Api.Client
   alias Prettycore.Precios.Precio
   alias Prettycore.PsqlRepo, as: Repo
   import Ecto.Query
-
-  # ── API → DB ──────────────────────────────────────────────────────────────
-
-  @doc """
-  Llama a la API VTA_PRECIOS y guarda los resultados en la tabla `precios`.
-  Retorna {:ok, count} o {:error, reason}.
-  """
-  def sync_precios(cliente_codigo, dir_codigo) do
-    cliente = if is_binary(cliente_codigo) and cliente_codigo != "", do: cliente_codigo, else: "1"
-    dir     = if is_binary(dir_codigo)     and dir_codigo     != "", do: dir_codigo,     else: "1"
-
-    case Client.get_precios(cliente, dir) do
-      # Lista directa
-      {:ok, lista} when is_list(lista) and lista != [] ->
-        save_precios(lista, cliente, dir)
-
-      # OData / mapa con "value" o respuesta única
-      {:ok, %{"value" => lista}} when is_list(lista) and lista != [] ->
-        save_precios(lista, cliente, dir)
-
-      # Un solo objeto (mapa plano)
-      {:ok, %{"PRODUC_CODIGO_K" => _} = item} ->
-        save_precios([item], cliente, dir)
-
-      {:ok, other} ->
-        require Logger
-        Logger.warning("sync_precios: respuesta inesperada: #{inspect(other)}")
-        {:ok, 0}
-
-      error ->
-        error
-    end
-  end
 
   # ── DB → Assigns ──────────────────────────────────────────────────────────
 

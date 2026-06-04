@@ -5,13 +5,8 @@ defmodule Prettycore.SysAdmin.Config do
   @primary_key {:id, :integer, autogenerate: false}
 
   schema "system_config" do
-    field :usuario, :string
-    field :instancia, :string
-    field :token, :string
-    field :url, :string
     field :foto, :string
     field :permitir_edicion, :boolean, default: true
-    field :modo_nativo, :boolean, default: false
     field :banda_texto, :string
     field :banda_color, :string
     field :timezone,    :string, default: "America/Mexico_City"
@@ -21,7 +16,7 @@ defmodule Prettycore.SysAdmin.Config do
 
   def changeset(config, attrs) do
     config
-    |> cast(attrs, [:usuario, :instancia, :token, :url, :foto, :permitir_edicion, :modo_nativo, :banda_texto, :banda_color, :timezone])
+    |> cast(attrs, [:foto, :permitir_edicion, :banda_texto, :banda_color, :timezone])
     |> validate_required([])
   end
 end

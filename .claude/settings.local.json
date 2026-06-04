@@ -82,7 +82,11 @@
       "WebFetch(domain:prettycore.xyz)",
       "Bash(Get-ChildItem -Path \"d:\\\\prettycore\" -Directory)",
       "Bash(Select-Object -First 20)",
-      "Bash(Get-ChildItem -Path \"d:\\\\prettycore\\\\lib\" -Recurse -Filter \"*import*\" -Name)"
+      "Bash(Get-ChildItem -Path \"d:\\\\prettycore\\\\lib\" -Recurse -Filter \"*import*\" -Name)",
+      "Bash(grep -r \"Client\\\\\\\\.base_url\\\\|get_all\\\\|get_filtered\\\\|get_by_id\\\\|get_clientes\\\\|get_cliente\\\\|get_productos\\\\|get_usuarios\\\\|get_workorder\\\\|get_estadisticas\\\\|get_precios\" /d/prettycore/lib --include=\"*.ex\")",
+      "Bash(grep -n \"Client\\\\\\\\.base_url\\\\|/ClientesNew\\\\|/ClientesEdit\\\\|/InfoCliente\\\\|/workorderEstado\\\\|/Estadisticas\\\\|/VTA_PRECIOS\\\\|/REST_USUARIO\\\\|/query\" /d/prettycore/lib/prettycore/clientes/api.ex /d/prettycore/lib/prettycore/workorders/api.ex /d/prettycore/lib/prettycore/api/client.ex)",
+      "Bash(rm lib/prettycore/clientes.ex lib/prettycore/workorders.ex lib/prettycore/auth/password_reset_user.ex lib/prettycore/auth/password_reset.ex)",
+      "Bash(rm lib/prettycore/clientes/catalogos.ex lib/prettycore/clientes/excel.ex lib/prettycore/clientes/cliente.ex lib/prettycore/clientes/direccion.ex)"
     ],
     "deny": [],
     "ask": []

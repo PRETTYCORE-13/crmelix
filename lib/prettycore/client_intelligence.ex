@@ -10,7 +10,6 @@ defmodule Prettycore.ClientIntelligence do
   alias Prettycore.ClientIntelligence.CiEvent
   alias Prettycore.ClientIntelligence.CiScore
   alias Prettycore.ClientIntelligence.CiClientStats
-  alias Prettycore.Api.Client, as: Api
 
   # ── Tracking ─────────────────────────────────────────────────
 
@@ -218,127 +217,10 @@ defmodule Prettycore.ClientIntelligence do
     |> PsqlRepo.one()
   end
 
-  # Cuántos clientes procesar por lote (evita saturar la API con 9k calls)
-  @batch_size 200
-
-  @doc """
-  Obtiene estadísticas de un lote de clientes y las guarda en DB.
-  Procesa hasta #{@batch_size} clientes por llamada para no saturar la API.
-
-  Parámetros:
-    - token: frog_token del usuario
-    - page: página del lote (0 = primeros #{@batch_size}, 1 = siguientes #{@batch_size}, etc.)
-    - only_missing: si true, solo procesa clientes sin stats guardadas aún
-
-  Retorna {:ok, %{processed: n, total_clients: m, has_more: bool}}
-  """
-  def fetch_and_store_all_stats(token \\ nil, page \\ 0, only_missing \\ false) do
-    Logger.info("CI: fetch stats página #{page} (lote #{@batch_size})")
-
-    # 1. Obtener lista de clientes desde API (usa la caché si existe)
-    registros_raw =
-      case :persistent_term.get(:cache_cte_clientes, nil) do
-        nil ->
-          case Api.get_all("CTE_CLIENTES", nil) do
-            {:ok, data} -> data
-            {:error, _} -> []
-          end
-        cached -> cached
-      end
-
-    # Todos los pares activos únicos
-    todos_pares =
-      registros_raw
-      |> Enum.filter(fn r -> r["S_MAQEDO"] == 10 || r["S_MAQEDO"] == "10" end)
-      |> Enum.map(fn r ->
-        %{
-          client_code: to_string(r["CTECLI_CODIGO_K"] || ""),
-          dir_code:    to_string(r["CTEDIR_CODIGO_K"] || "1"),
-          client_name: r["CTECLI_RAZONSOCIAL"] || r["CTECLI_DENCOMERCIA"] || ""
-        }
-      end)
-      |> Enum.reject(&(&1.client_code == ""))
-      |> Enum.uniq_by(fn p -> {p.client_code, p.dir_code} end)
-
-    total_clients = length(todos_pares)
-
-    # Filtrar solo los que no tienen stats si se pide
-    pares_a_procesar =
-      if only_missing do
-        ya_guardados =
-          CiClientStats
-          |> select([s], {s.client_code, s.dir_code})
-          |> PsqlRepo.all()
-          |> MapSet.new()
-
-        Enum.reject(todos_pares, fn p ->
-          MapSet.member?(ya_guardados, {p.client_code, p.dir_code})
-        end)
-      else
-        todos_pares
-      end
-
-    # Tomar el lote de esta página
-    lote = pares_a_procesar |> Enum.drop(page * @batch_size) |> Enum.take(@batch_size)
-    has_more = length(pares_a_procesar) > (page + 1) * @batch_size
-
-    if lote == [] do
-      {:ok, %{processed: 0, total_clients: total_clients, has_more: false}}
-    else
-      Logger.info("CI: procesando #{length(lote)} clientes (de #{total_clients} total)")
-      now = DateTime.truncate(DateTime.utc_now(), :second)
-
-      # 2. Fetch en paralelo — base_url y service_token ya están en caché
-      # (1 query DB por cada 5 min en lugar de 1 por task)
-      results =
-        lote
-        |> Task.async_stream(
-          fn %{client_code: cc, dir_code: dc, client_name: name} ->
-            case Prettycore.Clientes.get_estadisticas(cc, dc, token) do
-              {:ok, stats} ->
-                ultimo_pedido = case stats.pedido do
-                  %{"FECHA" => f} -> f
-                  %{"fecha" => f} -> f
-                  _ -> nil
-                end
-                %{
-                  client_code: cc,
-                  dir_code: dc,
-                  client_name: name,
-                  total_venta_anual: stats.total_venta_anual,
-                  cartera_vigente: stats.cartera_vigente,
-                  cartera_vencida: stats.cartera_vencida,
-                  enfriadores: stats.enfriadores,
-                  clasificacion: stats.clasificacion,
-                  ultimo_pedido_fecha: ultimo_pedido,
-                  fetched_at: now
-                }
-              {:error, _} -> nil
-            end
-          end,
-          max_concurrency: 20,
-          timeout: 10_000,
-          on_timeout: :kill_task
-        )
-        |> Enum.flat_map(fn
-          {:ok, nil}   -> []
-          {:ok, data}  -> [data]
-          {:exit, _}   -> []
-        end)
-
-      Logger.info("CI: #{length(results)}/#{length(lote)} exitosos, guardando en DB")
-
-      # 3. Upsert batch en DB
-      Enum.each(results, fn attrs ->
-        case PsqlRepo.get_by(CiClientStats, client_code: attrs.client_code, dir_code: attrs.dir_code) do
-          nil      -> %CiClientStats{} |> CiClientStats.changeset(attrs) |> PsqlRepo.insert()
-          existing -> existing |> CiClientStats.changeset(attrs) |> PsqlRepo.update()
-        end
-      end)
-
-      {:ok, %{processed: length(results), total_clients: total_clients, has_more: has_more}}
-    end
+  def fetch_and_store_all_stats(_token \\ nil, _page \\ 0, _only_missing \\ false) do
+    {:ok, %{processed: 0, total_clients: 0, has_more: false}}
   end
+
 
   @doc "Cuenta cuántos clientes tienen stats guardadas vs total en API"
   def stats_progress do

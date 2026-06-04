@@ -4,7 +4,6 @@ defmodule PrettycoreWeb.AuthOnMount do
 
   alias Prettycore.Auth
   alias Prettycore.ClientesNativos
-  alias Prettycore.SysAdmin
 
   def on_mount(:ensure_authenticated, params, session, socket) do
     user_id = session["user_id"]
@@ -13,20 +12,14 @@ defmodule PrettycoreWeb.AuthOnMount do
     session_role = session["role"]
 
     cond do
-      # Sin sesión → fuera
       is_nil(user_id) or is_nil(email_from_session) ->
         {:halt, redirect(socket, to: "/")}
 
-      # El email en URL no coincide → lo mandamos a SU ruta correcta
       not is_nil(email_from_url) and email_from_url != email_from_session ->
-        correct_path = "/admin/tienda"
-        {:halt, redirect(socket, to: correct_path)}
+        {:halt, redirect(socket, to: "/admin/tienda")}
 
       true ->
-        frog_token   = session["frog_token"]
-        company_logo = get_company_logo(frog_token)
-        user_name    = session["user_name"]
-        modo_nativo  = SysAdmin.get_config().modo_nativo == true
+        user_name = session["user_name"]
 
         {user_role, user_permissions, lista_precios, gamas, sucursal_numero} =
           if session_role == "cliente_nativo" do
@@ -59,18 +52,11 @@ defmodule PrettycoreWeb.AuthOnMount do
          |> assign(:current_user_id, user_id)
          |> assign(:current_user_email, email_from_session)
          |> assign(:current_user_name, user_name)
-         |> assign(:company_logo, company_logo)
-         |> assign(:frog_token, frog_token)
          |> assign(:user_role, user_role)
          |> assign(:user_permissions, user_permissions)
          |> assign(:lista_precios, lista_precios)
          |> assign(:gamas, gamas)
-         |> assign(:sucursal_numero, sucursal_numero)
-         |> assign(:modo_nativo, modo_nativo)}
+         |> assign(:sucursal_numero, sucursal_numero)}
     end
-  end
-
-  defp get_company_logo(_token) do
-    :persistent_term.get(:company_logo_cache, nil)
   end
 end

@@ -2,14 +2,10 @@
 defmodule PrettycoreWeb.SessionController do
   use PrettycoreWeb, :controller
   alias Prettycore.Auth
-  alias Prettycore.Api.Client, as: Api
-  alias Prettycore.SysAdmin
   require Logger
 
   def create(conn, %{"username" => user, "password" => pass}) do
     caso = Auth.authenticate(user, pass)
-    config = SysAdmin.get_config()
-    modo_nativo = config.modo_nativo == true
 
     case caso do
       {:ok, user_struct} ->
@@ -24,28 +20,16 @@ defmodule PrettycoreWeb.SessionController do
           |> put_session(:user_email, email)
           |> put_session(:user_name, username)
           |> put_session(:role, "sysadmin")
-          |> put_session(:frog_token, nil)
           |> configure_session(renew: true)
           |> track_new_session(user_id)
           |> redirect(to: ~p"/sysadmin")
         else
-          # En modo nativo no se obtiene token Frog ni se precargan catálogos
-          frog_token = if modo_nativo, do: nil, else: get_frog_token(user_struct)
-
-          dest =
-            cond do
-              role == "cliente_nativo" -> ~p"/admin/tienda"
-              modo_nativo              -> ~p"/admin/tienda"
-              true                     -> ~p"/admin/loading"
-            end
-
           conn_with_session =
             conn
             |> put_session(:user_id, user_id)
             |> put_session(:user_email, email)
             |> put_session(:user_name, username)
             |> put_session(:role, role)
-            |> put_session(:frog_token, frog_token)
             |> configure_session(renew: true)
 
           conn_tracked =
@@ -53,7 +37,7 @@ defmodule PrettycoreWeb.SessionController do
               do: conn_with_session,
               else: track_new_session(conn_with_session, user_id)
 
-          redirect(conn_tracked, to: dest)
+          redirect(conn_tracked, to: ~p"/admin/tienda")
         end
 
       {:error, :invalid_credentials} ->
@@ -72,7 +56,6 @@ defmodule PrettycoreWeb.SessionController do
     end
 
     Task.start(fn -> Auth.close_user_session(session_token) end)
-    :persistent_term.erase(:cache_cte_clientes)
     conn
     |> configure_session(drop: true)
     |> redirect(to: ~p"/")
@@ -148,21 +131,4 @@ defmodule PrettycoreWeb.SessionController do
     %{device_type: device_type, browser: browser, os: os}
   end
 
-  defp get_frog_token(user_struct) do
-    usuario_frog = Map.get(user_struct, :usuario_frog)
-
-    if usuario_frog && usuario_frog != "" do
-      case Api.get_frog_credentials(usuario_frog) do
-        {:ok, token} ->
-          Logger.info("FROG token obtenido para usuario: #{usuario_frog}")
-          token
-
-        {:error, reason} ->
-          Logger.warning("No se pudo obtener FROG token: #{inspect(reason)}")
-          nil
-      end
-    else
-      nil
-    end
-  end
 end

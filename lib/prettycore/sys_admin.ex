@@ -8,9 +8,6 @@ defmodule Prettycore.SysAdmin do
   alias Prettycore.SysAdmin.Config
 
   @singleton_id 1
-  @default_instancia "https://s2.ecore.ninja:1522/SP/EN_RESTHELPER"
-  @default_token "IFcRzSfaBG6ycnpWzThyfEdKHglK14tlZylvRhOhlQ1fDHobmveKk6JowcU/BhCquBlqQv7zkrLIUYvFZmQZqHdqNiLptzCBf5wT826XpY4="
-
   @cache_key :sysadmin_config_cache
 
   def get_config do
@@ -45,15 +42,7 @@ defmodule Prettycore.SysAdmin do
   defp load_and_cache do
     config =
       case PsqlRepo.get(Config, @singleton_id) do
-        nil ->
-          %Config{
-            id: @singleton_id,
-            usuario: "",
-            instancia: @default_instancia,
-            token: @default_token,
-            url: "",
-            foto: ""
-          }
+        nil -> %Config{id: @singleton_id, foto: ""}
         c -> c
       end
     :persistent_term.put(@cache_key, config)
