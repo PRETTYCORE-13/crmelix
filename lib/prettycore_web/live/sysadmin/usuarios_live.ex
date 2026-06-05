@@ -133,7 +133,7 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
             <p class="mt-2 text-zinc-500">Crear y gestionar usuarios del sistema</p>
           </div>
 
-          <div class="grid grid-cols-2 gap-6">
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <!-- Formulario -->
             <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
               <div class="flex items-center space-x-3 mb-8">
