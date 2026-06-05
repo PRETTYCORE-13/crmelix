@@ -41,26 +41,17 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
 
   @impl true
   def handle_event("save", %{"auth_user" => params}, socket) do
-    dir = params |> Map.get("dir_codigo", "") |> String.trim()
-    if dir == "" do
-      changeset =
-        %AuthUser{}
-        |> AuthUser.admin_changeset(params)
-        |> Map.put(:action, :insert)
-      {:noreply, assign(socket, form: to_form(changeset))}
-    else
-      case Auth.create_user_admin(params) do
-        {:ok, _user} ->
-          {:noreply,
-           socket
-           |> put_flash(:info, "Usuario creado exitosamente")
-           |> assign(:form, to_form(AuthUser.admin_changeset(%AuthUser{}, %{})))
-           |> assign(:users, Auth.list_users())
-           |> assign(:cliente_lookup, nil)}
+    case Auth.create_user_admin(params) do
+      {:ok, _user} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Usuario creado exitosamente")
+         |> assign(:form, to_form(AuthUser.admin_changeset(%AuthUser{}, %{})))
+         |> assign(:users, Auth.list_users())
+         |> assign(:cliente_lookup, nil)}
 
-        {:error, %Ecto.Changeset{} = changeset} ->
-          {:noreply, assign(socket, form: to_form(changeset))}
-      end
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, form: to_form(changeset))}
     end
   end
 
@@ -173,7 +164,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
           <p class="mt-2 text-gray-500">Crear y gestionar usuarios del sistema</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <!-- Formulario de Crear Usuario -->
           <div class="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
             <div class="flex items-center space-x-3 mb-8">
@@ -225,7 +216,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label for="cliente_codigo" class="block text-sm font-medium text-gray-700 mb-2">
-                    Código Cliente <span class="text-purple-500">*</span>
+                    Código Cliente
                   </label>
                   <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -239,34 +230,15 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                       id="cliente_codigo"
                       value={@form[:cliente_codigo].value}
                       maxlength="20"
-                      class={"block w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all #{cond do
-                        @cliente_lookup == :not_found -> "border-red-400"
-                        match?({:ok, _}, @cliente_lookup) -> "border-green-400"
-                        true -> "border-gray-300"
-                      end}"}
+                      class="block w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
                       placeholder="Ej: GN8657B"
                       autocomplete="off"
-                      phx-change="lookup_cliente"
-                      phx-debounce="500"
                     />
                   </div>
-                  <%= case @cliente_lookup do %>
-                    <% {:ok, c} -> %>
-                      <p class="mt-1.5 text-xs text-green-600 flex items-center gap-1">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                        <%= c["CTECLI_RAZONSOCIAL"] || c["CTECLI_DENCOMERCIA"] || "Cliente encontrado" %>
-                      </p>
-                    <% :not_found -> %>
-                      <p class="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                        Código de cliente no encontrado
-                      </p>
-                    <% _ -> %>
-                  <% end %>
                 </div>
                 <div>
                   <label for="dir_codigo" class="block text-sm font-medium text-gray-700 mb-2">
-                    No. Dirección <span class="text-purple-500">*</span>
+                    No. Dirección
                   </label>
                   <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -428,22 +400,22 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                   <% is_admin_role = user.role in ["admin", "sysadmin"] %>
                   <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-500/40 bg-purple-50/30", else: "border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-gray-300"}"}>
                     <!-- Fila principal -->
-                    <div class="flex items-center justify-between p-4">
-                      <div class="flex items-center space-x-4">
-                        <div class={"w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-gray-400"}"}>
+                    <div class="flex items-center justify-between gap-3 p-4">
+                      <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <div class={"w-12 h-12 shrink-0 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-gray-400"}"}>
                           <%= (String.first(user.username || "?") || "?") |> String.upcase() %>
                         </div>
-                        <div>
-                          <p class="text-sm font-semibold text-gray-900"><%= user.username %></p>
-                          <p class="text-xs text-gray-400 mt-0.5"><%= user.email || "Sin email" %></p>
+                        <div class="min-w-0">
+                          <p class="text-sm font-semibold text-gray-900 truncate"><%= user.username %></p>
+                          <p class="text-xs text-gray-400 mt-0.5 truncate"><%= user.email || "Sin email" %></p>
                           <%= if user.cliente_codigo && user.cliente_codigo != "" do %>
-                            <p class="text-xs text-purple-500 mt-0.5 font-mono">
+                            <p class="text-xs text-purple-500 mt-0.5 font-mono truncate">
                               <%= user.cliente_codigo %><%= if user.dir_codigo && user.dir_codigo != "", do: " · Dir #{user.dir_codigo}", else: "" %>
                             </p>
                           <% end %>
                         </div>
                       </div>
-                      <div class="flex items-center space-x-2">
+                      <div class="flex items-center gap-1.5 shrink-0">
                         <span class={"inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium #{if user.role == "admin", do: "bg-purple-100 text-purple-600 border border-purple-200", else: "bg-gray-100 text-gray-500 border border-gray-200"}"}>
                           <%= if user.role == "admin" do %>
                             <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
