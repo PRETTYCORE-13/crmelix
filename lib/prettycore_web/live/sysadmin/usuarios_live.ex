@@ -278,17 +278,17 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                     <% expanded = @expanded_permissions_user_id == user.id %>
                     <% user_perms = user.permissions || ["tienda"] %>
                     <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-600/40 bg-zinc-900", else: "border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700"}"}>
-                      <div class="flex items-center justify-between p-4">
-                        <div class="flex items-center space-x-4">
-                          <div class={"w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-zinc-700"}"}>
+                      <div class="flex items-center justify-between gap-3 p-4">
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                          <div class={"w-12 h-12 shrink-0 rounded-xl flex items-center justify-center text-white font-bold text-lg #{if user.active, do: "bg-purple-600", else: "bg-zinc-700"}"}>
                             <%= (String.first(user.username || "?") || "?") |> String.upcase() %>
                           </div>
-                          <div>
-                            <p class="text-sm font-semibold text-white"><%= user.username %></p>
-                            <p class="text-xs text-zinc-500 mt-0.5"><%= user.email || "Sin email" %></p>
+                          <div class="min-w-0">
+                            <p class="text-sm font-semibold text-white truncate"><%= user.username %></p>
+                            <p class="text-xs text-zinc-500 mt-0.5 truncate"><%= user.email || "Sin email" %></p>
                           </div>
                         </div>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center gap-1.5 shrink-0">
                           <span class={"inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium #{case user.role do
                             "sysadmin" -> "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                             "admin"    -> "bg-purple-600/10 text-purple-400 border border-purple-600/20"

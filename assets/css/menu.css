@@ -483,11 +483,15 @@
   }
 
   /* Mostrar labels siempre cuando está visible en móvil */
-  .pc-platform-sidebar.pc-sidebar-visible .pc-nav-label,
-  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-section-label {
+  .pc-platform-sidebar.pc-sidebar-visible .pc-nav-label {
     opacity: 1;
     width: auto;
+    overflow: visible;
     font-size: 14px;
+    padding: 0;
+  }
+
+  .pc-platform-sidebar.pc-sidebar-visible .pc-sidebar-section-label {
     text-align: left;
     padding: 14px 8px 6px;
   }
