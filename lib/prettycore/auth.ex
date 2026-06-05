@@ -62,7 +62,13 @@ defmodule Prettycore.Auth do
   end
 
   def create_user_admin(attrs) do
-    %AuthUser{}
+    perms_default =
+      case Map.get(attrs, "role", Map.get(attrs, :role, "user")) do
+        "user" -> ["inicio", "tienda", "pedidos"]
+        _      -> ["inicio"]
+      end
+
+    %AuthUser{permissions: perms_default}
     |> AuthUser.admin_changeset(attrs)
     |> PsqlRepo.insert()
   end
