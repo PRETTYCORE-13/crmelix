@@ -429,19 +429,21 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                             _ -> "Cliente"
                           end %>
                         </span>
-                        <!-- Botón permisos -->
-                        <button
-                          type="button"
-                          phx-click="toggle_permissions_panel"
-                          phx-value-id={user.id}
-                          class={"p-1.5 rounded-lg transition-all duration-200 #{if expanded, do: "text-purple-500 bg-purple-100", else: "text-gray-400 hover:text-purple-500 hover:bg-purple-50"}"}
-                          title="Gestionar permisos"
-                        >
-                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                          </svg>
-                        </button>
+                        <!-- Botón permisos: solo sysadmin puede gestionar -->
+                        <%= if @user_role == "sysadmin" and user.role != "user" do %>
+                          <button
+                            type="button"
+                            phx-click="toggle_permissions_panel"
+                            phx-value-id={user.id}
+                            class={"p-1.5 rounded-lg transition-all duration-200 #{if expanded, do: "text-purple-500 bg-purple-100", else: "text-gray-400 hover:text-purple-500 hover:bg-purple-50"}"}
+                            title="Gestionar permisos"
+                          >
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
+                          </button>
+                        <% end %>
                         <!-- Botón eliminar: solo sysadmin -->
                         <%= if @user_role == "sysadmin" do %>
                         <button
@@ -472,8 +474,8 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                         </button>
                       </div>
                     </div>
-                    <!-- Panel de permisos (expandible) -->
-                    <%= if expanded do %>
+                    <!-- Panel de permisos (solo sysadmin) -->
+                    <%= if expanded and @user_role == "sysadmin" and user.role != "user" do %>
                       <div class="px-4 pb-4 border-t border-gray-200 pt-3">
                         <table class="w-full text-xs">
                           <thead>

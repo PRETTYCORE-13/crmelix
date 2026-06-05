@@ -6,6 +6,7 @@ defmodule PrettycoreWeb.MenuLayout do
   #  %{id: "programacion", label: "Programación"},
   #  %{id: "workorder", label: "Orden T"},
     %{id: "tienda", label: "Tienda"},
+    %{id: "pedidos", label: "Pedidos", user_only: true},
     %{id: "usuarios", label: "Usuarios", admin_only: true}
   ]
 
@@ -463,10 +464,13 @@ defmodule PrettycoreWeb.MenuLayout do
   end
 
   defp do_filter_menu(menu, _perms, "sysadmin"), do: menu
-  defp do_filter_menu(menu, nil, "user"), do: Enum.filter(menu, &(&1.id == "tienda"))
-  defp do_filter_menu(menu, nil, _role), do: Enum.reject(menu, &Map.get(&1, :admin_only, false))
+  defp do_filter_menu(menu, _perms, "user"),
+    do: Enum.filter(menu, &(&1.id in ["tienda", "pedidos"]))
+  defp do_filter_menu(menu, nil, _role),
+    do: Enum.reject(menu, &(Map.get(&1, :admin_only, false) or Map.get(&1, :user_only, false)))
   defp do_filter_menu(menu, perms, _role) do
     menu
+    |> Enum.reject(&Map.get(&1, :user_only, false))
     |> Enum.reject(fn item -> Map.get(item, :admin_only, false) and item.id not in perms end)
     |> Enum.filter(&(&1.id in perms))
   end

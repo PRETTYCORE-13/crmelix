@@ -17,7 +17,7 @@ defmodule Prettycore.Auth.AuthUser do
     field :active, :boolean, default: true
     field :role, :string, default: "user"
     field :usuario_frog, :string
-    field :permissions, {:array, :string}, default: ["inicio"]
+    field :permissions, {:array, :string}, default: ["inicio", "tienda", "pedidos"]
     field :cliente_codigo, :string
     field :dir_codigo, :string
 
