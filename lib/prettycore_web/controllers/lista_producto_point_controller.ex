@@ -24,16 +24,16 @@ defmodule PrettycoreWeb.ListaProductoPointController do
     })
   end
 
-  defp format(MapaDeProductos) do
+  defp format(mapa_de_productos) do
     %{
-      codigo:      MapaDeProductos.codigo,
-      descripcion: MapaDeProductos.descripcion,
-      desc_corta:  MapaDeProductos.desc_corta,
-      marca:       MapaDeProductos.marca,
-      iva:         MapaDeProductos.iva,
-      pzas_min:    MapaDeProductos.pzas_min_vta,
-      activo:      MapaDeProductos.activo,
-      imagen_url:  MapaDeProductos.imagen_url
+      codigo:      mapa_de_productos.codigo,
+      descripcion: mapa_de_productos.descripcion,
+      desc_corta:  mapa_de_productos.desc_corta,
+      marca:       mapa_de_productos.marca,
+      iva:         mapa_de_productos.iva,
+      pzas_min:    mapa_de_productos.pzas_min_vta,
+      activo:      mapa_de_productos.activo,
+      imagen_url:  mapa_de_productos.imagen_url
     }
   end
 
