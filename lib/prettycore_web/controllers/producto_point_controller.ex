@@ -29,9 +29,18 @@ defmodule PrettycoreWeb.ProductoPointController do
   # ── GET /producto/point/sku?q=SKU ───────────────────────────────────
   # Busca productos por código (SKU)
 
-def sku(conn, %{"codigo" => codigo}) do
-  productos = Productos.search_by_sku(codigo)
-  json(conn, %{ok: true, total: length(productos), data: Enum.map(productos, &format/1)})
+def sku(conn, params) do
+  # Extrae el código del body o de los params de URL (flexible)
+  codigo = params["codigo"] || params["q"]
+
+  cond do
+    is_nil(codigo) or codigo == "" ->
+      json(conn, %{ok: false, error: "Se requiere el parámetro: codigo o q"})
+
+    true ->
+      productos = Productos.search_by_sku(codigo)
+      json(conn, %{ok: true, total: length(productos), data: Enum.map(productos, &format/1)})
+  end
 end
 
   # ── POST /producto/point/sku ─────────────────────────────────────────
