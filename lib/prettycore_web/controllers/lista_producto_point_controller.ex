@@ -20,20 +20,20 @@ defmodule PrettycoreWeb.ListaProductoPointController do
       page:     page,
       limit:    limit,
       paginas:  ceil(total / limit),
-      data:     Enum.map(productos, &format/1)
+      data:     Enum.map(productos, &format/1) #Creamos MapaDeProductos
     })
   end
 
-  defp format(x) do
+  defp format(MapaDeProductos) do
     %{
-      codigo:      x.codigo,
-      descripcion: x.descripcion,
-      desc_corta:  x.desc_corta,
-      marca:       x.marca,
-      iva:         x.iva,
-      pzas_min:    x.pzas_min_vta,
-      activo:      x.activo,
-      imagen_url:  x.imagen_url
+      codigo:      MapaDeProductos.codigo,
+      descripcion: MapaDeProductos.descripcion,
+      desc_corta:  MapaDeProductos.desc_corta,
+      marca:       MapaDeProductos.marca,
+      iva:         MapaDeProductos.iva,
+      pzas_min:    MapaDeProductos.pzas_min_vta,
+      activo:      MapaDeProductos.activo,
+      imagen_url:  MapaDeProductos.imagen_url
     }
   end
 
