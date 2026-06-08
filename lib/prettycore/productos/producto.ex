@@ -21,9 +21,9 @@ defmodule Prettycore.Productos.Producto do
     timestamps(type: :utc_datetime)
   end
 
-  def changeset(producto, attrs) do
-    producto
-    |> cast(attrs, [:codigo, :descripcion, :desc_corta, :marca, :iva, :pzas_min_vta, :activo, :raw, :imagen_url])
-    |> validate_required([:codigo])
-  end
+def listar_productos_paginados(page \\ 1, per_page \\ 20) do
+  Producto
+  |> order_by([p], p.descripcion)
+  |> Repo.paginate(page: page, page_size: per_page)
+end
 end
