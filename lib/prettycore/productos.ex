@@ -69,6 +69,16 @@ defmodule Prettycore.Productos do
     end
   end
 
+  @doc "Lista productos paginados."
+  def list_productos_paginado(offset, limit) do
+    PsqlRepo.all(from p in Producto, order_by: p.descripcion, offset: ^offset, limit: ^limit)
+  end
+
+  @doc "Cuenta el total de productos."
+  def count_productos do
+    PsqlRepo.aggregate(Producto, :count)
+  end
+
   @doc "Retorna true si la tabla de productos está vacía."
   def empty? do
     PsqlRepo.aggregate(Producto, :count) == 0
