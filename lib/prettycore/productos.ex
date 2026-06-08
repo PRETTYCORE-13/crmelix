@@ -59,9 +59,14 @@ defmodule Prettycore.Productos do
   @doc "Inserta o actualiza un producto. Retorna {:ok, producto} o {:error, changeset}."
   def upsert_producto(attrs) do
     codigo = Map.get(attrs, "codigo") || Map.get(attrs, :codigo)
-    (PsqlRepo.get(Producto, codigo) || %Producto{})
-    |> Producto.changeset(attrs)
-    |> PsqlRepo.insert_or_update()
+
+    if is_nil(codigo) or codigo == "" do
+      {:error, %Producto{} |> Producto.changeset(attrs)}
+    else
+      (PsqlRepo.get(Producto, codigo) || %Producto{})
+      |> Producto.changeset(attrs)
+      |> PsqlRepo.insert_or_update()
+    end
   end
 
   @doc "Retorna true si la tabla de productos está vacía."
