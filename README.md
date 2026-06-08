@@ -203,44 +203,67 @@ Módulo de subida de imágenes vía SSH/SFTP. Directorios separados por tipo (`/
 ## Páginas LiveView y Rutas
 
 ### Públicas
-| Ruta | Módulo | Descripción |
+
+| Ruta | Archivo | Para qué sirve |
 |---|---|---|
-| `GET /` | `LoginLive` | Formulario de login. Detecta usuarios sistema y clientes nativos |
-| `GET /password-reset` | `PasswordResetLive` | Reset de contraseña (3 pasos en LiveView) |
-| `GET /logout` | `SessionController` | Cierra sesión y redirige a `/` |
-| `GET /health` | `HealthController` | Healthcheck JSON (sin auth) |
+| `GET /` | `login/` | **Login principal.** Aquí entran todos: admin, sysadmin y clientes. El sistema detecta automáticamente si el usuario es del sistema (`users`) o un cliente nativo (`clientes_nativos`) |
+| `GET /password-reset` | `password_reset_live.ex` | **Solicitar reset de contraseña.** El usuario escribe su email y recibe un enlace de recuperación |
+| `GET /restablecer/:token` | `login/reset_password_cliente_live.ex` | **Restablecer contraseña.** Página final del flujo de reset; valida el token del email y permite escribir la nueva contraseña |
+| `GET /logout` | `SessionController` | Cierra la sesión y regresa al login |
+| `GET /health` | `HealthController` | Healthcheck JSON sin autenticación. Útil para monitoreo externo |
 
-### Panel Admin (`/admin/**`, requiere sesión)
-| Ruta | Descripción |
-|---|---|
-| `/admin/platform` | Dashboard de inicio con accesos rápidos |
-| `/admin/tienda` | Storefront (vista completa de la tienda) |
-| `/admin/pedidos` | Lista y gestión de pedidos |
-| `/admin/clientes` | Clientes Frog (solo lectura) |
-| `/admin/clientes/new` | Crear cliente (con tabs) |
-| `/admin/clientes/edit/:id` | Editar cliente (tabs: perfil, contacto, precios, stock) |
-| `/admin/clientes-nativos` | CRUD clientes nativos |
-| `/admin/productos-nativos` | CRUD productos nativos + imágenes SFTP |
-| `/admin/listas-precios` | Gestión de listas de precios |
-| `/admin/categorias` | CRUD categorías + asignación de productos |
-| `/admin/super-categorias` | CRUD super-categorías |
-| `/admin/categorias-nativas` | Categorías y super-categorías nativas unificadas |
-| `/admin/carrusel` | Gestión del carrusel de imágenes |
-| `/admin/secciones` | Configuración de secciones del storefront |
-| `/admin/seccion/:tipo` | Editor de sección específica (top10, favoritos, etc.) |
-| `/admin/sucursales` | CRUD sucursales |
-| `/admin/stock` | Stock por sucursal |
-| `/admin/usuarios` | CRUD usuarios del sistema + permisos |
-| `/admin/clientes/export/excel` | Exportar clientes a Excel (descarga directa) |
+---
 
-### Panel SysAdmin (`/sysadmin/**`, requiere `role=sysadmin`)
-| Ruta | Descripción |
-|---|---|
-| `/sysadmin/configuracion` | Config global: API Frog, modo nativo, banda publicitaria |
-| `/sysadmin/sesiones` | Ver y cerrar sesiones activas |
-| `/sysadmin/intelligence` | Dashboard de analytics |
-| `/sysadmin/usuarios` | CRUD usuarios + permisos granulares |
-| `/sysadmin/tienda` | Vista del storefront (inspección) |
+### Panel Admin — `/admin/**`
+> Requiere sesión activa. Accesible para roles: `admin`, `oficina`, `user` (según permisos).
+
+| Ruta | Archivo | Para qué sirve |
+|---|---|---|
+| `/admin/platform` | `inicio_live.ex` | **Inicio / Dashboard.** Página de bienvenida con accesos rápidos a las secciones principales |
+| `/admin/tienda` | `tienda_live.ex` | **Tienda / Storefront.** Vista completa de la tienda tal como la ve un cliente. Admins la ven en modo "Solo inspección" (sin poder comprar). Los clientes hacen sus pedidos desde aquí |
+| `/admin/pedidos` | `pedidos_live.ex` | **Gestión de pedidos.** Lista todos los pedidos con su estado, cliente y monto. Permite cambiar el estado (pendiente → procesando → enviado → entregado) y aprobar cancelaciones |
+| `/admin/categorias` | `categorias_live.ex` | **Categorías de la tienda.** Crea, edita y elimina las categorías que aparecen en la barra lateral de la tienda (Bebidas, Botanas, etc.). Permite reordenarlas y asignarles imagen y productos |
+| `/admin/super-categorias` | `super_categorias_live.ex` | **Super Categorías.** Grupos de nivel superior que agrupan múltiples categorías o productos. Se muestran en la tienda como secciones destacadas |
+| `/admin/carrusel` | `carrusel_live.ex` | **Carrusel del banner.** Administra las imágenes del banner rotatorio que aparece en la parte superior de la tienda. Subida SFTP, reordenar y activar/desactivar imágenes |
+| `/admin/secciones` | `secciones_live.ex` | **Secciones de la tienda.** Activa o desactiva secciones (Top 10, Favoritos, Ofertas, Publicidad, Envíos, etc.) y cambia su orden en el storefront |
+| `/admin/seccion/:tipo` | `seccion_editor_live.ex` | **Editor de sección específica.** Al hacer clic en una sección desde `/secciones`, entra aquí para configurar su contenido: qué productos muestra, título, color e imágenes de publicidad |
+| `/admin/productos-nativos` | `productos_nativos_live.ex` | **Productos nativos.** CRUD completo de productos creados directamente en Prettycore (no importados del ERP). Subida de imagen, asignación de categoría, precio, stock y activar/desactivar |
+| `/admin/clientes-nativos` | `clientes_nativos_live.ex` | **Clientes B2B nativos.** Lista, crea y edita los clientes registrados directamente en Prettycore. Cada cliente tiene asignado una lista de precios y una sucursal |
+| `/admin/listas-precios` | `listas_precios_live.ex` | **Listas de precios.** Define precios diferenciados por cliente. Cada lista tiene un número y contiene los precios de cada producto para ese grupo de clientes |
+| `/admin/sucursales` | `sucursales_live.ex` | **Sucursales.** CRUD de sucursales físicas. Cada cliente nativo se asigna a una sucursal y ve el stock de esa sucursal |
+| `/admin/stock` | `stock_live.ex` | **Stock por sucursal.** Tabla de inventario: elige una sucursal y edita las cantidades disponibles de cada producto. Los cambios se guardan en lote |
+| `/admin/categorias-nativas` | `categorias_nativas_live.ex` | **Categorías nativas.** Gestión de categorías específicas para los productos nativos (independiente del sistema de categorías Frog) |
+| `/admin/gamas` | `gamas_live.ex` | **Gamas de productos.** Agrupaciones de productos para clientes nativos. Los clientes pueden ver solo los productos de su gama asignada |
+| `/admin/configuracion` | `configuracion_live.ex` | **Hora de pedidos.** Configura los horarios en que los clientes pueden realizar pedidos |
+| `/admin/usuarios` | `users/users_create_live.ex` | **Crear usuarios.** Formulario para que el admin cree nuevos usuarios del sistema (clientes, admins, oficina). Solo `sysadmin` puede gestionar permisos |
+| `/admin/productos-nativos/plantilla` | `ProductosNativosTemplateController` | **Descargar plantilla Excel.** Descarga una hoja Excel vacía para importar productos en lote |
+| `/admin/productos-nativos/exportar` | `ProductosNativosTemplateController` | **Exportar productos a Excel.** Descarga todos los productos nativos en formato Excel |
+
+---
+
+### Panel SysAdmin — `/sysadmin/**`
+> Requiere `role = "sysadmin"`. Acceso exclusivo al super-administrador.
+
+| Ruta | Archivo | Para qué sirve |
+|---|---|---|
+| `/sysadmin` o `/sysadmin/configuracion` | `sysadmin/configuracion_live.ex` | **Configuración global.** El corazón del sistema. Desde aquí se activa/desactiva el modo nativo, se configuran las credenciales del ERP Frog (URL, token, usuario, instancia), y se personaliza la banda publicitaria (texto y color del marquee superior) |
+| `/sysadmin/sesiones` | `sysadmin/sesiones_live.ex` | **Sesiones activas.** Ve quién está conectado en este momento: usuario, IP, dispositivo, navegador, sistema operativo y cuándo fue su última actividad. Permite cerrar sesiones individuales o todas a la vez |
+| `/sysadmin/intelligence` | `sysadmin/client_intelligence_live.ex` | **Inteligencia / Analytics.** Dashboard de análisis de clientes y ventas. Datos de comportamiento para toma de decisiones |
+| `/sysadmin/usuarios` | `sysadmin/usuarios_live.ex` | **Gestión completa de usuarios.** Crear usuarios con cualquier rol, asignar/revocar permisos granulares (qué páginas puede ver cada usuario), activar/desactivar y eliminar usuarios. **Esta es la única pantalla donde se pueden eliminar usuarios** |
+| `/sysadmin/tienda` | `tienda_live.ex` | **Vista de la tienda.** El sysadmin puede inspeccionar la tienda tal como la ve un cliente, sin poder comprar |
+
+---
+
+### API REST — `/producto/point/**`
+> Endpoints JSON para integración con sistemas externos. No requieren sesión web.
+
+| Método | Ruta | Para qué sirve |
+|---|---|---|
+| `POST` | `/producto/point/token` | **Obtener Bearer token.** Envía `{"usuario": "sysadmin", "contrasena": "..."}` y recibe el token para usar en los demás endpoints |
+| `GET` | `/producto/point/sku?q=SKU123` | **Buscar producto por código SKU.** Requiere `Authorization: Bearer <token>` |
+| `POST` | `/producto/point/sku` | **Crear o actualizar producto por SKU.** Acepta un objeto o `{"productos": [...]}` para bulk. Requiere Bearer token |
+| `GET` | `/producto/point/descrip?q=agua` | **Buscar productos por descripción.** Requiere Bearer token |
+| `POST` | `/producto/point/descrip` | **Crear o actualizar productos (mismo formato que POST /sku).** Requiere Bearer token |
 
 ---
 
@@ -433,25 +456,29 @@ prettycore.xyz/ELIXIR/PRETTYCORE/
 | Tabla | Descripción |
 |---|---|
 | `users` | Usuarios del sistema (admin, oficina, sysadmin, user) |
-| `users_sessions` | Sesiones activas con metadata de dispositivo |
-| `clientes_nativos` | Clientes B2B creados directamente |
+| `users_sessions` | Sesiones activas con metadata de dispositivo (IP, browser, OS) |
+| `api_tokens` | Tokens Bearer para la API REST de productos (1 token por usuario sysadmin) |
+| `clientes_nativos` | Clientes B2B creados directamente en Prettycore |
 | `pedidos` | Órdenes de compra |
 | `pedido_items` | Ítems de cada pedido |
 | `carritos` | Carritos de compra activos |
 | `carrito_items` | Ítems en el carrito |
 | `productos` | Productos sincronizados desde la API Frog |
 | `productos_nativos` | Productos creados directamente en Prettycore |
-| `categorias` | Categorías de productos |
+| `categorias` | Categorías de productos (orden único, índice único en BD) |
 | `categoria_productos` | Join: categoría ↔ producto |
 | `super_categorias` | Super-categorías de nivel superior |
 | `carrusel_imagenes` | Imágenes del banner rotatorio |
 | `secciones` | Configuración de secciones del storefront |
-| `clientes_nativos` | Clientes B2B nativos |
 | `listas_precios` | Precios por lista numerada y producto |
 | `sucursales` | Sucursales físicas |
 | `stock_sucursal` | Stock por sucursal y producto |
 | `system_config` | Configuración global del sistema (singleton id=1) |
 | `client_intelligence` | Datos de analytics/inteligencia de clientes |
+| `notificaciones` | Notificaciones internas del sistema |
+| `user_addresses` | Direcciones de envío de los usuarios |
+| `gamas` | Gamas de productos para clientes nativos |
+| `cliente_nativo_gamas` | Join: cliente nativo ↔ gama |
 
 ### `system_config` (singleton)
 ```

@@ -40,6 +40,13 @@ defmodule Prettycore.Categorias do
     Repo.all(from c in Categoria, order_by: [asc: c.orden, asc: c.nombre])
   end
 
+  def next_orden do
+    case Repo.one(from c in Categoria, select: max(c.orden)) do
+      nil -> 0
+      max -> max + 1
+    end
+  end
+
   def create_categoria(attrs) do
     %Categoria{} |> Categoria.changeset(attrs) |> Repo.insert()
   end

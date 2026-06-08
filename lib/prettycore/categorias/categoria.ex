@@ -23,5 +23,6 @@ defmodule Prettycore.Categorias.Categoria do
     |> cast(attrs, [:nombre, :imagen_url, :orden])
     |> validate_required([:nombre])
     |> unique_constraint(:nombre)
+    |> unique_constraint(:orden, message: "ese número de orden ya está en uso")
   end
 end

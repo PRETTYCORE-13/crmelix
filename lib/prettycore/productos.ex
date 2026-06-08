@@ -38,6 +38,32 @@ defmodule Prettycore.Productos do
     if count > 0, do: {:ok, count}, else: {:error, :not_found}
   end
 
+  @doc "Busca productos exactamente o parcialmente por SKU (codigo)."
+  def search_by_sku(""), do: []
+  def search_by_sku(q) do
+    term = "%#{q}%"
+    PsqlRepo.all(from p in Producto, where: ilike(p.codigo, ^term), order_by: p.codigo)
+  end
+
+  @doc "Busca productos por descripción o descripción corta."
+  def search_by_descrip(""), do: []
+  def search_by_descrip(q) do
+    term = "%#{q}%"
+    PsqlRepo.all(
+      from p in Producto,
+        where: ilike(p.descripcion, ^term) or ilike(p.desc_corta, ^term),
+        order_by: p.descripcion
+    )
+  end
+
+  @doc "Inserta o actualiza un producto. Retorna {:ok, producto} o {:error, changeset}."
+  def upsert_producto(attrs) do
+    codigo = Map.get(attrs, "codigo") || Map.get(attrs, :codigo)
+    (PsqlRepo.get(Producto, codigo) || %Producto{})
+    |> Producto.changeset(attrs)
+    |> PsqlRepo.insert_or_update()
+  end
+
   @doc "Retorna true si la tabla de productos está vacía."
   def empty? do
     PsqlRepo.aggregate(Producto, :count) == 0

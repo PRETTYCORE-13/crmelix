@@ -17,6 +17,11 @@ defmodule PrettycoreWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :api_auth do
+    plug :accepts, ["json"]
+    plug PrettycoreWeb.Plugs.ApiAuth
+  end
+
   ## Rutas de login y sesión
   scope "/", PrettycoreWeb do
     pipe_through :browser
@@ -25,6 +30,7 @@ defmodule PrettycoreWeb.Router do
     live "/", LoginLive
 
     live "/restablecer/:token", ResetPasswordClienteLive
+    live "/password-reset", PasswordResetLive
 
     # Controlador que valida usuario y crea sesión
     post "/", SessionController, :create
@@ -109,6 +115,23 @@ defmodule PrettycoreWeb.Router do
 
     get "/sys_udn", SysUdnController, :index
     get "/sys_udn/codigos", SysUdnController, :codigos
+  end
+
+  ## API Productos — autenticación pública (obtener token)
+  scope "/producto/point", PrettycoreWeb do
+    pipe_through :api
+
+    post "/token", ProductoPointController, :token
+  end
+
+  ## API Productos — requieren Bearer token
+  scope "/producto/point", PrettycoreWeb do
+    pipe_through :api_auth
+
+    get  "/sku",    ProductoPointController, :sku
+    post "/sku",    ProductoPointController, :upsert_sku
+    get  "/descrip", ProductoPointController, :descrip
+    post "/descrip", ProductoPointController, :upsert_descrip
   end
 
   import Phoenix.LiveDashboard.Router

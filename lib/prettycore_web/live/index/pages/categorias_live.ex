@@ -65,7 +65,7 @@ defmodule PrettycoreWeb.CategoriasLive do
   # ── Abrir modales ──────────────────────────────────────────────────
 
   def handle_event("nueva", _, socket) do
-    {:noreply, assign(socket, modal: :nueva, form_nombre: "", form_orden: "#{length(socket.assigns.categorias)}", form_error: nil)}
+    {:noreply, assign(socket, modal: :nueva, form_nombre: "", form_orden: "#{Categorias.next_orden()}", form_error: nil)}
   end
 
   def handle_event("editar", %{"id" => id}, socket) do

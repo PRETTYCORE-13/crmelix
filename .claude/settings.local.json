@@ -107,7 +107,8 @@
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -d prettycore_dev -c \"GRANT ALL ON SCHEMA public TO prettycore;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -d prettycore_dev -c \"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO prettycore; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO prettycore; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO prettycore; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO prettycore;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -c \"DROP DATABASE IF EXISTS prettycore_dev; CREATE DATABASE prettycore_dev OWNER prettycore;\" 2>&1)",
-      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -c \"DROP DATABASE IF EXISTS prettycore_dev;\" 2>&1)"
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -c \"DROP DATABASE IF EXISTS prettycore_dev;\" 2>&1)",
+      "Bash(grep -E \"\\\\.ex$\")"
     ],
     "deny": [],
     "ask": []
