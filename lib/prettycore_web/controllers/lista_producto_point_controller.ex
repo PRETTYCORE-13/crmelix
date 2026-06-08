@@ -24,16 +24,16 @@ defmodule PrettycoreWeb.ListaProductoPointController do
     })
   end
 
-  defp format(p) do
+  defp format(x) do
     %{
-      codigo:      p.codigo,
-      descripcion: p.descripcion,
-      desc_corta:  p.desc_corta,
-      marca:       p.marca,
-      iva:         p.iva,
-      pzas_min:    p.pzas_min_vta,
-      activo:      p.activo,
-      imagen_url:  p.imagen_url
+      codigo:      x.codigo,
+      descripcion: x.descripcion,
+      desc_corta:  x.desc_corta,
+      marca:       x.marca,
+      iva:         x.iva,
+      pzas_min:    x.pzas_min_vta,
+      activo:      x.activo,
+      imagen_url:  x.imagen_url
     }
   end
 
