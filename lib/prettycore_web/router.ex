@@ -128,8 +128,9 @@ defmodule PrettycoreWeb.Router do
   scope "/producto/point", PrettycoreWeb do
     pipe_through :api_auth
 
-    get  "/sku",    ProductoPointController, :sku
-    post "/sku",    ProductoPointController, :upsert_sku
+    get  "/lista",   ListaProductoPointController, :index
+    get  "/sku",     ProductoPointController, :sku
+    post "/sku",     ProductoPointController, :upsert_sku
     get  "/descrip", ProductoPointController, :descrip
     post "/descrip", ProductoPointController, :upsert_descrip
   end
