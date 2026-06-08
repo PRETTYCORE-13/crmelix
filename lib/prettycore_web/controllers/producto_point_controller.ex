@@ -29,10 +29,10 @@ defmodule PrettycoreWeb.ProductoPointController do
   # ── GET /producto/point/sku?q=SKU ───────────────────────────────────
   # Busca productos por código (SKU)
 
-  def sku(conn, %{"q" => q}) when is_binary(q) and q != "" do
-    productos = Productos.search_by_sku(q)
-    json(conn, %{ok: true, total: length(productos), data: Enum.map(productos, &format/1)})
-  end
+def sku(conn, %{"codigo" => codigo}) do
+  productos = Productos.search_by_sku(codigo)
+  json(conn, %{ok: true, total: length(productos), data: Enum.map(productos, &format/1)})
+end
 
   # ── POST /producto/point/sku ─────────────────────────────────────────
   # Body: un producto o lista de productos
