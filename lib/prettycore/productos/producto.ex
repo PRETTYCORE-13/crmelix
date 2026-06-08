@@ -1,3 +1,4 @@
+# lib/prettycore/productos/producto.ex (solo el esquema)
 defmodule Prettycore.Productos.Producto do
   use Ecto.Schema
   import Ecto.Changeset
@@ -21,9 +22,9 @@ defmodule Prettycore.Productos.Producto do
     timestamps(type: :utc_datetime)
   end
 
-def listar_productos_paginados(page \\ 1, per_page \\ 20) do
-  Producto
-  |> order_by([p], p.descripcion)
-  |> Repo.paginate(page: page, page_size: per_page)
-end
+  def changeset(producto, attrs) do
+    producto
+    |> cast(attrs, [:codigo, :descripcion, :desc_corta, :marca, :iva, :pzas_min_vta, :activo, :raw, :imagen_url])
+    |> validate_required([:codigo])
+  end
 end
