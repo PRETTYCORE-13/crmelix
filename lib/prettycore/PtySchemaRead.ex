@@ -27,7 +27,7 @@ defmodule Prettycore.SchemaRead do
 
   def buscar_por_condiciones(schema, condiciones) do
     filtros = Enum.reduce(condiciones, dynamic(true), fn {campo, valor}, acc ->
-      campo_atom = String.to_existing_atom(campo)
+      campo_atom = String.to_atom(campo)
       dynamic([p], ^acc and field(p, ^campo_atom) == ^valor)
     end)
 
