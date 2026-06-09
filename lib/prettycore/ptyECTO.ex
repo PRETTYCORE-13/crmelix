@@ -14,7 +14,7 @@ defmodule Prettycore.Schema do
 
   #funcion que lista contenido de cualquier tabla paginado
   def lista_schema(tra, offset, limit) do
-    PsqlRepo.all(from p in tra, order_by: p.descripcion, offset: ^offset, limit: ^limit)
+    PsqlRepo.all(from p in tra, order_by: p.inserted_at, offset: ^offset, limit: ^limit)
   end
 
 end
