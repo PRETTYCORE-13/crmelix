@@ -79,6 +79,16 @@ defmodule Prettycore.Productos do
     PsqlRepo.aggregate(Producto, :count)
   end
 
+
+  def count_tx(tx) do
+    PsqlRepo.aggregate(tx, :count)
+  end
+
+  def lista_schema(tra, offset, limit) do
+    PsqlRepo.all(from p in tra, order_by: p.descripcion, offset: ^offset, limit: ^limit)
+  end
+
+
   @doc "Retorna true si la tabla de productos está vacía."
   def empty? do
     PsqlRepo.aggregate(Producto, :count) == 0

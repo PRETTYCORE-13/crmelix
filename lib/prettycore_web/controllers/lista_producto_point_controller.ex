@@ -11,8 +11,8 @@ defmodule PrettycoreWeb.ListaProductoPointController do
     limit = params |> Map.get("limit", "50") |> parse_int(50)
     offset = (page - 1) * limit
 
-    productos = Productos.list_productos_paginado(offset, limit)
-    total     = Productos.count_productos()
+    productos = Productos.lista_schema(Productos, offset, limit)
+    total     = Productos.count_tx(Productos, :count)
 
 IO.inspect(%{page: page, limit: limit, offset: offset, total: total}, label: "DEBUG")
 
