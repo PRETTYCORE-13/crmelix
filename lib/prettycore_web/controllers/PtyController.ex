@@ -46,11 +46,13 @@ defmodule PrettycoreWeb.PtyController do
     end
   end
 
-  # Convierte cualquier struct Ecto a mapa limpio
+  # Convierte cualquier struct Ecto a mapa limpio, descartando asociaciones no cargadas
   defp format(struct) do
     struct
     |> Map.from_struct()
     |> Map.drop([:__meta__, :inserted_at, :updated_at])
+    |> Enum.reject(fn {_k, v} -> match?(%Ecto.Association.NotLoaded{}, v) end)
+    |> Map.new()
   end
 
   defp parse_int(val, default) do
