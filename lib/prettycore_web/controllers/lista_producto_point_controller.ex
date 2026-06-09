@@ -2,6 +2,7 @@ defmodule PrettycoreWeb.ListaProductoPointController do
   use PrettycoreWeb, :controller
 
   alias Prettycore.Productos
+  alias Prettycore.Productos.Producto
 
   # GET /producto/point/lista
   # GET /producto/point/lista?page=2&limit=50
@@ -11,8 +12,8 @@ defmodule PrettycoreWeb.ListaProductoPointController do
     limit = params |> Map.get("limit", "50") |> parse_int(50)
     offset = (page - 1) * limit
 
-    productos = Productos.lista_schema(Productos, offset, limit)
-    total     = Productos.count_tx(Productos, :count)
+    productos = Productos.lista_schema(Producto, offset, limit)
+    total     = Productos.count_tx(Producto)
 
 IO.inspect(%{page: page, limit: limit, offset: offset, total: total}, label: "DEBUG")
 
