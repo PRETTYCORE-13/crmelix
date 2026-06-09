@@ -7,6 +7,7 @@ defmodule Prettycore.Productos do
   import Ecto.Query
   alias Prettycore.PsqlRepo
   alias Prettycore.Productos.Producto
+  alias Prettycore.Schema
 
   @doc "Lista todos los productos desde la BD local."
   def list_productos do
@@ -77,17 +78,7 @@ defmodule Prettycore.Productos do
   @doc "Cuenta el total de productos."
   def count_productos do
     PsqlRepo.aggregate(Producto, :count)
-  end
-
-
-  def count_tx(tx) do
-    PsqlRepo.aggregate(tx, :count)
-  end
-
-  def lista_schema(tra, offset, limit) do
-    PsqlRepo.all(from p in tra, order_by: p.descripcion, offset: ^offset, limit: ^limit)
-  end
-
+ end
 
   @doc "Retorna true si la tabla de productos está vacía."
   def empty? do
