@@ -31,8 +31,8 @@ defmodule PrettycoreWeb.PtyController do
         limit  = params |> Map.get("limit", "50")  |> parse_int(50)
         offset = (page - 1) * limit
 
-        registros = Schema.lista_schema(schema, offset, limit)
-        total     = Schema.count_tx(schema)
+        registros = SchemaRead.lista_schema(schema, offset, limit)
+        total     = SchemaRead.count_tx(schema)
 
         json(conn, %{
           ok:      true,
