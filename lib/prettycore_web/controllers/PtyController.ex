@@ -46,6 +46,66 @@ defmodule PrettycoreWeb.PtyController do
     end
   end
 
+    def show(conn, %{"tabla" => tabla, "id" => id}) do
+    case Map.get(@schemas, tabla) do
+      nil ->
+        conn
+        |> put_status(404)
+        |> json(%{ok: false, error: "Tabla '#{tabla}' no encontrada"})
+
+      schema ->
+        # Buscar por ID (asumiendo que usan :id como primary key)
+        case SchemaRead.obtener_por_id(schema, id) do
+          nil ->
+            conn
+            |> put_status(404)
+            |> json(%{ok: false, error: "Registro no encontrado en '#{tabla}' con id: #{id}"})
+
+          registro ->
+            json(conn, %{
+              ok: true,
+              tabla: tabla,
+              id: id,
+              data: format(registro)
+            })
+        end
+    end
+  end
+
+
+    # NUEVA FUNCIÓN: POST /pty/buscar
+  # Body: {"tabla": "pedidos", "condiciones": {"serie": "2010"}}
+  # O varias condiciones: {"tabla": "pedidos", "condiciones": {"serie": "2010", "activo": true}}
+
+  def buscar(conn, _params) do
+    body        = conn.body_params
+    tabla       = Map.get(body, "tabla")
+    condiciones = Map.get(body, "condiciones", %{})
+    schema      = Map.get(@schemas, tabla)
+
+    case SchemaRead.buscar_por_condiciones(schema, condiciones) do
+      [] ->
+        json(conn, %{
+          ok: true,
+          tabla: tabla,
+          condiciones: condiciones,
+          total: 0,
+          data: []
+        })
+
+      registros ->
+        json(conn, %{
+          ok: true,
+          tabla: tabla,
+          condiciones: condiciones,
+          total: length(registros),
+          data: Enum.map(registros, &format/1)
+        })
+    end
+  end
+
+
+
   # Convierte cualquier struct Ecto a mapa limpio, descartando asociaciones no cargadas
   defp format(struct) do
     struct

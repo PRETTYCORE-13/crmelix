@@ -129,7 +129,9 @@ defmodule PrettycoreWeb.Router do
     pipe_through :api_auth
 
     get  "/lista",         ListaProductoPointController, :index
-    get  "/pty/:tabla",    PtyController, :index
+    get  "/pty/:tabla",          PtyController, :index
+    get  "/pty/:tabla/:id",      PtyController, :show
+    post "/pty/buscar",          PtyController, :buscar
     get  "/sku",     ProductoPointController, :sku
     post "/sku",     ProductoPointController, :upsert_sku
     get  "/descrip", ProductoPointController, :descrip
