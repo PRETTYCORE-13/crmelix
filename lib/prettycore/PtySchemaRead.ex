@@ -1,4 +1,4 @@
-defmodule Prettycore.Schema do
+defmodule Prettycore.SchemaRead do
   @moduledoc """
   Contexto para productos. Lee de PostgreSQL y sincroniza desde la API cuando se requiere.
   """
@@ -6,7 +6,7 @@ defmodule Prettycore.Schema do
 
   import Ecto.Query
   alias Prettycore.PsqlRepo
-  
+
 #funcion que cuenta el numero de elementos de cualquier tabla
   def count_tx(tx) do
     PsqlRepo.aggregate(tx, :count)

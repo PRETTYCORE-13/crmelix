@@ -1,7 +1,7 @@
 defmodule PrettycoreWeb.PtyController do
   use PrettycoreWeb, :controller
 
-  alias Prettycore.Schema
+  alias Prettycore.SchemaRead
 
   # Mapa de nombre → módulo schema
   @schemas %{
