@@ -1,7 +1,7 @@
 defmodule PrettycoreWeb.PtyController do
   use PrettycoreWeb, :controller
 
-  alias Prettycore.PtyEcto
+  alias Prettycore.Schema
 
   # Mapa de nombre → módulo schema
   @schemas %{
@@ -31,8 +31,8 @@ defmodule PrettycoreWeb.PtyController do
         limit  = params |> Map.get("limit", "50")  |> parse_int(50)
         offset = (page - 1) * limit
 
-        registros = PtyEcto.lista_schema(schema, offset, limit)
-        total     = PtyEcto.count_tx(schema)
+        registros = Schema.lista_schema(schema, offset, limit)
+        total     = Schema.count_tx(schema)
 
         json(conn, %{
           ok:      true,
