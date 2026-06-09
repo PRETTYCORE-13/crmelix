@@ -14,6 +14,8 @@ defmodule PrettycoreWeb.ListaProductoPointController do
     productos = Productos.list_productos_paginado(offset, limit)
     total     = Productos.count_productos()
 
+IO.inspect(%{page: page, limit: limit, offset: offset, total: total}, label: "DEBUG")
+
     json(conn, %{
       ok:       true,
       total:    total,
