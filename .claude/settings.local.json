@@ -119,7 +119,8 @@
       "Bash(Get-ChildItem -Path \"d:\\\\prettycore2\\\\lib\\\\prettycore\" -Directory)",
       "Bash(Select-Object Name)",
       "Bash(Sort-Object Name)",
-      "Bash(mix phx.routes)"
+      "Bash(mix phx.routes)",
+      "Bash(mix ecto.create)"
     ],
     "deny": [],
     "ask": []
