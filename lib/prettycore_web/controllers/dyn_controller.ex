@@ -22,12 +22,15 @@ defmodule PrettycoreWeb.DynController do
 
   # ── Helpers ───────────────────────────────────────────────────
 
-  defp get_modelo(conn, modelo_nombre) do
+  defp get_modelo(modelo_nombre) do
     case Meta.obtener_modelo_por_nombre(modelo_nombre) do
-      nil   -> {:error, send_resp(conn, 404, Jason.encode!(%{ok: false, error: "Modelo '#{modelo_nombre}' no existe"}))}
+      nil    -> :not_found
       modelo -> {:ok, modelo}
     end
   end
+
+  defp not_found(conn, nombre),
+    do: conn |> put_status(404) |> json(%{ok: false, error: "Modelo '#{nombre}' no existe"})
 
   defp run_query(sql, params) do
     Ecto.Adapters.SQL.query(PsqlRepo, sql, params)
@@ -60,39 +63,41 @@ defmodule PrettycoreWeb.DynController do
   # ── GET /api/dyn/:modelo  →  lista paginada ────────────────────
 
   def index(conn, %{"modelo" => modelo_nombre} = params) do
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      page  = String.to_integer(Map.get(params, "page",  "1"))
-      limit = String.to_integer(Map.get(params, "limit", "50"))
-      offset = (page - 1) * limit
-
-      sql   = "SELECT * FROM #{modelo.tabla_db} ORDER BY inserted_at DESC LIMIT $1 OFFSET $2"
-      count_sql = "SELECT COUNT(*) FROM #{modelo.tabla_db}"
-
-      with {:ok, res}   <- run_query(sql, [limit, offset]),
-           {:ok, count} <- run_query(count_sql, []) do
-        total = count.rows |> List.first() |> List.first()
-        data  = rows_to_maps(res.columns, res.rows)
-        json(conn, %{ok: true, modelo: modelo_nombre, total: total, page: page, limit: limit, data: data})
-      else
-        {:error, %{postgres: %{message: msg}}} -> json(conn |> put_status(500), %{ok: false, error: msg})
-      end
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        page   = String.to_integer(Map.get(params, "page",  "1"))
+        limit  = String.to_integer(Map.get(params, "limit", "50"))
+        offset = (page - 1) * limit
+        sql       = "SELECT * FROM #{modelo.tabla_db} ORDER BY inserted_at DESC LIMIT $1 OFFSET $2"
+        count_sql = "SELECT COUNT(*) FROM #{modelo.tabla_db}"
+        with {:ok, res}   <- run_query(sql, [limit, offset]),
+             {:ok, count} <- run_query(count_sql, []) do
+          total = count.rows |> List.first() |> List.first()
+          data  = rows_to_maps(res.columns, res.rows)
+          json(conn, %{ok: true, modelo: modelo_nombre, total: total, page: page, limit: limit, data: data})
+        else
+          {:error, %{postgres: %{message: msg}}} -> json(conn |> put_status(500), %{ok: false, error: msg})
+        end
     end
   end
 
   # ── GET /api/dyn/:modelo/:id  →  registro único ───────────────
 
   def show(conn, %{"modelo" => modelo_nombre, "id" => id}) do
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      sql = "SELECT * FROM #{modelo.tabla_db} WHERE id = $1 LIMIT 1"
-      case run_query(sql, [id]) do
-        {:ok, %{rows: []}} ->
-          json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
-        {:ok, res} ->
-          [row] = res.rows
-          json(conn, %{ok: true, data: rows_to_maps(res.columns, [row]) |> List.first()})
-        {:error, %{postgres: %{message: msg}}} ->
-          json(conn |> put_status(500), %{ok: false, error: msg})
-      end
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        sql = "SELECT * FROM #{modelo.tabla_db} WHERE id = $1 LIMIT 1"
+        case run_query(sql, [id]) do
+          {:ok, %{rows: []}} ->
+            json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
+          {:ok, res} ->
+            [row] = res.rows
+            json(conn, %{ok: true, data: rows_to_maps(res.columns, [row]) |> List.first()})
+          {:error, %{postgres: %{message: msg}}} ->
+            json(conn |> put_status(500), %{ok: false, error: msg})
+        end
     end
   end
 
@@ -100,24 +105,25 @@ defmodule PrettycoreWeb.DynController do
 
   def create(conn, %{"modelo" => modelo_nombre} = params) do
     attrs = Map.drop(params, ["modelo"])
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      case validate_payload(modelo, attrs) do
-        {:error, errors} ->
-          json(conn |> put_status(422), %{ok: false, errors: errors})
-        :ok ->
-          columnas = Enum.sort_by(modelo.columnas, & &1.orden)
-          campos   = Enum.map(columnas, & &1.nombre)
-          valores  = Enum.map(campos, fn c -> Map.get(attrs, c) end)
-          placeholders = campos |> Enum.with_index(1) |> Enum.map(fn {_, i} -> "$#{i}" end) |> Enum.join(", ")
-          sql = "INSERT INTO #{modelo.tabla_db} (#{Enum.join(campos, ", ")}) VALUES (#{placeholders}) RETURNING *"
-
-          case run_query(sql, valores) do
-            {:ok, res} ->
-              json(conn |> put_status(201), %{ok: true, data: rows_to_maps(res.columns, res.rows) |> List.first()})
-            {:error, %{postgres: %{message: msg}}} ->
-              json(conn |> put_status(500), %{ok: false, error: msg})
-          end
-      end
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        case validate_payload(modelo, attrs) do
+          {:error, errors} ->
+            json(conn |> put_status(422), %{ok: false, errors: errors})
+          :ok ->
+            columnas     = Enum.sort_by(modelo.columnas, & &1.orden)
+            campos       = Enum.map(columnas, & &1.nombre)
+            valores      = Enum.map(campos, fn c -> Map.get(attrs, c) end)
+            placeholders = campos |> Enum.with_index(1) |> Enum.map(fn {_, i} -> "$#{i}" end) |> Enum.join(", ")
+            sql = "INSERT INTO #{modelo.tabla_db} (#{Enum.join(campos, ", ")}) VALUES (#{placeholders}) RETURNING *"
+            case run_query(sql, valores) do
+              {:ok, res} ->
+                json(conn |> put_status(201), %{ok: true, data: rows_to_maps(res.columns, res.rows) |> List.first()})
+              {:error, %{postgres: %{message: msg}}} ->
+                json(conn |> put_status(500), %{ok: false, error: msg})
+            end
+        end
     end
   end
 
@@ -125,41 +131,44 @@ defmodule PrettycoreWeb.DynController do
 
   def update(conn, %{"modelo" => modelo_nombre, "id" => id} = params) do
     attrs = Map.drop(params, ["modelo", "id"])
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      fields = Map.keys(attrs)
-      if fields == [] do
-        json(conn |> put_status(422), %{ok: false, error: "Sin campos para actualizar"})
-      else
-        sets        = fields |> Enum.with_index(1) |> Enum.map(fn {f, i} -> "#{f} = $#{i}" end) |> Enum.join(", ")
-        values      = Enum.map(fields, &Map.get(attrs, &1))
-        id_pos      = length(fields) + 1
-        sql = "UPDATE #{modelo.tabla_db} SET #{sets}, updated_at = NOW() WHERE id = $#{id_pos} RETURNING *"
-
-        case run_query(sql, values ++ [id]) do
-          {:ok, %{rows: []}} ->
-            json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
-          {:ok, res} ->
-            json(conn, %{ok: true, data: rows_to_maps(res.columns, res.rows) |> List.first()})
-          {:error, %{postgres: %{message: msg}}} ->
-            json(conn |> put_status(500), %{ok: false, error: msg})
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        fields = Map.keys(attrs)
+        if fields == [] do
+          json(conn |> put_status(422), %{ok: false, error: "Sin campos para actualizar"})
+        else
+          sets   = fields |> Enum.with_index(1) |> Enum.map(fn {f, i} -> "#{f} = $#{i}" end) |> Enum.join(", ")
+          values = Enum.map(fields, &Map.get(attrs, &1))
+          id_pos = length(fields) + 1
+          sql = "UPDATE #{modelo.tabla_db} SET #{sets}, updated_at = NOW() WHERE id = $#{id_pos} RETURNING *"
+          case run_query(sql, values ++ [id]) do
+            {:ok, %{rows: []}} ->
+              json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
+            {:ok, res} ->
+              json(conn, %{ok: true, data: rows_to_maps(res.columns, res.rows) |> List.first()})
+            {:error, %{postgres: %{message: msg}}} ->
+              json(conn |> put_status(500), %{ok: false, error: msg})
+          end
         end
-      end
     end
   end
 
   # ── DELETE /api/dyn/:modelo/:id  →  eliminar ─────────────────
 
   def delete(conn, %{"modelo" => modelo_nombre, "id" => id}) do
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      sql = "DELETE FROM #{modelo.tabla_db} WHERE id = $1 RETURNING id"
-      case run_query(sql, [id]) do
-        {:ok, %{rows: []}} ->
-          json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
-        {:ok, _} ->
-          json(conn, %{ok: true, id: id})
-        {:error, %{postgres: %{message: msg}}} ->
-          json(conn |> put_status(500), %{ok: false, error: msg})
-      end
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        sql = "DELETE FROM #{modelo.tabla_db} WHERE id = $1 RETURNING id"
+        case run_query(sql, [id]) do
+          {:ok, %{rows: []}} ->
+            json(conn |> put_status(404), %{ok: false, error: "Registro no encontrado"})
+          {:ok, _} ->
+            json(conn, %{ok: true, id: id})
+          {:error, %{postgres: %{message: msg}}} ->
+            json(conn |> put_status(500), %{ok: false, error: msg})
+        end
     end
   end
 
@@ -167,30 +176,31 @@ defmodule PrettycoreWeb.DynController do
 
   def buscar(conn, %{"modelo" => modelo_nombre} = params) do
     condiciones = Map.get(params, "condiciones", %{})
-    with {:ok, modelo} <- get_modelo(conn, modelo_nombre) do
-      if condiciones == %{} do
-        sql = "SELECT * FROM #{modelo.tabla_db} ORDER BY inserted_at DESC"
-        case run_query(sql, []) do
-          {:ok, res} ->
-            data = rows_to_maps(res.columns, res.rows)
-            json(conn, %{ok: true, total: length(data), data: data})
-          {:error, %{postgres: %{message: msg}}} ->
-            json(conn |> put_status(500), %{ok: false, error: msg})
+    case get_modelo(modelo_nombre) do
+      :not_found -> not_found(conn, modelo_nombre)
+      {:ok, modelo} ->
+        if condiciones == %{} do
+          sql = "SELECT * FROM #{modelo.tabla_db} ORDER BY inserted_at DESC"
+          case run_query(sql, []) do
+            {:ok, res} ->
+              data = rows_to_maps(res.columns, res.rows)
+              json(conn, %{ok: true, total: length(data), data: data})
+            {:error, %{postgres: %{message: msg}}} ->
+              json(conn |> put_status(500), %{ok: false, error: msg})
+          end
+        else
+          fields = Map.keys(condiciones)
+          where  = fields |> Enum.with_index(1) |> Enum.map(fn {f, i} -> "#{f} = $#{i}" end) |> Enum.join(" AND ")
+          values = Enum.map(fields, &Map.get(condiciones, &1))
+          sql    = "SELECT * FROM #{modelo.tabla_db} WHERE #{where} ORDER BY inserted_at DESC"
+          case run_query(sql, values) do
+            {:ok, res} ->
+              data = rows_to_maps(res.columns, res.rows)
+              json(conn, %{ok: true, total: length(data), data: data})
+            {:error, %{postgres: %{message: msg}}} ->
+              json(conn |> put_status(500), %{ok: false, error: msg})
+          end
         end
-      else
-        fields = Map.keys(condiciones)
-        where  = fields |> Enum.with_index(1) |> Enum.map(fn {f, i} -> "#{f} = $#{i}" end) |> Enum.join(" AND ")
-        values = Enum.map(fields, &Map.get(condiciones, &1))
-        sql = "SELECT * FROM #{modelo.tabla_db} WHERE #{where} ORDER BY inserted_at DESC"
-
-        case run_query(sql, values) do
-          {:ok, res} ->
-            data = rows_to_maps(res.columns, res.rows)
-            json(conn, %{ok: true, total: length(data), data: data})
-          {:error, %{postgres: %{message: msg}}} ->
-            json(conn |> put_status(500), %{ok: false, error: msg})
-        end
-      end
     end
   end
 end
