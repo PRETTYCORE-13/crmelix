@@ -78,18 +78,6 @@ defmodule PrettycoreWeb.SysAdminLayout do
                 </.link>
 
                 <.link
-                  navigate="/sysadmin/intelligence"
-                  class={if @current_page == "intelligence", do: "pc-nav-item pc-nav-item-active", else: "pc-nav-item"}
-                >
-                  <span class="pc-nav-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                    </svg>
-                  </span>
-                  <span class="pc-nav-label">Intelligence</span>
-                </.link>
-
-                <.link
                   navigate="/sysadmin/usuarios"
                   class={if @current_page == "usuarios", do: "pc-nav-item pc-nav-item-active", else: "pc-nav-item"}
                 >
@@ -102,20 +90,6 @@ defmodule PrettycoreWeb.SysAdminLayout do
                     </svg>
                   </span>
                   <span class="pc-nav-label">Usuarios</span>
-                </.link>
-
-                <.link
-                  navigate="/sysadmin/tienda"
-                  class={if @current_page == "tienda", do: "pc-nav-item pc-nav-item-active", else: "pc-nav-item"}
-                >
-                  <span class="pc-nav-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                      <line x1="3" y1="6" x2="21" y2="6" />
-                      <path d="M16 10a4 4 0 0 1-8 0" />
-                    </svg>
-                  </span>
-                  <span class="pc-nav-label">Tienda</span>
                 </.link>
 
               </nav>

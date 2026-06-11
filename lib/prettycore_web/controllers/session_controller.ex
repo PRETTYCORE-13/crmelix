@@ -37,7 +37,7 @@ defmodule PrettycoreWeb.SessionController do
               do: conn_with_session,
               else: track_new_session(conn_with_session, user_id)
 
-          redirect(conn_tracked, to: ~p"/admin/tienda")
+          redirect(conn_tracked, to: ~p"/admin/platform")
         end
 
       {:error, :invalid_credentials} ->

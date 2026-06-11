@@ -12,16 +12,12 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
      socket
      |> assign(:current_page, "usuarios")
      |> assign(:sidebar_open, true)
-     |> assign(:show_programacion_children, false)
-     |> assign(:show_clientes_children, false)
-     |> assign(:show_prettycore_children, false)
      |> assign(:page_title, "Usuarios")
      |> assign(:changeset, changeset)
      |> assign(:form, to_form(changeset))
      |> assign(:users, Auth.list_users())
      |> assign(:show_password, false)
-     |> assign(:expanded_permissions_user_id, nil)
-     |> assign(:cliente_lookup, nil)}
+     |> assign(:expanded_permissions_user_id, nil)}
   end
 
   @impl true
@@ -47,8 +43,7 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
          socket
          |> put_flash(:info, "Usuario creado exitosamente")
          |> assign(:form, to_form(AuthUser.admin_changeset(%AuthUser{}, %{})))
-         |> assign(:users, Auth.list_users())
-         |> assign(:cliente_lookup, nil)}
+         |> assign(:users, Auth.list_users())}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, form: to_form(changeset))}
@@ -56,30 +51,9 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
   end
 
   @impl true
-  def handle_event("lookup_cliente", %{"auth_user" => %{"cliente_codigo" => codigo}}, socket) do
-    codigo = String.trim(codigo)
-    result =
-      if codigo == "" do
-        nil
-      else
-        case buscar_cliente_en_cache(codigo) do
-          nil -> :not_found
-          cliente -> {:ok, cliente}
-        end
-      end
-    {:noreply, assign(socket, cliente_lookup: result)}
-  end
-
-  def handle_event("lookup_cliente", _params, socket) do
-    {:noreply, socket}
-  end
-
-  @impl true
   def handle_event("toggle_password", _, socket) do
     {:noreply, assign(socket, show_password: !socket.assigns.show_password)}
   end
-
-  defp buscar_cliente_en_cache(_codigo), do: nil
 
   @impl true
   def handle_event("delete_user", %{"id" => id}, socket) do
@@ -207,58 +181,6 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                     <%= translate_error(hd(@form[:username].errors)) %>
                   </p>
                 <% end %>
-              </div>
-
-              <!-- Usuario FROG (hidden, always ROBOOT for client creation) -->
-              <input type="hidden" name="auth_user[usuario_frog]" value="ROBOOT" />
-
-              <!-- Cliente + Dirección (2 columnas) -->
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label for="cliente_codigo" class="block text-sm font-medium text-gray-700 mb-2">
-                    Código Cliente
-                  </label>
-                  <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      name="auth_user[cliente_codigo]"
-                      id="cliente_codigo"
-                      value={@form[:cliente_codigo].value}
-                      maxlength="20"
-                      class="block w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
-                      placeholder="Ej: GN8657B"
-                      autocomplete="off"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label for="dir_codigo" class="block text-sm font-medium text-gray-700 mb-2">
-                    No. Dirección
-                  </label>
-                  <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      name="auth_user[dir_codigo]"
-                      id="dir_codigo"
-                      value={@form[:dir_codigo].value}
-                      maxlength="10"
-                      class="block w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-600 focus:border-transparent transition-all"
-                      placeholder="Ej: 1"
-                      autocomplete="off"
-                    />
-                  </div>
-                </div>
               </div>
 
               <!-- Email -->
@@ -397,7 +319,6 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                   <% expanded = @expanded_permissions_user_id == user.id %>
                   <% user_perms = user.permissions || ["inicio"] %>
                   <% is_sysadmin_role = user.role == "sysadmin" %>
-                  <% is_admin_role = user.role in ["admin", "sysadmin"] %>
                   <div class={"rounded-xl border transition-all duration-200 #{if expanded, do: "border-purple-500/40 bg-purple-50/30", else: "border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-gray-300"}"}>
                     <!-- Fila principal -->
                     <div class="flex items-center justify-between gap-3 p-4">
@@ -408,11 +329,6 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                         <div class="min-w-0">
                           <p class="text-sm font-semibold text-gray-900 truncate"><%= user.username %></p>
                           <p class="text-xs text-gray-400 mt-0.5 truncate"><%= user.email || "Sin email" %></p>
-                          <%= if user.cliente_codigo && user.cliente_codigo != "" do %>
-                            <p class="text-xs text-purple-500 mt-0.5 font-mono truncate">
-                              <%= user.cliente_codigo %><%= if user.dir_codigo && user.dir_codigo != "", do: " · Dir #{user.dir_codigo}", else: "" %>
-                            </p>
-                          <% end %>
                         </div>
                       </div>
                       <div class="flex items-center gap-1.5 shrink-0">
@@ -486,16 +402,14 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                           </thead>
                           <tbody class="divide-y divide-gray-100">
                             <% perms_list = cond do
-                            is_sysadmin_role -> [{"categorias", "Categorías Tienda"}, {"editar_imagenes", "Imágenes Tienda"}]
+                            is_sysadmin_role -> []
                             user.role == "admin" -> [
                               {"clientes",   "Clientes"},
-                              {"tienda",     "Tienda"},
-                              {"categorias", "Administrar Tienda"},
-                              {"pedidos",    "Ver Pedidos"},
-                              {"usuarios",   "Usuarios"}
+                              {"usuarios",   "Usuarios"},
+                              {"disenador",  "Diseñador de esquema"}
                             ]
-                            user.role == "oficina" -> [{"clientes", "Clientes"}, {"tienda", "Tienda"}, {"categorias", "Administrar Tienda"}, {"pedidos", "Ver Pedidos"}, {"usuarios", "Usuarios"}]
-                            true -> [{"tienda", "Tienda"}]
+                            user.role == "oficina" -> [{"clientes", "Clientes"}, {"usuarios", "Usuarios"}, {"disenador", "Diseñador de esquema"}]
+                            true -> []
                           end %>
                             <%= for {perm_id, perm_label} <- perms_list do %>
                               <% checked = is_sysadmin_role or perm_id in user_perms %>
@@ -512,22 +426,14 @@ defmodule PrettycoreWeb.Users.UsersCreateLive do
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
                                         </svg>
-                                      <% "tienda" -> %>
-                                        <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" />
-                                        </svg>
                                       <% "usuarios" -> %>
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="23" y2="8" /><line x1="21" y1="6" x2="21" y2="10" />
                                         </svg>
-                                      <% "categorias" -> %>
+                                      <% "disenador" -> %>
                                         <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                          <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                                        </svg>
-                                      <% "editar_imagenes" -> %>
-                                        <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                          <path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                          <path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                                          <path d="M3 9h18M9 21V9" />
                                         </svg>
                                       <% _ -> %>
                                     <% end %>

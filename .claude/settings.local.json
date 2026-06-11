@@ -108,7 +108,18 @@
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -d prettycore_dev -c \"GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO prettycore; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO prettycore; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO prettycore; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO prettycore;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -c \"DROP DATABASE IF EXISTS prettycore_dev; CREATE DATABASE prettycore_dev OWNER prettycore;\" 2>&1)",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -h 127.0.0.1 -p 1111 -c \"DROP DATABASE IF EXISTS prettycore_dev;\" 2>&1)",
-      "Bash(grep -E \"\\\\.ex$\")"
+      "Bash(grep -E \"\\\\.ex$\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\prettycore\\\\lib\" -Recurse -Filter \"*.ex\")",
+      "Bash(Select-Object -Property FullName)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Remove-Item -Recurse -Force \"d:\\\\prettycore2\\\\lib\\\\prettycore_web\\\\live\\\\tienda\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item -Force \"d:\\\\prettycore2\\\\IMG\\\\tienda.png\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item -Force \"d:\\\\prettycore2\\\\priv\\\\static\\\\images\\\\tienda.png\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Host \"Done\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\prettycore2\\\\lib\\\\prettycore\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Sort-Object Name)",
+      "Bash(mix phx.routes)"
     ],
     "deny": [],
     "ask": []

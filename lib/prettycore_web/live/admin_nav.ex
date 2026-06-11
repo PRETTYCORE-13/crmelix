@@ -8,27 +8,10 @@ defmodule PrettycoreWeb.AdminNav do
   import Phoenix.Component, only: [update: 3]
 
   @routes %{
-    "inicio"             => "/admin/tienda",
+    "inicio"             => "/admin/platform",
     "clientes_frog"      => "/admin/clientes",
-    "clientes_nativos"   => "/admin/clientes-nativos",
-    "listas_precios"     => "/admin/listas-precios",
-    "gamas"              => "/admin/gamas",
-    "lista_productos"    => "/admin/productos-nativos",
-    "productos_nativos"  => "/admin/productos-nativos",
-    "stock"              => "/admin/stock",
-    "sucursales"         => "/admin/sucursales",
-    "configuracion"      => "/admin/configuracion",
-    "categorias_nativas" => "/admin/categorias-nativas",
-    "tienda"             => "/admin/tienda",
-    "pedidos"            => "/admin/pedidos",
-    "categorias"         => "/admin/categorias",
-    "super_categorias"   => "/admin/super-categorias",
-    "carrusel"           => "/admin/carrusel",
-    "secciones"          => "/admin/secciones",
     "usuarios"           => "/admin/usuarios",
-    "seccion_ofertas"    => "/admin/seccion/ofertas",
-    "seccion_publicidad" => "/admin/seccion/publicidad",
-    "seccion_envios"     => "/admin/seccion/envios",
+    "disenador"          => "/admin/disenador",
   }
 
   @doc """
@@ -39,12 +22,6 @@ defmodule PrettycoreWeb.AdminNav do
     case id do
       "toggle_sidebar" ->
         {:noreply, update(socket, :sidebar_open, &(not &1))}
-
-      "clientes" ->
-        {:noreply, update(socket, :show_clientes_children, &(not &1))}
-
-      "toggle_prettycore_children" ->
-        {:noreply, update(socket, :show_prettycore_children, &(not &1))}
 
       page when page == current_page ->
         {:noreply, socket}

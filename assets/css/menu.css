@@ -165,6 +165,7 @@
 .pc-nav-item {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
@@ -175,6 +176,7 @@
   text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
   position: relative;
+  width: 100%;
 }
 
 .pc-nav-item:hover {
@@ -215,6 +217,10 @@
 
 .pc-platform-sidebar-open .pc-nav-label {
   opacity: 1;
+}
+
+.pc-platform-sidebar-open .pc-nav-item {
+  justify-content: flex-start;
 }
 
 .pc-nav-item-active .pc-nav-label {

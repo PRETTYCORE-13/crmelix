@@ -17,9 +17,7 @@ defmodule Prettycore.Auth.AuthUser do
     field :active, :boolean, default: true
     field :role, :string, default: "user"
     field :usuario_frog, :string
-    field :permissions, {:array, :string}, default: ["inicio", "tienda", "pedidos"]
-    field :cliente_codigo, :string
-    field :dir_codigo, :string
+    field :permissions, {:array, :string}, default: ["inicio"]
 
     timestamps(type: :utc_datetime)
   end
@@ -29,7 +27,7 @@ defmodule Prettycore.Auth.AuthUser do
   """
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:username, :email, :password, :active, :role, :usuario_frog, :cliente_codigo, :dir_codigo])
+    |> cast(attrs, [:username, :email, :password, :active, :role, :usuario_frog])
     |> validate_required([:username, :password])
     |> validate_length(:username, min: 3, max: 50)
     |> validate_length(:password, min: 6, max: 72, message: "debe tener entre 6 y 72 caracteres")
@@ -44,11 +42,8 @@ defmodule Prettycore.Auth.AuthUser do
   """
   def admin_changeset(user, attrs) do
     user
-    |> cast(attrs, [:username, :email, :password, :active, :role, :usuario_frog, :cliente_codigo, :dir_codigo])
-    |> validate_required([:username, :password, :email, :cliente_codigo, :dir_codigo],
-        message: "es obligatorio")
-    |> validate_length(:dir_codigo, min: 1, message: "es obligatorio")
-    |> validate_length(:cliente_codigo, min: 1, message: "es obligatorio")
+    |> cast(attrs, [:username, :email, :password, :active, :role, :usuario_frog])
+    |> validate_required([:username, :password, :email], message: "es obligatorio")
     |> validate_length(:username, min: 3, max: 50)
     |> validate_length(:password, min: 6, max: 72, message: "debe tener entre 6 y 72 caracteres")
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "debe ser un email valido")
@@ -62,7 +57,7 @@ defmodule Prettycore.Auth.AuthUser do
   """
   def update_changeset(user, attrs) do
     user
-    |> cast(attrs, [:email, :active, :role, :usuario_frog, :permissions, :cliente_codigo, :dir_codigo])
+    |> cast(attrs, [:email, :active, :role, :usuario_frog, :permissions])
     |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "debe ser un email valido")
     |> unique_constraint(:email)
   end

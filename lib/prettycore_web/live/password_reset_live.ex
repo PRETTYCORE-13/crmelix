@@ -2,8 +2,6 @@ defmodule PrettycoreWeb.PasswordResetLive do
   use PrettycoreWeb, :live_view
 
   alias Prettycore.Auth
-  alias Prettycore.ClientesNativos
-  alias Prettycore.Emails.BienvenidaCliente
 
   @impl true
   def mount(_params, _session, socket) do
@@ -28,56 +26,27 @@ defmodule PrettycoreWeb.PasswordResetLive do
     username = String.trim(username)
     socket = assign(socket, loading: true, error: nil)
 
-    # Primero buscar en clientes nativos
-    cliente = ClientesNativos.get_by_username(username)
+    case Auth.request_reset(username) do
+      {:ok, _message, masked_email} ->
+        {:noreply,
+         socket
+         |> assign(loading: false, step: :verify,
+                   username: username, masked_email: masked_email)}
 
-    cond do
-      cliente != nil and not cliente.activo ->
+      {:ok, _message} ->
+        {:noreply,
+         socket
+         |> assign(loading: false, step: :verify,
+                   username: username, masked_email: "tu correo")}
+
+      {:error, :not_found} ->
+        {:noreply, assign(socket, loading: false, error: "Usuario no encontrado.")}
+
+      {:error, :inactive} ->
         {:noreply, assign(socket, loading: false, error: "Esta cuenta está inactiva.")}
 
-      cliente != nil and (is_nil(cliente.email) or cliente.email == "") ->
-        {:noreply, assign(socket, loading: false, error: "Esta cuenta no tiene correo registrado. Contacta a tu administrador.")}
-
-      cliente != nil ->
-        base_url = Application.get_env(:prettycore, :app_base_url, "https://prettycore.onrender.com")
-
-        case ClientesNativos.generar_reset_token(cliente) do
-          {:ok, token, _} ->
-            reset_url = base_url <> "/restablecer/#{token}"
-            BienvenidaCliente.send_reset_link(cliente.email, cliente.nombre, reset_url)
-            {:noreply,
-             socket
-             |> assign(loading: false, step: :link_sent,
-                       masked_email: mask_email(cliente.email))}
-
-          _ ->
-            {:noreply, assign(socket, loading: false, error: "Ocurrió un error. Intenta de nuevo.")}
-        end
-
-      true ->
-        # Buscar en usuarios admin (PostgreSQL)
-        case Auth.request_reset(username) do
-          {:ok, _message, masked_email} ->
-            {:noreply,
-             socket
-             |> assign(loading: false, step: :verify,
-                       username: username, masked_email: masked_email)}
-
-          {:ok, _message} ->
-            {:noreply,
-             socket
-             |> assign(loading: false, step: :verify,
-                       username: username, masked_email: "tu correo")}
-
-          {:error, :not_found} ->
-            {:noreply, assign(socket, loading: false, error: "Usuario no encontrado.")}
-
-          {:error, :inactive} ->
-            {:noreply, assign(socket, loading: false, error: "Esta cuenta está inactiva.")}
-
-          {:error, reason} ->
-            {:noreply, assign(socket, loading: false, error: to_string(reason))}
-        end
+      {:error, reason} ->
+        {:noreply, assign(socket, loading: false, error: to_string(reason))}
     end
   end
 
@@ -186,31 +155,6 @@ defmodule PrettycoreWeb.PasswordResetLive do
               <a href="/" class="text-sm text-purple-500 hover:text-purple-300 transition-colors">
                 ← Volver al inicio de sesión
               </a>
-            </div>
-
-          <% end %>
-
-          <%= if @step == :link_sent do %>
-            <!-- ── Link enviado (clientes nativos) ─────────── -->
-            <div class="text-center">
-              <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/15 border border-purple-500/30 mb-5">
-                <svg class="w-8 h-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h2 class="text-xl font-semibold text-gray-50 mb-2">Revisa tu correo</h2>
-              <p class="text-gray-400 text-sm leading-relaxed mb-2">
-                Enviamos un enlace a <span class="text-purple-400 font-medium"><%= @masked_email %></span>
-              </p>
-              <p class="text-gray-500 text-xs leading-relaxed mb-7">
-                El enlace es válido por 24 horas. Si no llega, revisa tu carpeta de spam.
-              </p>
-              <button
-                type="button"
-                phx-click="back"
-                class="text-sm text-purple-500 hover:text-purple-300 transition-colors">
-                ← Volver
-              </button>
             </div>
 
           <% end %>

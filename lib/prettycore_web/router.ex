@@ -29,7 +29,6 @@ defmodule PrettycoreWeb.Router do
     # Página de login (LiveView)
     live "/", LoginLive
 
-    live "/restablecer/:token", ResetPasswordClienteLive
     live "/password-reset", PasswordResetLive
 
     # Controlador que valida usuario y crea sesión
@@ -49,22 +48,8 @@ defmodule PrettycoreWeb.Router do
   #    live "/programacion", Programacion
   #    live "/programacion/sql", HerramientaSql
   #    live "/workorder", WorkOrderLive
-      live "/tienda", Tienda
-      live "/pedidos", PedidosLive
-      live "/categorias", CategoriasLive
-      live "/carrusel", CarruselLive
-      live "/super-categorias", SuperCategoriasLive
-      live "/secciones", SeccionesLive
-      live "/seccion/:tipo", SeccionEditorLive
-      live "/productos-nativos", ProductosNativosLive
-      live "/clientes-nativos", ClientesNativosLive
-      live "/listas-precios", ListasPreciosLive
-      live "/gamas", GamasLive
-      live "/sucursales", SucursalesLive
-      live "/stock", StockLive
-      live "/categorias-nativas", CategoriasNativasLive
-      live "/configuracion", ConfiguracionLive
       live "/usuarios", Users.UsersCreateLive
+      live "/disenador", DisenadorLive
     end
   end
 
@@ -77,23 +62,9 @@ defmodule PrettycoreWeb.Router do
       live "/", ConfiguracionLive
       live "/configuracion", ConfiguracionLive
       live "/sesiones", SesionesLive
-      live "/intelligence", ClientIntelligenceLive
       live "/usuarios", UsuariosLive
     end
 
-    scope "/sysadmin", PrettycoreWeb do
-      pipe_through :browser
-
-      live "/tienda", Tienda
-    end
-  end
-
-  ## Rutas para descarga de Excel (protegidas pero no LiveView)
-  scope "/admin", PrettycoreWeb do
-    pipe_through :browser
-
-    get "/productos-nativos/plantilla", ProductosNativosTemplateController, :download
-    get "/productos-nativos/exportar", ProductosNativosTemplateController, :exportar
   end
 
   ## Herramientas sysadmin (descargas, no LiveView)
@@ -109,41 +80,32 @@ defmodule PrettycoreWeb.Router do
     get "/health", HealthController, :index
   end
 
-  ## Endpoints JSON API
+  ## API — obtener token (sin auth requerida)
   scope "/api", PrettycoreWeb do
     pipe_through :api
-
-    get "/sys_udn", SysUdnController, :index
-    get "/sys_udn/codigos", SysUdnController, :codigos
+    post "/auth/token", DynController, :auth_token
   end
 
-  ## API Productos — autenticación pública (obtener token)
-  scope "/producto/point", PrettycoreWeb do
-    pipe_through :api
-
-    post "/token", ProductoPointController, :token
-  end
-
-  ## API Productos — requieren Bearer token
-  scope "/producto/point", PrettycoreWeb do
+  ## API Dinámica — esquema definidos en el diseñador
+  scope "/api/dyn", PrettycoreWeb do
     pipe_through :api_auth
 
-    get  "/lista",         ListaProductoPointController, :index
-    get  "/pty/:tabla",          PtyController, :index
-    get  "/pty/:tabla/:id",      PtyController, :show
-    post "/pty/buscar",          PtyController, :buscar
-    get  "/sku",     ProductoPointController, :sku
-    post "/sku",     ProductoPointController, :upsert_sku
-    get  "/descrip", ProductoPointController, :descrip
-    post "/descrip", ProductoPointController, :upsert_descrip
+    get    "/:modelo",          DynController, :index
+    get    "/:modelo/:id",      DynController, :show
+    post   "/:modelo",          DynController, :create
+    put    "/:modelo/:id",      DynController, :update
+    delete "/:modelo/:id",      DynController, :delete
+    post   "/:modelo/buscar",   DynController, :buscar
   end
 
-  import Phoenix.LiveDashboard.Router
+  if Mix.env() == :dev do
+    import Phoenix.LiveDashboard.Router
 
-  scope "/dev" do
-    pipe_through :browser
+    scope "/dev" do
+      pipe_through :browser
 
-    live_dashboard "/dashboard", metrics: EecWeb.Telemetry
-    forward "/mailbox", Plug.Swoosh.MailboxPreview
+      live_dashboard "/dashboard", metrics: EecWeb.Telemetry
+      forward "/mailbox", Plug.Swoosh.MailboxPreview
+    end
   end
 end
