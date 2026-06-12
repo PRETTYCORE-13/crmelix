@@ -12,6 +12,7 @@ defmodule PrettycoreWeb.AdminNav do
     "clientes_frog"      => "/admin/clientes",
     "usuarios"           => "/admin/usuarios",
     "disenador"          => "/admin/disenador",
+    "editor"             => "/admin/editor",
   }
 
   @doc """

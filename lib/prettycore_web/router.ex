@@ -50,6 +50,7 @@ defmodule PrettycoreWeb.Router do
   #    live "/workorder", WorkOrderLive
       live "/usuarios", Users.UsersCreateLive
       live "/disenador", DisenadorLive
+      live "/editor", TablaEditorLive
     end
   end
 

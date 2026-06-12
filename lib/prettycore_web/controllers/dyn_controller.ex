@@ -53,6 +53,7 @@ defmodule PrettycoreWeb.DynController do
       end
     end
   end
+
   defp encode_value(%NaiveDateTime{} = dt), do: NaiveDateTime.to_iso8601(dt)
   defp encode_value(%DateTime{} = dt),      do: DateTime.to_iso8601(dt)
   defp encode_value(%Date{} = d),           do: Date.to_iso8601(d)

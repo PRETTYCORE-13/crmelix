@@ -5,7 +5,8 @@ defmodule PrettycoreWeb.MenuLayout do
   @menu [
   #  %{id: "programacion", label: "Programación"},
   #  %{id: "workorder", label: "Orden T"},
-    %{id: "disenador", label: "Diseñador de esquema"}
+    %{id: "disenador", label: "Diseñador de esquema"},
+    %{id: "editor",    label: "Editor de tablas"}
   ]
 
   # Props y slot
