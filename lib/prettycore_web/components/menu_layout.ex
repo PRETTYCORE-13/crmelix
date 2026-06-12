@@ -5,8 +5,10 @@ defmodule PrettycoreWeb.MenuLayout do
   @menu [
   #  %{id: "programacion", label: "Programación"},
   #  %{id: "workorder", label: "Orden T"},
-    %{id: "disenador", label: "Diseñador de esquema"},
-    %{id: "editor",    label: "Editor de tablas"}
+    %{id: "esquemas", label: "Esquemas", children: [
+      %{id: "disenador", label: "Diseñador de esquema"},
+      %{id: "editor",    label: "Editor de tablas"}
+    ]}
   ]
 
   # Props y slot
@@ -99,14 +101,44 @@ defmodule PrettycoreWeb.MenuLayout do
             <div class="pc-sidebar-section-label">Menú</div>
             <nav class="pc-sidebar-nav">
               <%= for item <- @menu_items do %>
-                <button
-                  type="button"
-                  class={menu_item_class(menu_active?(item.id, @current_page))}
-                  phx-click={nav_and_close_js(@menu_event, item.id)}
-                >
-                  <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
-                  <span class="pc-nav-label">{item.label}</span>
-                </button>
+                <%= if Map.get(item, :children) do %>
+                  <%
+                    group_active = Enum.any?(item.children, &menu_active?(&1.id, @current_page))
+                    group_id     = "grp-#{item.id}"
+                  %>
+                  <button
+                    type="button"
+                    class={menu_item_class(group_active)}
+                    phx-click={JS.toggle(to: "##{group_id}")}
+                  >
+                    <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
+                    <span class="pc-nav-label" style="flex:1">{item.label}</span>
+                    <svg class="pc-nav-label" style="width:14px;height:14px;flex-shrink:0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </button>
+                  <div id={group_id} class={"pc-submenu #{if group_active, do: "", else: "hidden"}"}>
+                    <%= for child <- item.children do %>
+                      <button
+                        type="button"
+                        class={submenu_item_class(menu_active?(child.id, @current_page))}
+                        phx-click={nav_and_close_js(@menu_event, child.id)}
+                      >
+                        <span class="pc-submenu-dot"></span>
+                        <span class="pc-nav-label">{child.label}</span>
+                      </button>
+                    <% end %>
+                  </div>
+                <% else %>
+                  <button
+                    type="button"
+                    class={menu_item_class(menu_active?(item.id, @current_page))}
+                    phx-click={nav_and_close_js(@menu_event, item.id)}
+                  >
+                    <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
+                    <span class="pc-nav-label">{item.label}</span>
+                  </button>
+                <% end %>
               <% end %>
             </nav>
           </div>
@@ -259,6 +291,10 @@ defmodule PrettycoreWeb.MenuLayout do
     <%= case @name do %>
       <% "inicio" -> %>
         <img src="/images/inicio.png" class="w-8 h-8 object-contain" />
+      <% "esquemas" -> %>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 12c0 1.657 4.03 3 9 3s9-1.343 9-3"/>
+        </svg>
       <% "disenador" -> %>
         <img src="/images/pedidos.png" class="w-8 h-8 object-contain" />
       <% "usuarios" -> %>
@@ -284,20 +320,32 @@ defmodule PrettycoreWeb.MenuLayout do
 
   defp do_filter_menu(menu, _perms, "sysadmin"), do: menu
   defp do_filter_menu(_menu, _perms, "user"), do: []
-  defp do_filter_menu(menu, nil, _role),
-    do: Enum.reject(menu, &(Map.get(&1, :admin_only, false) or Map.get(&1, :user_only, false)))
+  defp do_filter_menu(menu, nil, _role) do
+    Enum.reject(menu, &(Map.get(&1, :admin_only, false) or Map.get(&1, :user_only, false)))
+  end
   defp do_filter_menu(menu, perms, _role) do
-    menu
-    |> Enum.reject(&Map.get(&1, :user_only, false))
-    |> Enum.reject(fn item -> Map.get(item, :admin_only, false) and item.id not in perms end)
-    |> Enum.filter(&(&1.id in perms))
+    Enum.reduce(menu, [], fn item, acc ->
+      case Map.get(item, :children) do
+        nil ->
+          if not Map.get(item, :user_only, false) and
+             not (Map.get(item, :admin_only, false) and item.id not in perms) and
+             item.id in perms,
+            do: acc ++ [item], else: acc
+        children ->
+          filtered = Enum.filter(children, &(&1.id in perms))
+          if filtered != [], do: acc ++ [%{item | children: filtered}], else: acc
+      end
+    end)
   end
 
   ## HELPERS
   defp menu_active?(id, current), do: id == current
 
-  defp menu_item_class(true), do: "pc-nav-item pc-nav-item-active"
+  defp menu_item_class(true),  do: "pc-nav-item pc-nav-item-active"
   defp menu_item_class(false), do: "pc-nav-item"
+
+  defp submenu_item_class(true),  do: "pc-submenu-item pc-submenu-item-active"
+  defp submenu_item_class(false), do: "pc-submenu-item"
 
   defp toggle_sidebar_js(menu_event) do
     JS.push(menu_event, value: %{id: "toggle_sidebar"})
