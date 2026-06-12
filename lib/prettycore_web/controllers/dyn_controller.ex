@@ -23,7 +23,7 @@ defmodule PrettycoreWeb.DynController do
   # ── Helpers ───────────────────────────────────────────────────
 
   defp get_contexto(contexto_nombre) do
-    case Meta.obtener_modelo_por_nombre(contexto_nombre) do
+    case Meta.obtener_contexto_por_nombre(contexto_nombre) do
       nil      -> :not_found
       contexto -> {:ok, contexto}
     end
