@@ -44,7 +44,7 @@
           <ul class="mt-4 list-disc space-y-2 pl-6 leading-8 text-slate-700">
             <li>Datos de identificación, como nombre, correo electrónico, teléfono o nombre de usuario.</li>
             <li>Datos de acceso y autenticación, como credenciales cifradas o identificadores de sesión.</li>
-            <li>Datos técnicos del dispositivo, como sistema operativo, modelo, idioma, dirección IP y registros de uso.</li>
+            <li>Datos técnicos del dispositivo, como sistema operativo, contexto, idioma, dirección IP y registros de uso.</li>
             <li>Datos de contenido proporcionados por el usuario dentro de la app.</li>
             <li>Datos de dirección de envío (calle, colonia, ciudad, estado, código postal), usados exclusivamente para gestionar la entrega de pedidos.</li>
           </ul>

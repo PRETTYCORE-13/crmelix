@@ -13,7 +13,7 @@ defmodule Prettycore.Meta.MetaEndpoint do
     field :activo,        :boolean, default: true
     field :requiere_auth, :boolean, default: true
 
-    belongs_to :modelo, Prettycore.Meta.MetaModel, foreign_key: :meta_model_id, define_field: false
+    belongs_to :contexto, Prettycore.Meta.MetaModel, foreign_key: :meta_model_id, define_field: false
 
     timestamps()
   end

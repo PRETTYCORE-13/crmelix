@@ -23,7 +23,7 @@ defmodule Prettycore.Meta.MetaColumn do
     field :min_longitud,  :integer
     field :max_longitud,  :integer
 
-    belongs_to :modelo, Prettycore.Meta.MetaModel, foreign_key: :meta_model_id, define_field: false
+    belongs_to :contexto, Prettycore.Meta.MetaModel, foreign_key: :meta_model_id, define_field: false
 
     timestamps()
   end

@@ -9,12 +9,12 @@ defmodule Prettycore.Meta do
     PsqlRepo.all(from m in MetaModel, order_by: m.nombre)
   end
 
-  def obtener_modelo!(id) do
+  def obtener_contexto!(id) do
     PsqlRepo.get!(MetaModel, id)
     |> PsqlRepo.preload([:columnas, :endpoints, relaciones: :destino])
   end
 
-  def obtener_modelo_por_nombre(nombre) do
+  def obtener_contexto_por_nombre(nombre) do
     PsqlRepo.get_by(MetaModel, nombre: nombre)
     |> case do
       nil -> nil
@@ -22,28 +22,28 @@ defmodule Prettycore.Meta do
     end
   end
 
-  def crear_modelo(attrs) do
+  def crear_contexto(attrs) do
     %MetaModel{}
     |> MetaModel.changeset(attrs)
     |> PsqlRepo.insert()
   end
 
-  def actualizar_modelo(%MetaModel{} = modelo, attrs) do
-    modelo
+  def actualizar_contexto(%MetaModel{} = contexto, attrs) do
+    contexto
     |> MetaModel.changeset(attrs)
     |> PsqlRepo.update()
   end
 
-  def renombrar_tabla(%MetaModel{} = modelo, nueva_tabla_db) do
-    sql = "ALTER TABLE #{modelo.tabla_db} RENAME TO #{nueva_tabla_db}"
+  def renombrar_tabla(%MetaModel{} = contexto, nueva_tabla_db) do
+    sql = "ALTER TABLE #{contexto.tabla_db} RENAME TO #{nueva_tabla_db}"
     case Ecto.Adapters.SQL.query(PsqlRepo, sql, []) do
       {:ok, _}    -> {:ok, :renamed}
       {:error, e} -> {:error, pg_error(e)}
     end
   end
 
-  def eliminar_modelo(%MetaModel{} = modelo) do
-    PsqlRepo.delete(modelo)
+  def eliminar_contexto(%MetaModel{} = contexto) do
+    PsqlRepo.delete(contexto)
   end
 
   # ── MetaColumns ───────────────────────────────────────────────
@@ -90,25 +90,25 @@ defmodule Prettycore.Meta do
 
   # ── Persistir esquema local y migrar ─────────────────────────
 
-  def persistir_esquema_local(modelo_local) do
+  def persistir_esquema_local(contexto_local) do
     result = PsqlRepo.transaction(fn ->
-      m = case crear_modelo(%{
-        "nombre"      => modelo_local.nombre,
-        "descripcion" => modelo_local.descripcion,
-        "tabla_db"    => modelo_local.tabla_db
+      m = case crear_contexto(%{
+        "nombre"      => contexto_local.nombre,
+        "descripcion" => contexto_local.descripcion,
+        "tabla_db"    => contexto_local.tabla_db
       }) do
         {:ok, saved}   -> saved
         {:error, cs}   -> PsqlRepo.rollback({:changeset, cs})
       end
 
-      Enum.each(Map.get(modelo_local, :columnas, []), fn col ->
+      Enum.each(Map.get(contexto_local, :columnas, []), fn col ->
         case crear_columna(col_local_a_attrs(col, m.id)) do
           {:ok, _}     -> :ok
           {:error, cs} -> PsqlRepo.rollback({:changeset, cs})
         end
       end)
 
-      Enum.each(Map.get(modelo_local, :endpoints, []), fn ep ->
+      Enum.each(Map.get(contexto_local, :endpoints, []), fn ep ->
         crear_endpoint(%{meta_model_id: m.id, operacion: ep.operacion})
       end)
 
@@ -157,14 +157,14 @@ defmodule Prettycore.Meta do
 
   # ── Agregar columnas a tabla existente (ALTER TABLE) ─────────
 
-  def agregar_columnas_a_tabla(%MetaModel{} = modelo, columnas) do
+  def agregar_columnas_a_tabla(%MetaModel{} = contexto, columnas) do
     Enum.reduce_while(columnas, {:ok, []}, fn col, {:ok, acc} ->
       case PsqlRepo.get(MetaColumn, col.id) do
         nil ->
           # Columna nueva — INSERT + ALTER TABLE ADD COLUMN
-          attrs = col_local_a_attrs(col, modelo.id)
+          attrs = col_local_a_attrs(col, contexto.id)
           with {:ok, saved} <- crear_columna(attrs) do
-            alter = "ALTER TABLE #{modelo.tabla_db} ADD COLUMN IF NOT EXISTS #{columna_a_sql(saved)}"
+            alter = "ALTER TABLE #{contexto.tabla_db} ADD COLUMN IF NOT EXISTS #{columna_a_sql(saved)}"
             case Ecto.Adapters.SQL.query(PsqlRepo, alter, []) do
               {:ok, _}    -> {:cont, {:ok, acc ++ [:added]}}
               {:error, e} -> {:halt, {:error, pg_error(e)}}
@@ -175,7 +175,7 @@ defmodule Prettycore.Meta do
 
         existing ->
           # Columna editada — solo actualizar meta_columns
-          attrs = col_local_a_attrs(col, modelo.id)
+          attrs = col_local_a_attrs(col, contexto.id)
           case actualizar_columna(existing, attrs) do
             {:ok, _}     -> {:cont, {:ok, acc ++ [:updated]}}
             {:error, cs} -> {:halt, {:error, changeset_error_str(cs)}}
@@ -189,8 +189,8 @@ defmodule Prettycore.Meta do
 
   # ── Crear tabla en BD ─────────────────────────────────────────
 
-  def crear_tabla_en_bd(%MetaModel{} = modelo) do
-    columnas = listar_columnas(modelo.id)
+  def crear_tabla_en_bd(%MetaModel{} = contexto) do
+    columnas = listar_columnas(contexto.id)
 
     reservados = ~w(id inserted_at updated_at)
 
@@ -208,11 +208,11 @@ defmodule Prettycore.Meta do
 
     col_block = Enum.join(all_cols, ",\n  ")
 
-    sql = "CREATE TABLE IF NOT EXISTS #{modelo.tabla_db} (\n  #{col_block}\n)\n"
+    sql = "CREATE TABLE IF NOT EXISTS #{contexto.tabla_db} (\n  #{col_block}\n)\n"
 
     case Ecto.Adapters.SQL.query(PsqlRepo, sql, []) do
       {:ok, _} ->
-        modelo
+        contexto
         |> MetaModel.status_changeset(%{tabla_creada: true})
         |> PsqlRepo.update()
 

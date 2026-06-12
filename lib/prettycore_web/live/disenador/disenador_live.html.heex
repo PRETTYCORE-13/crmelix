@@ -4,7 +4,7 @@
   <aside class="w-56 shrink-0 border-r border-gray-200 flex flex-col">
     <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
       <span class="text-sm font-semibold text-gray-700">Esquemas</span>
-      <button phx-click="nuevo_modelo" title="Nuevo modelo"
+      <button phx-click="nuevo_contexto" title="Nuevo contexto"
         class="text-indigo-600 hover:text-indigo-800 text-xl font-bold leading-none">+</button>
     </div>
     <nav class="flex-1 overflow-y-auto">
@@ -18,12 +18,12 @@
             phx-click="seleccionar" phx-value-id={m.id}
             class={[
               "w-full text-left px-4 py-2.5 border-b border-gray-100 hover:bg-indigo-50 transition-colors",
-              @modelo && @modelo.id == m.id &&
+              @contexto && @contexto.id == m.id &&
                 "bg-indigo-50 border-l-2 border-l-indigo-500" || ""
             ]}
           >
             <div class="flex items-center gap-1.5">
-              <span class={["text-sm font-medium", @modelo && @modelo.id == m.id && "text-indigo-700" || "text-gray-800"]}>
+              <span class={["text-sm font-medium", @contexto && @contexto.id == m.id && "text-indigo-700" || "text-gray-800"]}>
                 <%= m.nombre %>
               </span>
               <%= cond do %>
@@ -45,28 +45,28 @@
   <%!-- Panel derecho --%>
   <main class="flex-1 overflow-y-auto flex flex-col min-w-0">
 
-    <%= if @modelo_form do %>
-      <%!-- Formulario nuevo / editar modelo --%>
+    <%= if @contexto_form do %>
+      <%!-- Formulario nuevo / editar contexto --%>
       <div class="p-6 max-w-lg">
         <h2 class="text-base font-semibold text-gray-800 mb-5">
-          <%= if @modelo, do: "Editar modelo", else: "Nuevo modelo" %>
+          <%= if @contexto, do: "Editar contexto", else: "Nuevo contexto" %>
         </h2>
-        <.form for={@modelo_form} phx-submit="guardar_modelo" class="space-y-4">
+        <.form for={@contexto_form} phx-submit="guardar_contexto" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Nombre <span class="text-xs text-gray-400 font-normal">(técnico, sin espacios)</span>
             </label>
-            <.input field={@modelo_form[:nombre]} placeholder="ej. socios" />
+            <.input field={@contexto_form[:nombre]} placeholder="ej. socios" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-            <.input field={@modelo_form[:descripcion]} placeholder="ej. Catálogo de socios" />
+            <.input field={@contexto_form[:descripcion]} placeholder="ej. Catálogo de socios" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Tabla en BD <span class="text-xs text-gray-400 font-normal">(nombre real en PostgreSQL)</span>
             </label>
-            <.input field={@modelo_form[:tabla_db]} placeholder="ej. socios" />
+            <.input field={@contexto_form[:tabla_db]} placeholder="ej. socios" />
           </div>
           <div class="flex gap-3 pt-2">
             <button type="submit"
@@ -82,20 +82,20 @@
       </div>
 
     <% else %>
-      <%= if @modelo do %>
-        <%!-- Cabecera del modelo --%>
+      <%= if @contexto do %>
+        <%!-- Cabecera del contexto --%>
         <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between shrink-0 gap-4">
           <div class="min-w-0">
             <div class="flex items-center gap-3">
-              <h2 class="text-base font-semibold text-gray-800"><%= @modelo.nombre %></h2>
+              <h2 class="text-base font-semibold text-gray-800"><%= @contexto.nombre %></h2>
               <%!-- Badge estado BD --%>
               <%= cond do %>
-                <% MapSet.member?(@local_ids, @modelo.id) -> %>
+                <% MapSet.member?(@local_ids, @contexto.id) -> %>
                   <span class="flex items-center gap-1 px-2 py-0.5 bg-yellow-50 text-yellow-700 text-xs rounded-full border border-yellow-200">
                     <span class="w-1.5 h-1.5 rounded-full bg-yellow-400"></span>
                     Borrador local
                   </span>
-                <% @modelo.tabla_creada -> %>
+                <% @contexto.tabla_creada -> %>
                   <span class="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">
                     <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                     BD activa
@@ -108,15 +108,15 @@
               <% end %>
             </div>
             <p class="text-xs text-gray-500 mt-0.5">
-              tabla: <code class="bg-gray-100 px-1 rounded"><%= @modelo.tabla_db %></code>
-              <%= if @modelo.descripcion do %>
-                &nbsp;·&nbsp;<%= @modelo.descripcion %>
+              tabla: <code class="bg-gray-100 px-1 rounded"><%= @contexto.tabla_db %></code>
+              <%= if @contexto.descripcion do %>
+                &nbsp;·&nbsp;<%= @contexto.descripcion %>
               <% end %>
             </p>
           </div>
           <div class="flex items-center gap-3 shrink-0">
             <%!-- Botón Ejecutar migración (solo si tabla no creada) --%>
-            <%= if not @modelo.tabla_creada do %>
+            <%= if not @contexto.tabla_creada do %>
               <button phx-click="crear_tabla_bd" disabled={@bd_creando}
                 class={[
                   "px-3 py-1.5 text-sm rounded font-medium transition-colors",
@@ -128,18 +128,18 @@
               </button>
             <% end %>
             <%!-- Botón Aplicar cambios de columnas pendientes --%>
-            <% cols_pendientes = Enum.filter(@modelo.columnas, &MapSet.member?(@col_local_ids, &1.id)) %>
+            <% cols_pendientes = Enum.filter(@contexto.columnas, &MapSet.member?(@col_local_ids, &1.id)) %>
             <%= if cols_pendientes != [] do %>
               <button phx-click="agregar_cols_bd"
                 class="px-3 py-1.5 text-sm rounded font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors">
                 Aplicar <%= length(cols_pendientes) %> cambio(s)
               </button>
             <% end %>
-            <button phx-click="editar_modelo"
+            <button phx-click="editar_contexto"
               class="text-sm text-indigo-600 hover:text-indigo-800">Editar</button>
             <button
-              phx-click="eliminar_modelo"
-              data-confirm={"¿Eliminar el modelo '#{@modelo.nombre}'? Se eliminarán también sus columnas y endpoints."}
+              phx-click="eliminar_contexto"
+              data-confirm={"¿Eliminar el contexto '#{@contexto.nombre}'? Se eliminarán también sus columnas y endpoints."}
               class="text-sm text-red-400 hover:text-red-600">Eliminar</button>
           </div>
         </div>
@@ -185,15 +185,15 @@
           <nav class="flex gap-1 -mb-px">
             <button phx-click="cambiar_tab" phx-value-tab="columnas"
               class={tab_class(@tab == :columnas)}>
-              Columnas (<%= length(@modelo.columnas) %>)
+              Columnas (<%= length(@contexto.columnas) %>)
             </button>
             <button phx-click="cambiar_tab" phx-value-tab="endpoints"
               class={tab_class(@tab == :endpoints)}>
-              Endpoints (<%= length(@modelo.endpoints) %>)
+              Endpoints (<%= length(@contexto.endpoints) %>)
             </button>
             <button phx-click="cambiar_tab" phx-value-tab="relaciones"
               class={tab_class(@tab == :relaciones)}>
-              Relaciones (<%= length(@modelo.relaciones) %>)
+              Relaciones (<%= length(@contexto.relaciones) %>)
             </button>
           </nav>
         </div>
@@ -225,14 +225,14 @@
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
-                    <%= if @modelo.columnas == [] do %>
+                    <%= if @contexto.columnas == [] do %>
                       <tr>
                         <td colspan="9" class="px-4 py-8 text-center text-gray-400 text-sm">
                           Sin columnas. Presiona "+ Nueva columna".
                         </td>
                       </tr>
                     <% else %>
-                      <% sorted = Enum.sort_by(@modelo.columnas, & &1.orden) %>
+                      <% sorted = Enum.sort_by(@contexto.columnas, & &1.orden) %>
                       <% last = length(sorted) - 1 %>
                       <%= for {col, idx} <- Enum.with_index(sorted) do %>
                         <tr class={["hover:bg-gray-50", @col_editando_id == col.id && "bg-indigo-50" || ""]}>
@@ -375,12 +375,12 @@
             <% @tab == :endpoints -> %>
               <%!-- Tab: Endpoints --%>
               <p class="text-xs text-gray-400 mb-4">
-                Activa las operaciones que expone este modelo como API.
-                La URL base será <code class="bg-gray-100 px-1 rounded">/api/dyn/<%= @modelo.nombre %></code>
+                Activa las operaciones que expone este contexto como API.
+                La URL base será <code class="bg-gray-100 px-1 rounded">/api/dyn/<%= @contexto.nombre %></code>
               </p>
               <div class="space-y-2 max-w-lg">
                 <%= for op <- Prettycore.Meta.MetaEndpoint.operaciones() do %>
-                  <% activo = Enum.any?(@modelo.endpoints, &(&1.operacion == op)) %>
+                  <% activo = Enum.any?(@contexto.endpoints, &(&1.operacion == op)) %>
                   <div class={[
                     "flex items-center justify-between p-3 rounded border transition-colors",
                     activo && "bg-indigo-50 border-indigo-200" || "bg-white border-gray-200"
@@ -408,7 +408,7 @@
               <%!-- Tab: Relaciones --%>
               <div class="mb-4 flex items-center justify-between">
                 <p class="text-xs text-gray-400">
-                  Define cómo se relaciona este modelo con otros esquema del diseñador.
+                  Define cómo se relaciona este contexto con otros esquema del diseñador.
                 </p>
                 <button phx-click="nueva_relacion"
                   class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700">
@@ -421,21 +421,21 @@
                   <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                     <tr>
                       <th class="px-3 py-2 text-left">Tipo</th>
-                      <th class="px-3 py-2 text-left">Modelo destino</th>
+                      <th class="px-3 py-2 text-left">contexto destino</th>
                       <th class="px-3 py-2 text-left">Campo FK</th>
                       <th class="px-3 py-2 text-left">Alias</th>
                       <th class="px-3 py-2 w-16"></th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
-                    <%= if @modelo.relaciones == [] do %>
+                    <%= if @contexto.relaciones == [] do %>
                       <tr>
                         <td colspan="5" class="px-4 py-8 text-center text-gray-400 text-sm">
                           Sin relaciones definidas.
                         </td>
                       </tr>
                     <% else %>
-                      <%= for rel <- @modelo.relaciones do %>
+                      <%= for rel <- @contexto.relaciones do %>
                         <tr class="hover:bg-gray-50">
                           <td class="px-3 py-2">
                             <span class={[
@@ -447,7 +447,7 @@
                             </span>
                           </td>
                           <td class="px-3 py-2 font-mono text-xs text-gray-700">
-                            <%= if rel.destino, do: rel.destino.nombre, else: rel.modelo_destino_id %>
+                            <%= if rel.destino, do: rel.destino.nombre, else: rel.contexto_destino_id %>
                           </td>
                           <td class="px-3 py-2 font-mono text-xs text-gray-600"><%= rel.campo_fk %></td>
                           <td class="px-3 py-2 text-xs text-gray-500"><%= rel.alias %></td>
@@ -475,8 +475,8 @@
                         options={MetaRelation.tipos()} />
                     </div>
                     <div>
-                      <label class="block text-xs font-medium text-gray-600 mb-1">Modelo destino</label>
-                      <.input type="select" field={@rel_form[:modelo_destino_id]}
+                      <label class="block text-xs font-medium text-gray-600 mb-1">contexto destino</label>
+                      <.input type="select" field={@rel_form[:contexto_destino_id]}
                         options={Enum.map(@esquema, &{&1.nombre, &1.id})} />
                     </div>
                     <div>
@@ -509,7 +509,7 @@
         <div class="flex-1 flex items-center justify-center h-full">
           <div class="text-center text-gray-400">
             <div class="text-4xl mb-3">⚙️</div>
-            <p class="text-sm">Selecciona un modelo o crea uno nuevo</p>
+            <p class="text-sm">Selecciona un contexto o crea uno nuevo</p>
           </div>
         </div>
       <% end %>

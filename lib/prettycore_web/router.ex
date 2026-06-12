@@ -90,12 +90,12 @@ defmodule PrettycoreWeb.Router do
   scope "/api/dyn", PrettycoreWeb do
     pipe_through :api_auth
 
-    get    "/:modelo",          DynController, :index
-    get    "/:modelo/:id",      DynController, :show
-    post   "/:modelo",          DynController, :create
-    put    "/:modelo/:id",      DynController, :update
-    delete "/:modelo/:id",      DynController, :delete
-    post   "/:modelo/buscar",   DynController, :buscar
+    get    "/:contexto",          DynController, :index
+    get    "/:contexto/:id",      DynController, :show
+    post   "/:contexto",          DynController, :create
+    put    "/:contexto/:id",      DynController, :update
+    delete "/:contexto/:id",      DynController, :delete
+    post   "/:contexto/buscar",   DynController, :buscar
   end
 
   if Mix.env() == :dev do

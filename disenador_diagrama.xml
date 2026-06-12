@@ -133,7 +133,7 @@
         </mxCell>
 
         <!-- Flechas flujo -->
-        <mxCell id="63" value="GET /api/dyn/:modelo" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="62" target="60">
+        <mxCell id="63" value="GET /api/dyn/:contexto" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="62" target="60">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="64" value="1. busca meta_model&#xa;2. valida endpoint activo&#xa;3. ejecuta query" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="60" target="61">
