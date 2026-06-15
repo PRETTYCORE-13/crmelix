@@ -12,6 +12,5 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateClientes do
       timestamps()
     end
 
-    create_if_not_exists unique_index(:clientes, [:rfc])
   end
 end
