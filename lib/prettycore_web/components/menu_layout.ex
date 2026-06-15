@@ -2,14 +2,7 @@ defmodule PrettycoreWeb.MenuLayout do
   use Phoenix.Component
   alias Phoenix.LiveView.JS
 
-  @menu [
-  #  %{id: "programacion", label: "Programación"},
-  #  %{id: "workorder", label: "Orden T"},
-    %{id: "esquemas", label: "Esquemas", children: [
-      %{id: "disenador", label: "Diseñador de esquema"},
-      %{id: "editor",    label: "Editor de tablas"}
-    ]}
-  ]
+  @menu []
 
   # Props y slot
   attr :current_page, :string, required: true
@@ -102,33 +95,46 @@ defmodule PrettycoreWeb.MenuLayout do
             <nav class="pc-sidebar-nav">
               <%= for item <- @menu_items do %>
                 <%= if Map.get(item, :children) do %>
-                  <%
-                    group_active = Enum.any?(item.children, &menu_active?(&1.id, @current_page))
-                    group_id     = "grp-#{item.id}"
-                  %>
-                  <button
-                    type="button"
-                    class={menu_item_class(group_active)}
-                    phx-click={JS.toggle(to: "##{group_id}")}
-                  >
-                    <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
-                    <span class="pc-nav-label" style="flex:1">{item.label}</span>
-                    <svg class="pc-nav-label" style="width:14px;height:14px;flex-shrink:0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                  </button>
-                  <div id={group_id} class={"pc-submenu #{if group_active, do: "", else: "hidden"}"}>
-                    <%= for child <- item.children do %>
-                      <button
-                        type="button"
-                        class={submenu_item_class(menu_active?(child.id, @current_page))}
-                        phx-click={nav_and_close_js(@menu_event, child.id)}
-                      >
-                        <span class="pc-submenu-dot"></span>
-                        <span class="pc-nav-label">{child.label}</span>
-                      </button>
-                    <% end %>
-                  </div>
+                  <%= if @sidebar_open do %>
+                    <%
+                      group_active = Enum.any?(item.children, &menu_active?(&1.id, @current_page))
+                      group_id     = "grp-#{item.id}"
+                    %>
+                    <button
+                      type="button"
+                      class={menu_item_class(group_active)}
+                      phx-click={JS.toggle(to: "##{group_id}")}
+                    >
+                      <span class="pc-nav-icon"><.pc_icon name={item.id} /></span>
+                      <span class="pc-nav-label" style="flex:1">{item.label}</span>
+                      <svg class="pc-nav-label" style="width:14px;height:14px;flex-shrink:0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+                    <div id={group_id} class={"pc-submenu #{if group_active, do: "", else: "hidden"}"}>
+                      <%= for child <- item.children do %>
+                        <button
+                          type="button"
+                          class={submenu_item_class(menu_active?(child.id, @current_page))}
+                          phx-click={nav_and_close_js(@menu_event, child.id)}
+                        >
+                          <span class="pc-submenu-dot"></span>
+                          <span class="pc-nav-label">{child.label}</span>
+                        </button>
+                      <% end %>
+                    </div>
+                  <% else %>
+                    <%# Colapsado: un solo ícono para el grupo; clic abre el sidebar %>
+                    <% group_active_col = Enum.any?(item.children, &menu_active?(&1.id, @current_page)) %>
+                    <button
+                      type="button"
+                      class={menu_item_class(group_active_col)}
+                      phx-click={JS.push(@menu_event, value: %{id: "toggle_sidebar"})}
+                      title={item.label}
+                    >
+                      <span class="pc-nav-icon"><.pc_icon name={hd(item.children).id} /></span>
+                    </button>
+                  <% end %>
                 <% else %>
                   <button
                     type="button"
@@ -296,6 +302,8 @@ defmodule PrettycoreWeb.MenuLayout do
           <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 12c0 1.657 4.03 3 9 3s9-1.343 9-3"/>
         </svg>
       <% "disenador" -> %>
+        <img src="/images/pedidos.png" class="w-8 h-8 object-contain" />
+      <% "editor" -> %>
         <img src="/images/pedidos.png" class="w-8 h-8 object-contain" />
       <% "usuarios" -> %>
         <img src="/images/usuarios.png" class="w-8 h-8 object-contain" />

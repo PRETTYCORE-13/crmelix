@@ -14,6 +14,11 @@ defmodule Prettycore.Meta do
     |> PsqlRepo.preload([:columnas, :endpoints, relaciones: :destino])
   end
 
+  def obtener_contexto_columnas!(id) do
+    PsqlRepo.get!(MetaModel, id)
+    |> PsqlRepo.preload(:columnas)
+  end
+
   def obtener_contexto_por_nombre(nombre) do
     PsqlRepo.get_by(MetaModel, nombre: nombre)
     |> case do

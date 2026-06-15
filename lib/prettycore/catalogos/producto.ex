@@ -1,0 +1,28 @@
+# lib/prettycore/catalogos/productos/producto.ex
+defmodule Prettycore.Catalogos.Productos.Producto do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  schema "productos" do
+    field :codigo, :string
+    field :descripcion, :string
+    field :precio, :float
+    field :activo, :boolean, default: true
+
+    # Relaciones con otros schemas del mismo subcontexto
+    belongs_to :categoria, Prettycore.Catalogos.Productos.Categoria
+    belongs_to :marca, Prettycore.Catalogos.Productos.Marca
+    belongs_to :gama, Prettycore.Catalogos.Productos.Gama
+    belongs_to :unidad_medida, Prettycore.Catalogos.Productos.UnidadMedida
+
+    timestamps()
+  end
+
+  def changeset(producto, attrs) do
+    producto
+    |> cast(attrs, [:codigo, :descripcion, :precio, :activo,
+                    :categoria_id, :marca_id, :gama_id, :unidad_medida_id])
+    |> validate_required([:codigo, :descripcion])
+    |> unique_constraint(:codigo)
+  end
+end

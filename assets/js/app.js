@@ -584,11 +584,175 @@ const TiendaSync = {
   mounted() {}
 }
 
+// Hook: Visualizador de schema — tarjetas arrastrables + líneas SVG entre FKs
+const SchemaViz = {
+  mounted() {
+    this.positions    = {}
+    this._dragBound   = new WeakSet()
+    this._initPositions()
+    this._addDragListeners()
+    this._draw()
+  },
+  updated() {
+    this._initPositions()
+    this._addDragListeners()
+    this._draw()
+  },
+
+  _initPositions() {
+    const cards  = [...this.el.querySelectorAll('[data-table-card]')]
+    const GAP    = 20
+    const CARD_W = 224 + GAP
+    const CARD_H = 300
+    const PAD    = 32
+    const cols   = Math.max(1, Math.floor((this.el.clientWidth - PAD * 2) / CARD_W)) || 4
+
+    cards.forEach((card, i) => {
+      const name = card.dataset.tableCard
+      if (!this.positions[name]) {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        this.positions[name] = { x: PAD + col * CARD_W, y: PAD + row * CARD_H }
+      }
+      card.style.left = this.positions[name].x + 'px'
+      card.style.top  = this.positions[name].y + 'px'
+    })
+
+    // Expandir canvas para que las tarjetas no queden cortadas al arrastrar abajo
+    const maxBottom = Math.max(...cards.map(c => (this.positions[c.dataset.tableCard]?.y || 0) + 320), 600)
+    this.el.style.minHeight = (maxBottom + 80) + 'px'
+  },
+
+  _addDragListeners() {
+    this.el.querySelectorAll('[data-table-card]').forEach(card => {
+      const handle = card.querySelector('[data-drag-handle]')
+      if (!handle || this._dragBound.has(handle)) return
+      this._dragBound.add(handle)
+
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        const name      = card.dataset.tableCard
+        const startMX   = e.clientX
+        const startMY   = e.clientY
+        const startCX   = this.positions[name].x
+        const startCY   = this.positions[name].y
+        let   moved     = false
+
+        document.body.style.cursor = 'grabbing'
+
+        const onMove = (e) => {
+          const dx = e.clientX - startMX
+          const dy = e.clientY - startMY
+          if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) moved = true
+          const nx = Math.max(0, startCX + dx)
+          const ny = Math.max(0, startCY + dy)
+          this.positions[name] = { x: nx, y: ny }
+          card.style.left = nx + 'px'
+          card.style.top  = ny + 'px'
+          // Expandir canvas si la tarjeta se arrastra muy abajo
+          const needed = ny + 360
+          if (needed > parseInt(this.el.style.minHeight || '0')) {
+            this.el.style.minHeight = (needed + 80) + 'px'
+          }
+          this._draw()
+        }
+
+        const onUp = () => {
+          document.body.style.cursor = ''
+          document.removeEventListener('mousemove', onMove)
+          document.removeEventListener('mouseup', onUp)
+          if (moved) {
+            // Bloquear el click que dispara phx-click después del drag
+            card.addEventListener('click', ce => ce.stopImmediatePropagation(), { capture: true, once: true })
+          }
+        }
+
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      })
+    })
+  },
+
+  _draw() {
+    const root = this.el
+    const svg  = root.querySelector('#schema-svg')
+    if (!svg) return
+    svg.innerHTML = ''
+
+    const rootRect = root.getBoundingClientRect()
+    const sx = root.scrollLeft
+    const sy = root.scrollTop
+
+    // Helper: convert viewport rect → canvas coordinates
+    const toCanvas = (rect, side = 'center') => {
+      const x = side === 'right'  ? rect.right  - rootRect.left + sx
+               : side === 'left'  ? rect.left   - rootRect.left + sx
+               :                    rect.left + rect.width / 2 - rootRect.left + sx
+      const y = rect.top + rect.height / 2 - rootRect.top + sy
+      return { x, y }
+    }
+
+    root.querySelectorAll('[data-fk-table]').forEach(fkEl => {
+      const targetName = fkEl.dataset.fkTable
+      const targetCard = root.querySelector(`[data-table-card="${targetName}"]`)
+      if (!targetCard) return
+      const fkCard = fkEl.closest('[data-table-card]')
+      if (!fkCard || fkCard === targetCard) return
+
+      // Target: the PK/id row in the referenced card
+      const pkRow = targetCard.querySelector('[data-col-name="id"]') || targetCard
+
+      const fkCardRect  = fkCard.getBoundingClientRect()
+      const targetRect  = targetCard.getBoundingClientRect()
+      const fkRowRect   = fkEl.getBoundingClientRect()
+      const pkRowRect   = pkRow.getBoundingClientRect()
+
+      // Choose exit side based on horizontal relative position
+      const srcCX = (fkCardRect.left + fkCardRect.right) / 2
+      const dstCX = (targetRect.left + targetRect.right) / 2
+      const goRight = dstCX >= srcCX
+
+      const p1 = toCanvas(fkRowRect,  goRight ? 'right' : 'left')
+      const p2 = toCanvas(pkRowRect,  goRight ? 'left'  : 'right')
+
+      // S-curve bezier with horizontal tangents
+      const dist = Math.max(80, Math.abs(p2.x - p1.x) * 0.55)
+      const sign = goRight ? 1 : -1
+      const d = `M${p1.x},${p1.y} C${p1.x + sign*dist},${p1.y} ${p2.x - sign*dist},${p2.y} ${p2.x},${p2.y}`
+
+      // Line
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      path.setAttribute('d', d)
+      path.setAttribute('stroke', '#6366f1')
+      path.setAttribute('stroke-width', '1.5')
+      path.setAttribute('fill', 'none')
+      path.setAttribute('opacity', '0.65')
+      svg.appendChild(path)
+
+      // Filled circle at FK end
+      const c1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+      c1.setAttribute('cx', p1.x); c1.setAttribute('cy', p1.y)
+      c1.setAttribute('r', '3.5'); c1.setAttribute('fill', '#6366f1')
+      c1.setAttribute('opacity', '0.8')
+      svg.appendChild(c1)
+
+      // Small diamond at PK end (indicates "one" side)
+      const hw = 5, hh = 3.5
+      const d2 = `M${p2.x},${p2.y - hh} L${p2.x + hw*sign},${p2.y} L${p2.x},${p2.y + hh} L${p2.x - hw*sign},${p2.y} Z`
+      const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      diamond.setAttribute('d', d2)
+      diamond.setAttribute('fill', '#6366f1')
+      diamond.setAttribute('opacity', '0.9')
+      svg.appendChild(diamond)
+    })
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: isLocalhost ? null : 5000,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, PromoCarrusel, DragSort, TiendaSync, ImageCompressor, ImagePreview},
+  hooks: {...colocatedHooks, LocationMap, NavigateAfterFlash, AutoFlash, ScrollCatActive, Carrusel, PromoCarrusel, DragSort, TiendaSync, ImageCompressor, ImagePreview, SchemaViz},
 })
 
 // Show progress bar on live navigation and form submits

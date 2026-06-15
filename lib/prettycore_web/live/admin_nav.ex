@@ -8,11 +8,7 @@ defmodule PrettycoreWeb.AdminNav do
   import Phoenix.Component, only: [update: 3]
 
   @routes %{
-    "inicio"             => "/admin/platform",
-    "clientes_frog"      => "/admin/clientes",
-    "usuarios"           => "/admin/usuarios",
-    "disenador"          => "/admin/disenador",
-    "editor"             => "/admin/editor",
+    "inicio" => "/admin/platform",
   }
 
   @doc """

@@ -269,7 +269,9 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                   <% all_perms = [
                     {"clientes",        "Clientes",              :page},
                     {"usuarios",        "Usuarios",              :page},
-                    {"disenador",       "Diseñador de esquema",  :page}
+                    {"disenador",       "Diseñador de esquema",  :page},
+                    {"editor",          "Editor de tablas",      :page},
+                    {"visualizador",    "Visualizador de schema", :page}
                   ] %>
                   <%= for user <- @users do %>
                     <% expanded = @expanded_permissions_user_id == user.id %>
@@ -374,6 +376,10 @@ defmodule PrettycoreWeb.SysAdmin.UsuariosLive do
                                           <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                             <rect x="3" y="3" width="18" height="18" rx="2" />
                                             <path d="M3 9h18M9 21V9" />
+                                          </svg>
+                                        <% "editor" -> %>
+                                          <svg class={"w-3.5 h-3.5 #{if checked, do: "text-purple-400", else: "text-zinc-600"}"} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
                                           </svg>
                                         <% _ -> %>
                                       <% end %>
