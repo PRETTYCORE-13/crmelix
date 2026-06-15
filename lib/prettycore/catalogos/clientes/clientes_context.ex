@@ -9,4 +9,27 @@ defmodule Prettycore.Catalogos.Clientes.ClientesContext do
     Repo.all(Cliente)
   end
 
+  def obtener_cliente(id) do
+    Repo.get(Cliente, id)
+  end
+
+  def buscar_cliente(id) do
+    case obtener_cliente(id) do
+      nil     -> {:error, :not_found}
+      cliente -> {:ok, cliente}
+    end
+  end
+
+  def crear_cliente(attrs) do
+    %Cliente{}
+    |> Cliente.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def actualizar_cliente(%Cliente{} = cliente, attrs) do
+    cliente
+    |> Cliente.changeset(attrs)
+    |> Repo.update()
+  end
+
 end

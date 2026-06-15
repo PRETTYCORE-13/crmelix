@@ -16,11 +16,8 @@ defmodule Prettycore.Catalogos.CatalogosContext do
 
   # ========== DELEGAR A CLIENTES ==========
   defdelegate listar_clientes, to: ClientesContext
-  defdelegate listar_clientes_activos, to: ClientesContext
   defdelegate obtener_cliente(id), to: ClientesContext
-  defdelegate buscar_cliente_por_rfc(rfc), to: ClientesContext
+  defdelegate buscar_cliente(id), to: ClientesContext
   defdelegate crear_cliente(attrs), to: ClientesContext
-  defdelegate listar_direcciones(cliente_id), to: ClientesContext
-  defdelegate listar_contactos(cliente_id), to: ClientesContext
-  defdelegate listar_tipos_cliente, to: ClientesContext
+  defdelegate actualizar_cliente(cliente, attrs), to: ClientesContext
 end

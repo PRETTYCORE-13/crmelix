@@ -27,5 +27,6 @@ defmodule Prettycore.Catalogos.Productos.Producto do
                     :categoria_id, :marca_id, :gama_id, :unidad_medida_id])
     |> validate_required([:codigo, :descripcion])
     |> unique_constraint(:codigo)
+    |> validate_number(:id, greater_than: 0)  # ← Validar ID > 0
   end
 end
