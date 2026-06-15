@@ -9,6 +9,7 @@ defmodule PrettycoreWeb.ProductoController do
   end
 
   def create(conn, params) do
+    IO.inspect(params, label: "BODY")
     case CatalogosContext.crear_producto(params) do
       {:ok, producto} ->
         json(conn, %{ok: true, data: producto})
