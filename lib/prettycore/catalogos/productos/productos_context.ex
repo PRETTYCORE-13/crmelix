@@ -33,4 +33,12 @@ defmodule Prettycore.Catalogos.Productos.ProductosContext do
     |> Producto.changeset(attrs)
     |> Repo.update()
   end
+
+  def buscar_producto(id) do
+    case obtener_producto(id) do
+      nil -> {:error, :not_found}
+      producto -> {:ok, producto}
+    end
+  end
+
 end

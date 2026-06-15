@@ -17,4 +17,13 @@ defmodule PrettycoreWeb.ProductoController do
         json(conn, %{ok: false, errors: changeset.errors})
     end
   end
+
+  def buscar_id(conn, %{"id" => id}) do
+    case CatalogosContext.buscar_producto(id) do
+      {:ok, producto} ->
+        json(conn, %{ok: true, data: producto})
+      {:error, :not_found} ->
+        json(conn, %{ok: false, message: "Producto no encontrado"})
+    end
+  end
 end

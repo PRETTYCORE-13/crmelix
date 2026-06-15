@@ -65,6 +65,7 @@ defmodule PrettycoreWeb.Router do
     pipe_through :api
 
     get  "/productos", ProductoController, :index
+    get  "/productos/:id", ProductoController, :buscar_id
     post "/productos", ProductoController, :create
   end
 
