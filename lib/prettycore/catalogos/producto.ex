@@ -3,6 +3,9 @@ defmodule Prettycore.Catalogos.Productos.Producto do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @derive {Jason.Encoder, only: [:id, :codigo, :descripcion, :precio, :activo,
+                                  :categoria_id, :marca_id, :gama_id, :unidad_medida_id,
+                                  :inserted_at, :updated_at]}
   schema "productos" do
     field :codigo, :string
     field :descripcion, :string
