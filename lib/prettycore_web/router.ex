@@ -33,7 +33,8 @@ defmodule PrettycoreWeb.Router do
     scope "/admin", PrettycoreWeb do
       pipe_through :browser
 
-      live "/platform", Inicio
+      live "/platform",  Inicio
+      live "/productos", ProductosLive
     end
   end
 
@@ -58,6 +59,14 @@ defmodule PrettycoreWeb.Router do
   scope "/", PrettycoreWeb do
     pipe_through :api
     get "/health", HealthController, :index
+  end
+
+  ## API Productos
+  scope "/api", PrettycoreWeb do
+    pipe_through :api
+
+    get    "/productos",     ProductoController, :index
+    post   "/productos",     ProductoController, :create
   end
 
   if Mix.env() == :dev do
