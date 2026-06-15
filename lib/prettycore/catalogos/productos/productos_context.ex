@@ -1,7 +1,7 @@
 # lib/prettycore/catalogos/productos/productos_context.ex
 defmodule Prettycore.Catalogos.Productos.ProductosContext do
   import Ecto.Query
-  alias Prettycore.Repo
+  alias Prettycore.PsqlRepo, as: Repo
   alias Prettycore.Catalogos.Productos.{Producto, Categoria, Marca, Gama}
 
   # ========== PRODUCTOS ==========

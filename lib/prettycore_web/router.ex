@@ -61,14 +61,6 @@ defmodule PrettycoreWeb.Router do
     get "/health", HealthController, :index
   end
 
-  ## API Productos
-  scope "/api", PrettycoreWeb do
-    pipe_through :api
-
-    get    "/productos",     ProductoController, :index
-    post   "/productos",     ProductoController, :create
-  end
-
   if Mix.env() == :dev do
     import Phoenix.LiveDashboard.Router
 
