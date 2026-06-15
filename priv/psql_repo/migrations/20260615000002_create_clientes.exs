@@ -2,7 +2,7 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateClientes do
   use Ecto.Migration
 
   def change do
-    create table(:clientes) do
+    create_if_not_exists table(:clientes) do
       add :nombre,   :string, null: false
       add :rfc,      :string
       add :email,    :string
@@ -12,6 +12,6 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateClientes do
       timestamps()
     end
 
-    create unique_index(:clientes, [:rfc])
+    create_if_not_exists unique_index(:clientes, [:rfc])
   end
 end
