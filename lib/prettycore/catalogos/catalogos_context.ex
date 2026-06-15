@@ -8,8 +8,8 @@ defmodule Prettycore.Catalogos.CatalogosContext do
   defdelegate listar_productos, to: ProductosContext
   defdelegate listar_productos_activos, to: ProductosContext
   defdelegate obtener_producto(id), to: ProductosContext
-  defdelegate buscar_producto_por_codigo(codigo), to: ProductosContext
   defdelegate crear_producto(attrs), to: ProductosContext
+  defdelegate buscar_producto(id), to: ProductosContext
   defdelegate listar_categorias, to: ProductosContext
   defdelegate listar_marcas, to: ProductosContext
   defdelegate listar_gamas, to: ProductosContext
