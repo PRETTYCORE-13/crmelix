@@ -27,6 +27,18 @@ defmodule PrettycoreWeb.ProductoController do
     end
   end
 
+  def update(conn, %{"id" => id} = params) do
+    case CatalogosContext.buscar_producto(id) do
+      {:error, :not_found} ->
+        conn |> put_status(404) |> json(%{ok: false, error: "Producto no encontrado"})
+      {:ok, producto} ->
+        case CatalogosContext.actualizar_producto(producto, params) do
+          {:ok, actualizado}  -> json(conn, %{ok: true, data: actualizado})
+          {:error, changeset} -> conn |> put_status(422) |> json(%{ok: false, errors: format_errors(changeset)})
+        end
+    end
+  end
+
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {k, v}, acc -> String.replace(acc, "%{#{k}}", to_string(v)) end)

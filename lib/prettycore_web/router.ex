@@ -63,24 +63,30 @@ defmodule PrettycoreWeb.Router do
   scope "/api", PrettycoreWeb do
     pipe_through :api
 
-    get  "/productos", ProductoController, :index
+    get  "/productos",     ProductoController, :index
     get  "/productos/:id", ProductoController, :buscar_id
-    post "/productos", ProductoController, :create
+    post "/productos",     ProductoController, :create
+    put  "/productos/:id", ProductoController, :update
+
     get  "/clientes",     ClienteController, :index
     get  "/clientes/:id", ClienteController, :buscar_id
     post "/clientes",     ClienteController, :create
+    put  "/clientes/:id", ClienteController, :update
 
     get  "/marcas",     MarcaController, :index
     get  "/marcas/:id", MarcaController, :buscar_id
     post "/marcas",     MarcaController, :create
+    put  "/marcas/:id", MarcaController, :update
 
     get  "/supercategorias",     SupercategoriaController, :index
     get  "/supercategorias/:id", SupercategoriaController, :buscar_id
     post "/supercategorias",     SupercategoriaController, :create
+    put  "/supercategorias/:id", SupercategoriaController, :update
 
     get  "/categorias",     CategoriaController, :index
     get  "/categorias/:id", CategoriaController, :buscar_id
     post "/categorias",     CategoriaController, :create
+    put  "/categorias/:id", CategoriaController, :update
 
   end
 

@@ -10,6 +10,7 @@ defmodule Prettycore.Catalogos.CatalogosContext do
   defdelegate count_productos, to: ProductosContext
   defdelegate obtener_producto(id), to: ProductosContext
   defdelegate crear_producto(attrs), to: ProductosContext
+  defdelegate actualizar_producto(producto, attrs), to: ProductosContext
   defdelegate buscar_producto(id), to: ProductosContext
 
   # ========== DELEGAR A CLIENTES ==========
