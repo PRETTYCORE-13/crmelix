@@ -9,15 +9,28 @@ defmodule Prettycore.PsqlRepo.Migrations.FixExistingTables do
 
     create_if_not_exists index(:categorias, [:supercategoria_id])
 
-    # Agregar columnas faltantes a clientes si no existen
+    execute """
+      CREATE TABLE IF NOT EXISTS clientes (
+        id bigserial PRIMARY KEY,
+        nombre varchar(255) NOT NULL,
+        rfc varchar(255),
+        email varchar(255),
+        telefono varchar(255),
+        activo boolean NOT NULL DEFAULT true,
+        inserted_at timestamp NOT NULL,
+        updated_at timestamp NOT NULL
+      )
+    """
+
+    # Agregar columnas faltantes si la tabla ya existía con otra estructura
     alter table(:clientes) do
-      add_if_not_exists :nombre,       :string
-      add_if_not_exists :rfc,          :string
-      add_if_not_exists :email,        :string
-      add_if_not_exists :telefono,     :string
-      add_if_not_exists :activo,       :boolean, default: true
-      add_if_not_exists :inserted_at,  :naive_datetime
-      add_if_not_exists :updated_at,   :naive_datetime
+      add_if_not_exists :nombre,      :string
+      add_if_not_exists :rfc,         :string
+      add_if_not_exists :email,       :string
+      add_if_not_exists :telefono,    :string
+      add_if_not_exists :activo,      :boolean, default: true
+      add_if_not_exists :inserted_at, :naive_datetime
+      add_if_not_exists :updated_at,  :naive_datetime
     end
   end
 end
