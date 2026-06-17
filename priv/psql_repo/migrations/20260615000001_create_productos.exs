@@ -2,7 +2,7 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateProductos do
   use Ecto.Migration
 
   def change do
-    create table(:productos) do
+    create_if_not_exists table(:productos) do
       add :codigo,           :string, null: false
       add :descripcion,      :string, null: false
       add :precio,           :float
@@ -15,6 +15,6 @@ defmodule Prettycore.PsqlRepo.Migrations.CreateProductos do
       timestamps()
     end
 
-    create unique_index(:productos, [:codigo])
+    create_if_not_exists unique_index(:productos, [:codigo])
   end
 end
