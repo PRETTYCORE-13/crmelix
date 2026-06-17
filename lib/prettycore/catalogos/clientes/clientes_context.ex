@@ -5,9 +5,13 @@ defmodule Prettycore.Catalogos.Clientes.ClientesContext do
   alias Prettycore.Catalogos.Clientes.{Cliente, Direccion, Contacto, TipoCliente}
 
   # ========== CLIENTES ==========
-  def listar_clientes do
-    Repo.all(Cliente)
+  def listar_clientes, do: Repo.all(Cliente)
+
+  def listar_clientes(offset, limit) do
+    Cliente |> offset(^offset) |> limit(^limit) |> Repo.all()
   end
+
+  def count_clientes, do: Repo.aggregate(Cliente, :count)
 
   def obtener_cliente(id) do
     Repo.get(Cliente, id)

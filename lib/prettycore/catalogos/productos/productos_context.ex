@@ -5,9 +5,13 @@ defmodule Prettycore.Catalogos.Productos.ProductosContext do
   alias Prettycore.Catalogos.Productos.{Producto, Categoria, Marca, Gama}
 
   # ========== PRODUCTOS ==========
-  def listar_productos do
-    Repo.all(Producto)
+  def listar_productos, do: Repo.all(Producto)
+
+  def listar_productos(offset, limit) do
+    Producto |> offset(^offset) |> limit(^limit) |> Repo.all()
   end
+
+  def count_productos, do: Repo.aggregate(Producto, :count)
 
   def listar_productos_activos do
     query = from p in Producto, where: p.activo == true

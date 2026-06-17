@@ -1,8 +1,15 @@
 defmodule Prettycore.Catalogos.Categorias.CategoriasContext do
+  import Ecto.Query
   alias Prettycore.PsqlRepo, as: Repo
   alias Prettycore.Catalogos.Categorias.Categoria
 
   def listar_categorias, do: Repo.all(Categoria)
+
+  def listar_categorias(offset, limit) do
+    Categoria |> offset(^offset) |> limit(^limit) |> Repo.all()
+  end
+
+  def count_categorias, do: Repo.aggregate(Categoria, :count)
 
   def obtener_categoria(id), do: Repo.get(Categoria, id)
 

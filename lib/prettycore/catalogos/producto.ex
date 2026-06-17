@@ -3,14 +3,15 @@ defmodule Prettycore.Catalogos.Productos.Producto do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @derive {Jason.Encoder, only: [:id, :codigo, :descripcion, :precio, :activo,
+  @derive {Jason.Encoder, only: [:id, :codigo, :descripcion, :precio, :activo, :imagen,
                                   :categoria_id, :marca_id, :gama_id, :unidad_medida_id,
                                   :inserted_at, :updated_at]}
   schema "productos" do
-    field :codigo, :string
-    field :descripcion, :string
-    field :precio, :float
-    field :activo, :boolean, default: true
+    field :codigo,     :string
+    field :descripcion,:string
+    field :precio,     :float
+    field :activo,     :boolean, default: true
+    field :imagen,     :string
 
     # Relaciones con otros schemas del mismo subcontexto
     belongs_to :categoria, Prettycore.Catalogos.Productos.Categoria
@@ -23,7 +24,7 @@ defmodule Prettycore.Catalogos.Productos.Producto do
 
   def changeset(producto, attrs) do
     producto
-    |> cast(attrs, [:codigo, :descripcion, :precio, :activo,
+    |> cast(attrs, [:codigo, :descripcion, :precio, :activo, :imagen,
                     :categoria_id, :marca_id, :gama_id, :unidad_medida_id])
     |> validate_required([:codigo, :descripcion])
     |> unique_constraint(:codigo)

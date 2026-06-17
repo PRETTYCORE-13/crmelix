@@ -1,29 +1,42 @@
-# lib/prettycore_web/controllers/producto_controller.ex
 defmodule PrettycoreWeb.ProductoController do
   use PrettycoreWeb, :controller
-  alias Prettycore.Catalogos.CatalogosContext  # ← Importante
+  alias Prettycore.Catalogos.CatalogosContext
 
-  def index(conn, _params) do
-    productos = CatalogosContext.listar_productos()
-    json(conn, %{ok: true, data: productos})
-  end
+  def index(conn, params) do
+    page   = params |> Map.get("page",  "1")  |> parse_int(1)
+    limit  = params |> Map.get("limit", "50") |> parse_int(50)
+    offset = (page - 1) * limit
+    total  = CatalogosContext.count_productos()
+    data   = CatalogosContext.listar_productos(offset, limit)
 
-  def create(conn, params) do
-    IO.inspect(params, label: "BODY")
-    case CatalogosContext.crear_producto(params) do
-      {:ok, producto} ->
-        json(conn, %{ok: true, data: producto})
-      {:error, changeset} ->
-        json(conn, %{ok: false, errors: changeset.errors})
-    end
+    json(conn, %{ok: true, tabla: "productos", total: total, page: page,
+                 limit: limit, paginas: ceil(total / limit), data: data})
   end
 
   def buscar_id(conn, %{"id" => id}) do
     case CatalogosContext.buscar_producto(id) do
-      {:ok, producto} ->
-        json(conn, %{ok: true, data: producto})
-      {:error, :not_found} ->
-        json(conn, %{ok: false, message: "Producto no encontrado"})
+      {:ok, producto}      -> json(conn, %{ok: true, data: producto})
+      {:error, :not_found} -> conn |> put_status(404) |> json(%{ok: false, error: "Producto no encontrado"})
+    end
+  end
+
+  def create(conn, params) do
+    case CatalogosContext.crear_producto(params) do
+      {:ok, producto}     -> conn |> put_status(201) |> json(%{ok: true, data: producto})
+      {:error, changeset} -> json(conn, %{ok: false, errors: format_errors(changeset)})
+    end
+  end
+
+  defp format_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {k, v}, acc -> String.replace(acc, "%{#{k}}", to_string(v)) end)
+    end)
+  end
+
+  defp parse_int(val, default) do
+    case Integer.parse(to_string(val)) do
+      {n, _} when n > 0 -> n
+      _                  -> default
     end
   end
 end
