@@ -1,0 +1,86 @@
+defmodule PrettycoreWeb.ListaController do
+  use PrettycoreWeb, :controller
+  alias Prettycore.Catalogos.Listas.ListasContext
+
+  def index(conn, params) do
+    page       = params |> Map.get("page",  "1")  |> parse_int(1)
+    limit      = params |> Map.get("limit", "50") |> parse_int(50)
+    offset     = (page - 1) * limit
+    cliente_id = Map.get(params, "cliente_id")
+
+    {total, data} =
+      if cliente_id do
+        {ListasContext.count_listas_por_cliente(cliente_id),
+         ListasContext.listar_listas_por_cliente(cliente_id, offset, limit)}
+      else
+        {ListasContext.count_listas(),
+         ListasContext.listar_listas(offset, limit)}
+      end
+
+    json(conn, %{ok: true, tabla: "listas", total: total, page: page,
+                 limit: limit, paginas: ceil(total / limit), data: data})
+  end
+
+  def buscar_id(conn, %{"id" => id}) do
+    case ListasContext.obtener_lista_con_productos(id) do
+      nil ->
+        conn |> put_status(404) |> json(%{ok: false, error: "Lista no encontrada"})
+      lista ->
+        json(conn, %{ok: true, data: %{
+          id:          lista.id,
+          nombre:      lista.nombre,
+          cliente_id:  lista.cliente_id,
+          activo:      lista.activo,
+          inserted_at: lista.inserted_at,
+          updated_at:  lista.updated_at,
+          productos:   lista.productos
+        }})
+    end
+  end
+
+  def create(conn, params) do
+    case ListasContext.crear_lista(params) do
+      {:ok, lista}        -> conn |> put_status(201) |> json(%{ok: true, data: lista})
+      {:error, changeset} -> conn |> put_status(422) |> json(%{ok: false, errors: format_errors(changeset)})
+    end
+  end
+
+  def update(conn, %{"id" => id} = params) do
+    case ListasContext.buscar_lista(id) do
+      {:error, :not_found} ->
+        conn |> put_status(404) |> json(%{ok: false, error: "Lista no encontrada"})
+      {:ok, lista} ->
+        case ListasContext.actualizar_lista(lista, params) do
+          {:ok, actualizada}  -> json(conn, %{ok: true, data: actualizada})
+          {:error, changeset} -> conn |> put_status(422) |> json(%{ok: false, errors: format_errors(changeset)})
+        end
+    end
+  end
+
+  def agregar_producto(conn, %{"lista_id" => lista_id, "producto_id" => producto_id}) do
+    case ListasContext.agregar_producto(lista_id, producto_id) do
+      {:ok, _}            -> json(conn, %{ok: true, mensaje: "Producto agregado a la lista"})
+      {:error, changeset} -> conn |> put_status(422) |> json(%{ok: false, errors: format_errors(changeset)})
+    end
+  end
+
+  def quitar_producto(conn, %{"lista_id" => lista_id, "producto_id" => producto_id}) do
+    case ListasContext.quitar_producto(lista_id, producto_id) do
+      {:ok, _}             -> json(conn, %{ok: true, mensaje: "Producto removido de la lista"})
+      {:error, :not_found} -> conn |> put_status(404) |> json(%{ok: false, error: "Producto no está en la lista"})
+    end
+  end
+
+  defp format_errors(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {k, v}, acc -> String.replace(acc, "%{#{k}}", to_string(v)) end)
+    end)
+  end
+
+  defp parse_int(val, default) do
+    case Integer.parse(to_string(val)) do
+      {n, _} when n > 0 -> n
+      _                  -> default
+    end
+  end
+end

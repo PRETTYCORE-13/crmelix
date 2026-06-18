@@ -88,6 +88,13 @@ defmodule PrettycoreWeb.Router do
     post "/categorias",     CategoriaController, :create
     put  "/categorias/:id", CategoriaController, :update
 
+    get    "/listas_productos",                                          ListaProductosController, :index
+    get    "/listas_productos/:id",                                      ListaProductosController, :buscar_id
+    post   "/listas_productos",                                          ListaProductosController, :create
+    put    "/listas_productos/:id",                                      ListaProductosController, :update
+    post   "/listas_productos/:lista_id/productos",                      ListaProductosController, :agregar_producto
+    delete "/listas_productos/:lista_id/productos/:producto_id",         ListaProductosController, :quitar_producto
+
   end
 
   if Mix.env() == :dev do
