@@ -21,6 +21,7 @@ defmodule PrettycoreWeb.ListaProductosController do
                  limit: limit, paginas: ceil(total / limit), data: data})
   end
 
+  @spec buscar_id(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def buscar_id(conn, %{"id" => id}) do
     case ListasProductosContext.obtener_lista_con_productos(id) do
       nil ->

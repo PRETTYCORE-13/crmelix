@@ -94,8 +94,15 @@ defmodule PrettycoreWeb.Router do
     put    "/listas_productos/:id",                                      ListaProductosController, :update
     post   "/listas_productos/:lista_id/productos",                      ListaProductosController, :agregar_producto
     delete "/listas_productos/:lista_id/productos/:producto_id",         ListaProductosController, :quitar_producto
-
   end
+
+    scope "/bagom", PrettycoreWeb do
+    pipe_through :api
+
+    get  "/servicios", MonteAlbanControllerBagom, :index
+    post "/ventas",    MonteAlbanControllerBagom, :create
+  end
+
 
   if Mix.env() == :dev do
     import Phoenix.LiveDashboard.Router
