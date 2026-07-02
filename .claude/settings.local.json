@@ -120,7 +120,17 @@
       "Bash(Select-Object Name)",
       "Bash(Sort-Object Name)",
       "Bash(mix phx.routes)",
-      "Bash(mix ecto.create)"
+      "Bash(mix ecto.create)",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -c \"CREATE USER pty_crm WITH PASSWORD '123456';\" 2>&1)",
+      "PowerShell($env:PGPASSWORD='postgres'; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -p 5432 -c \"CREATE USER pty_crm WITH PASSWORD '123456';\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -p 5432 -w -c \"SELECT version\\(\\);\" 2>&1)",
+      "PowerShell(Restart-Service -Name \"postgresql-x64-18\" -Force)",
+      "PowerShell(Get-Service -Name \"postgresql-x64-18\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -p 5432 -h 127.0.0.1 -c \"CREATE USER pty_crm WITH PASSWORD '123456';\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -p 5432 -h 127.0.0.1 -c \"CREATE DATABASE pty_crm_dev OWNER pty_crm;\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -p 5432 -h 127.0.0.1 -c \"ALTER USER postgres WITH PASSWORD 'postgres';\" 2>&1)",
+      "PowerShell($env:PGPASSWORD='123456'; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U pty_crm -p 5432 -h 127.0.0.1 -d pty_crm_dev -c \"INSERT INTO ventas \\(sysudn_codigo_k, liquid_fechaent, cfgepl_nombre, facdoc_referencia, vtarut_codigo_k, cred, ctecli_codigo_k, ctecli_dencomercia, ctecad_codigo_k, ctetpo_codigo_k, ctecan_codigo_k, preventa, ctepfr_codigo_k, produc_codigo_k, produc_descripcion, promar_codigo_k, propre_codigo_k, proseg_codigo_k, prolna_codigo_k, pzaliq, vtaliq, vtaliq_sn_iva, invpro_costoprom, rechazocajas, rechazo, inserted_at, updated_at\\) VALUES \\('SUC01', '2026-06-19', 'Juan Perez', 'FAC-0001', 'RUT01', 'C', 'CLI001', 'Comercial SA de CV', 'CAD01', 'TPO01', 'CAN01', false, 'PFR01', 'PROD001', 'Producto Demo CRM', 'MAR01', 'PRE01', 'SEG01', 'LNA01', 10.0000, 1500.0000, 1293.1034, 800.0000, 0, false, NOW\\(\\), NOW\\(\\)\\);\" 2>&1)",
+      "PowerShell($env:PGPASSWORD='123456'; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U pty_crm -p 5432 -h 127.0.0.1 -d pty_crm_dev -c \"DELETE FROM ventas;\" 2>&1)"
     ],
     "deny": [],
     "ask": []

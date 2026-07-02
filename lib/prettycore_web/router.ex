@@ -94,6 +94,19 @@ defmodule PrettycoreWeb.Router do
     put    "/listas_productos/:id",                                      ListaProductosController, :update
     post   "/listas_productos/:lista_id/productos",                      ListaProductosController, :agregar_producto
     delete "/listas_productos/:lista_id/productos/:producto_id",         ListaProductosController, :quitar_producto
+
+    get  "/ventas",     VentaController, :index
+    get  "/ventas/:id", VentaController, :show
+    post "/ventas",     VentaController, :create
+
+    get  "/bi/productos",     BIProductoController, :index
+    get  "/bi/productos/:id", BIProductoController, :show
+    post "/bi/productos",     BIProductoController, :create
+
+    get  "/bi/clientes",     BIClienteController, :index
+    get  "/bi/clientes/:id", BIClienteController, :show
+    post "/bi/clientes",     BIClienteController, :create
+
   end
 
     scope "/bagom", PrettycoreWeb do
