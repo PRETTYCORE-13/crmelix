@@ -3,7 +3,7 @@ import Config
 
 config :prettycore, Prettycore.PsqlRepo,
   hostname: System.get_env("DB_HOSTNAME_PSQL", "localhost"),
-  port: String.to_integer(System.get_env("DB_PORT_PSQL", "5433")),
+  port: String.to_integer(System.get_env("DB_PORT_PSQL", "5432")),
   username: System.get_env("DB_USERNAME_PSQL", "pty_crm"),
   password: System.get_env("DB_PASSWORD_PSQL", "123456"),
   database: System.get_env("DB_NAME_PSQL", "pty_crm_dev"),
