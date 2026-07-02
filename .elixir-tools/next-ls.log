@@ -1182,3 +1182,27 @@ This will trigger a full recompilation in order to re-index your codebase.
 16:48:22.707 [debug] handled notification client -> server textDocument/didClose in 205µs
 
 17:05:52.225 id=82 [debug] handled request client -> server textDocument/codeAction in 615µs
+
+17:09:28.375 id=83 [debug] handled request client -> server textDocument/codeAction in 1ms
+
+17:09:28.476 id=84 [debug] handled request client -> server textDocument/documentSymbol in 3ms
+
+17:09:28.816 id=85 [debug] handled request client -> server textDocument/codeAction in 512µs
+
+17:09:28.838 [debug] handled notification client -> server $/cancelRequest in 307µs
+
+17:09:28.841 id=86 [debug] handled request client -> server textDocument/codeAction in 409µs
+
+17:09:29.075 id=87 [debug] handled request client -> server textDocument/documentSymbol in 2ms
+
+17:13:01.312 [debug] handled notification client -> server $/cancelRequest in 205µs
+
+17:14:32.417 [debug] handled notification client -> server $/cancelRequest in 308µs
+
+17:15:05.602 [debug] handled notification client -> server $/setTrace in 65ms
+
+17:15:05.662 id=90 [debug] handled request client -> server textDocument/codeAction in 615µs
+
+17:15:06.545 [debug] handled notification client -> server $/setTrace in 307µs
+
+17:15:06.654 id=91 [debug] handled request client -> server textDocument/codeAction in 512µs
